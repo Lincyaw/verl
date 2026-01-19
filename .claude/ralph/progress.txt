@@ -391,3 +391,76 @@
 **Next Steps**:
 - 实现实时监控和观测系统（fault-injection-009）
 - 集成故障注入系统到verl主流程（fault-injection-010）
+
+### fault-injection-009: 实现实时监控和观测系统 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **实时指标收集器 (MetricsCollector)**
+   - 实现了`MetricsCollector`类，支持实时收集故障注入指标
+   - 收集故障事件指标（FaultMetrics）和系统指标（SystemMetrics）
+   - 支持GPU监控（通过pynvml）和Ray集群监控
+   - 提供指标聚合功能，支持时间窗口统计
+   - 支持回调函数注册，实现实时指标通知
+
+2. **可视化仪表板 (DashboardServer)**
+   - 基于Flask实现了Web仪表板服务器
+   - 提供REST API接口获取实时指标数据
+   - 包含故障分布图表（按层、按类型）
+   - 显示系统健康评分和关键指标
+   - 支持故障历史记录查看
+   - 提供美观的HTML界面，使用Chart.js进行数据可视化
+
+3. **智能告警系统 (AlertManager)**
+   - 实现了灵活的告警规则引擎
+   - 支持多种告警条件：阈值、速率、模式匹配、自定义函数
+   - 提供多种通知渠道：控制台、邮件、Webhook
+   - 支持告警冷却时间，防止告警风暴
+   - 实现告警确认机制
+   - 内置常用告警规则：系统健康、故障率、资源使用率等
+
+4. **故障影响分析 (FaultImpactAnalyzer)**
+   - 构建了组件依赖图，分析故障传播路径
+   - 实现故障影响评估算法
+   - 计算级联故障概率
+   - 评估系统降级程度
+   - 生成智能恢复建议
+   - 提供置信度评分
+
+5. **系统集成**
+   - 创建了`MonitoringIntegration`类整合所有监控组件
+   - 与故障注入编排器无缝集成
+   - 支持通过配置启用/禁用各个监控组件
+   - 提供统一的监控摘要接口
+
+6. **配置管理**
+   - 扩展了`FaultInjectionConfig`配置类，添加监控配置
+   - 创建了`MonitoringConfig`类管理所有监控参数
+   - 提供示例配置文件`monitoring_config.yaml`
+
+7. **测试覆盖**
+   - 编写了完整的单元测试`test_monitoring.py`
+   - 测试覆盖所有核心功能：指标收集、告警、影响分析、仪表板
+   - 包含集成测试验证端到端流程
+
+8. **示例和文档**
+   - 创建了演示脚本`monitoring_demo.py`
+   - 展示如何启用监控系统和查看仪表板
+   - 提供完整的API使用示例
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/monitoring/__init__.py` - 监控模块导出
+- `/Users/bytedance/workspace/verl/verl/fault_injection/monitoring/collector.py` - 指标收集器
+- `/Users/bytedance/workspace/verl/verl/fault_injection/monitoring/dashboard.py` - Web仪表板
+- `/Users/bytedance/workspace/verl/verl/fault_injection/monitoring/alerts.py` - 告警系统
+- `/Users/bytedance/workspace/verl/verl/fault_injection/monitoring/analyzer.py` - 影响分析器
+- `/Users/bytedance/workspace/verl/verl/fault_injection/monitoring/integration.py` - 系统集成
+- `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_monitoring.py` - 单元测试
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/monitoring_config.yaml` - 示例配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/monitoring_demo.py` - 演示脚本
+
+**Next Steps**:
+- 集成故障注入系统到verl主流程（fault-injection-010）

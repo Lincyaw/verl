@@ -19,6 +19,7 @@ from .base import (
 )
 from .config import FaultConfig, FaultInjectionConfig, FaultLayer
 from .recovery.integration import create_recovery_integration, RecoveryOrchestratorIntegration
+from .monitoring.integration import MonitoringIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,9 @@ class FaultOrchestrator:
         self._recovery_integration: Optional[RecoveryOrchestratorIntegration] = None
         if config.recovery.enabled:
             self._recovery_integration = create_recovery_integration(self, config)
+
+        # Initialize monitoring integration
+        self._monitoring_integration: Optional[MonitoringIntegration] = None
         self._available_targets: List[FaultContext] = []
         self._target_update_callbacks: List[callable] = []
 
@@ -158,6 +162,10 @@ class FaultOrchestrator:
                     del self._active_faults[fault_id]
 
             logger.info(f"Fault injection completed: {fault_id} - Status: {result.status.value}")
+
+            # Notify monitoring integration
+            if self._monitoring_integration:
+                self._monitoring_integration._on_fault_completed(result)
 
             # Trigger recovery if enabled
             if self._recovery_integration and result.status in [FaultStatus.COMPLETED, FaultStatus.FAILED]:
@@ -320,9 +328,47 @@ class FaultOrchestrator:
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
 
+    def enable_monitoring(self, monitoring_config: Optional[Dict[str, Any]] = None) -> None:
+        """Enable monitoring integration."""
+        if self._monitoring_integration is not None:
+            logger.warning("Monitoring integration already enabled")
+            return
+
+        from .monitoring.integration import create_monitoring_integration
+
+        self._monitoring_integration = create_monitoring_integration(self, monitoring_config)
+        self._monitoring_integration.start()
+        logger.info("Monitoring integration enabled")
+
+    def disable_monitoring(self) -> None:
+        """Disable monitoring integration."""
+        if self._monitoring_integration is None:
+            logger.warning("Monitoring integration not enabled")
+            return
+
+        self._monitoring_integration.stop()
+        self._monitoring_integration = None
+        logger.info("Monitoring integration disabled")
+
+    def get_monitoring_summary(self) -> Optional[Dict[str, Any]]:
+        """Get monitoring summary if monitoring is enabled."""
+        if self._monitoring_integration:
+            return self._monitoring_integration.get_monitoring_summary()
+        return None
+
+    def get_dashboard_url(self) -> Optional[str]:
+        """Get dashboard URL if dashboard is enabled."""
+        if self._monitoring_integration:
+            return self._monitoring_integration.get_dashboard_url()
+        return None
+
     def shutdown(self) -> None:
         """Shutdown the orchestrator."""
         logger.info("Shutting down fault injection orchestrator")
+
+        # Stop monitoring integration
+        if self._monitoring_integration:
+            self._monitoring_integration.stop()
 
         # Stop monitoring
         self.stop_monitoring()

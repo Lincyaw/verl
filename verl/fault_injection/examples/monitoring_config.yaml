@@ -1,0 +1,193 @@
+# Example configuration for fault injection monitoring and observability
+
+# Metrics collection configuration
+metrics:
+  collection_interval: 5  # seconds
+  aggregation_window: 60  # seconds
+  max_history_size: 10000
+  enable_gpu_monitoring: true
+  enable_ray_monitoring: true
+
+# Dashboard configuration
+dashboard:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  update_interval: 2  # seconds
+  enable_cors: true
+  max_datapoints: 1000
+
+# Alerting configuration
+alerts:
+  enabled: true
+  max_alerts_per_minute: 10
+  alert_retention_hours: 24
+  enable_auto_recovery: true
+
+  # Notification channels
+  notification_channels:
+    - type: console
+      enabled: true
+      min_severity: info
+
+    - type: email
+      enabled: false
+      smtp_host: "smtp.example.com"
+      smtp_port: 587
+      smtp_user: "alerts@example.com"
+      smtp_password: "password"
+      from_email: "fault-injection@example.com"
+      to_emails:
+        - "admin@example.com"
+        - "ops@example.com"
+      min_severity: warning
+
+    - type: webhook
+      enabled: false
+      url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+      headers:
+        Content-Type: application/json
+      timeout: 10
+      min_severity: error
+
+  # Alert rules
+  rules:
+    # System health alerts
+    - name: system_health_critical
+      condition: threshold
+      parameters:
+        metric: system_health
+        threshold: 25
+        operator: less
+      severity: critical
+      description: "System health is critically low (< 25%)"
+      cooldown_seconds: 300
+
+    - name: high_cpu_usage
+      condition: threshold
+      parameters:
+        metric: avg_cpu_percent
+        threshold: 90
+        operator: greater
+      severity: warning
+      description: "High CPU usage detected (> 90%)"
+      cooldown_seconds: 180
+
+    - name: high_memory_usage
+      condition: threshold
+      parameters:
+        metric: avg_memory_percent
+        threshold: 90
+        operator: greater
+      severity: warning
+      description: "High memory usage detected (> 90%)"
+      cooldown_seconds: 180
+
+    # Fault injection alerts
+    - name: high_fault_rate
+      condition: rate
+      parameters:
+        max_faults_per_minute: 10
+      severity: warning
+      description: "High fault injection rate detected (> 10 faults/minute)"
+      cooldown_seconds: 120
+
+    - name: low_recovery_success_rate
+      condition: threshold
+      parameters:
+        metric: faults_success_rate
+        threshold: 0.5
+        operator: less
+      severity: error
+      description: "Recovery success rate is below 50%"
+      cooldown_seconds: 300
+
+    - name: failed_fault_injection
+      condition: threshold
+      parameters:
+        metric: failed_faults
+        threshold: 5
+        operator: greater
+      severity: error
+      description: "Multiple fault injections have failed"
+      cooldown_seconds: 300
+
+    # Layer-specific alerts
+    - name: orchestration_layer_issues
+      condition: threshold
+      parameters:
+        metric: faults_by_layer.orchestration
+        threshold: 3
+        operator: greater
+      severity: warning
+      description: "Multiple orchestration layer faults detected"
+      cooldown_seconds: 300
+
+    - name: engine_layer_issues
+      condition: threshold
+      parameters:
+        metric: faults_by_layer.engine
+        threshold: 3
+        operator: greater
+      severity: error
+      description: "Multiple engine layer faults detected"
+      cooldown_seconds: 300
+
+    # Custom pattern-based alerts
+    - name: cuda_errors
+      condition: pattern
+      parameters:
+        metric: recent_error_messages
+        pattern: "CUDA"
+      severity: error
+      description: "CUDA-related errors detected"
+      cooldown_seconds: 300
+
+    - name: nccl_failures
+      condition: pattern
+      parameters:
+        metric: recent_error_messages
+        pattern: "NCCL"
+      severity: error
+      description: "NCCL communication failures detected"
+      cooldown_seconds: 300
+
+# Impact analysis configuration
+impact_analysis:
+  enabled: true
+  historical_window_hours: 24
+  confidence_threshold: 0.7
+
+  # Component dependencies (can be extended)
+  dependencies:
+    - component: critical_service
+      depends_on: [base_service1, base_service2]
+      criticality: critical
+
+# Dashboard customizations
+dashboard_customizations:
+  title: "Verl Fault Injection Monitor"
+  refresh_interval: 5  # seconds
+  theme: "light"  # light or dark
+
+  # Custom metrics to display
+  custom_metrics:
+    - name: "Training Progress"
+      type: "gauge"
+      data_source: "training_metrics"
+
+    - name: "GPU Utilization"
+      type: "line_chart"
+      data_source: "gpu_metrics"
+
+  # Custom alerts widget
+  alerts_widget:
+    enabled: true
+    max_displayed: 10
+    auto_acknowledge: false
+
+  # Export options
+  export:
+    enabled: true
+    formats: ["csv", "json", "pdf"]
+    schedule: "0 0 * * *"  # Daily at midnight

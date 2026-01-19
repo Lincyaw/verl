@@ -421,6 +421,44 @@ class FaultScenarioTemplate:
 
 
 @dataclass
+class MonitoringConfig:
+    """Configuration for monitoring and observability."""
+
+    enabled: bool = True
+    metrics: Dict[str, Any] = field(default_factory=lambda: {
+        "enabled": True,
+        "collection_interval": 5.0,
+        "aggregation_window": 60,
+        "max_history_size": 10000,
+        "enable_gpu_monitoring": True,
+        "enable_ray_monitoring": True,
+    })
+    dashboard: Dict[str, Any] = field(default_factory=lambda: {
+        "enabled": True,
+        "host": "0.0.0.0",
+        "port": 8080,
+        "update_interval": 2.0,
+        "enable_cors": True,
+        "max_datapoints": 1000,
+    })
+    alerts: Dict[str, Any] = field(default_factory=lambda: {
+        "enabled": True,
+        "max_alerts_per_minute": 10,
+        "alert_retention_hours": 24,
+        "enable_auto_recovery": True,
+        "notification_channels": [
+            {"type": "console", "enabled": True, "min_severity": "info"},
+        ],
+        "rules": [],  # Will use default rules if empty
+    })
+    impact_analysis: Dict[str, Any] = field(default_factory=lambda: {
+        "enabled": True,
+        "historical_window_hours": 24,
+        "confidence_threshold": 0.7,
+    })
+
+
+@dataclass
 class FaultInjectionConfig:
     """Main configuration for the fault injection system."""
 
@@ -433,6 +471,7 @@ class FaultInjectionConfig:
     log_level: str = "INFO"
     output_dir: Optional[str] = None  # Directory for fault logs
     recovery: RecoveryConfig = field(default_factory=RecoveryConfig)
+    monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
 
     @classmethod
     def from_yaml(cls, path: Union[str, Path]) -> "FaultInjectionConfig":
