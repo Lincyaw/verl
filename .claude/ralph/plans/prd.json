@@ -93,7 +93,7 @@
       "支持故障依赖和级联关系",
       "创建常见故障场景模板"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-009",

@@ -347,7 +347,47 @@
 - `/Users/bytedance/workspace/verl/verl/fault_injection/examples/recovery_config.yaml` - Example configuration
 - `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_recovery_*.py` - Unit tests
 
+### fault-injection-008: 创建配置驱动的故障场景 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **设计YAML格式的故障场景配置**
+   - 扩展了`FaultInjectionConfig`配置类，添加了`FaultScenarioConfig`和`FaultScenarioTemplate`
+   - 创建了`FaultDependencyConfig`来定义故障之间的依赖关系
+   - 支持在YAML中定义复杂的故障场景，包括故障顺序、依赖条件和级联模式
+
+2. **实现基于触发器的故障注入**
+   - 创建了`TriggerManager`和多种触发器类型：`ImmediateTrigger`、`TimedTrigger`、`CountTrigger`、`ProbabilisticTrigger`、`ConditionalTrigger`
+   - 支持基于时间、计数、概率和条件的故障触发
+   - 实现了`MetricThresholdTrigger`和`LogPatternTrigger`用于基于系统状态的触发
+   - 支持连续监控和事件驱动的故障注入
+
+3. **支持故障依赖和级联关系**
+   - 实现了`FaultScenarioOrchestrator`来管理故障场景的执行
+   - 支持多种级联模式：none（无级联）、linear（线性）、tree（树形）、burst（爆发）
+   - 支持依赖条件：after（之后）、on_success（成功时）、on_failure（失败时）
+   - 实现了执行图构建和状态跟踪
+
+4. **创建常见故障场景模板**
+   - 创建了`system_failure_cascade`模板：模拟系统级联故障
+   - 创建了`training_disruption`模板：模拟训练过程中的常见中断
+   - 创建了`inference_degradation`模板：模拟推理服务降级
+   - 创建了`network_chaos`模板：模拟各种网络故障
+   - 创建了`resource_exhaustion`模板：模拟资源耗尽故障
+   - 创建了`ray_cluster_instability`模板：模拟Ray集群不稳定
+   - 创建了`cuda_failures`模板：模拟CUDA特定故障
+   - 创建了`config_corruption`模板：模拟配置损坏故障
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/scenario.py` - 故障场景编排器
+- `/Users/bytedance/workspace/verl/verl/fault_injection/triggers.py` - 基于触发器的故障注入
+- `/Users/bytedance/workspace/verl/verl/fault_injection/scenario_loader.py` - 场景配置加载器
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/scenario_faults.yaml` - 示例场景配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_scenario_faults.py` - 单元测试
+
 **Next Steps**:
-- 创建配置驱动的故障场景（fault-injection-008）
 - 实现实时监控和观测系统（fault-injection-009）
 - 集成故障注入系统到verl主流程（fault-injection-010）

@@ -1,0 +1,423 @@
+# Configuration-driven fault scenarios for verl
+# This file demonstrates various fault scenarios with dependencies and cascading
+
+# System failure cascade scenario
+system_failure_cascade:
+  name: "System Failure Cascade"
+  description: "Simulate cascading system failures starting from memory pressure"
+  enabled: true
+  cascade_mode: "tree"
+  cascade_interval_seconds: 10
+  max_cascade_depth: 3
+  stop_on_failure: false
+
+  faults:
+    - name: "memory_pressure"
+      type: "memory_oom"
+      layer: "orchestration"
+      memory_mb: 4096
+      target:
+        mode: "random"
+        count: 2
+      trigger:
+        type: "immediate"
+      duration_seconds: 30
+
+    - name: "network_partition"
+      type: "network_partition"
+      layer: "orchestration"
+      partition_type: "partial"
+      partition_duration: 45
+      isolated_ranks: [0, 1]
+      target:
+        mode: "rank"
+        ranks: [0, 1]
+      trigger:
+        type: "conditional"
+        condition: "memory_pressure.status == 'completed'"
+      dependencies:
+        - fault_name: "memory_pressure"
+          condition: "on_success"
+          delay_seconds: 5
+
+    - name: "worker_crash"
+      type: "worker_crash"
+      layer: "worker"
+      worker_type: "actor"
+      crash_method: "exception"
+      target:
+        mode: "random"
+        count: 1
+      trigger:
+        type: "timed"
+        delay_seconds: 15
+      dependencies:
+        - fault_name: "network_partition"
+          condition: "after"
+          delay_seconds: 10
+
+    - name: "gcs_failure"
+      type: "gcs_failure"
+      layer: "orchestration"
+      gcs_failure_type: "disconnect"
+      gcs_isolation_duration: 20
+      target:
+        mode: "all"
+      trigger:
+        type: "probabilistic"
+        probability: 0.8
+      dependencies:
+        - fault_name: "worker_crash"
+          condition: "on_failure"
+          delay_seconds: 2
+
+# Training disruption scenario
+training_disruption:
+  name: "Training Disruption"
+  description: "Simulate common training disruptions"
+  enabled: true
+  cascade_mode: "linear"
+  cascade_interval_seconds: 30
+  stop_on_failure: true
+
+  faults:
+    - name: "gradient_corruption"
+      type: "gradient_nan"
+      layer: "worker"
+      gradient_nan_probability: 1.0
+      target:
+        mode: "all"
+      trigger:
+        type: "count"
+        count_threshold: 100
+
+    - name: "checkpoint_corruption"
+      type: "checkpoint_corruption"
+      layer: "engine"
+      corruption_type: "random_bytes"
+      checkpoint_path: "/tmp/checkpoint.pt"
+      target:
+        mode: "random"
+        count: 1
+      trigger:
+        type: "conditional"
+        condition: "gradient_corruption.status == 'completed'"
+      dependencies:
+        - fault_name: "gradient_corruption"
+          condition: "on_success"
+          delay_seconds: 60
+
+    - name: "nccl_timeout"
+      type: "nccl_failure"
+      layer: "engine"
+      nccl_error_type: "timeout"
+      nccl_timeout_ms: 30000
+      target:
+        mode: "random"
+        count: 2
+      trigger:
+        type: "timed"
+        delay_seconds: 120
+      dependencies:
+        - fault_name: "checkpoint_corruption"
+          condition: "after"
+          delay_seconds: 30
+
+# Inference degradation scenario
+inference_degradation:
+  name: "Inference Degradation"
+  description: "Simulate inference service degradation"
+  enabled: true
+  cascade_mode: "burst"
+  stop_on_failure: false
+
+  faults:
+    - name: "kv_cache_oom"
+      type: "inference_oom"
+      layer: "inference"
+      backend: "vllm"
+      kv_cache_size_mb: 2048
+      target:
+        mode: "random"
+        count: 1
+      trigger:
+        type: "metric_threshold"
+        condition: "gpu_memory_usage > 0.85"
+
+    - name: "scheduler_deadlock"
+      type: "scheduler_deadlock"
+      layer: "inference"
+      deadlock_type: "request_queue"
+      target:
+        mode: "all"
+      trigger:
+        type: "immediate"
+      dependencies:
+        - fault_name: "kv_cache_oom"
+          condition: "on_success"
+          delay_seconds: 5
+
+    - name: "compilation_failure"
+      type: "compilation_failure"
+      layer: "inference"
+      compilation_stage: "graph_capture"
+      target:
+        mode: "random"
+        count: 1
+      trigger:
+        type: "log_pattern"
+        condition: "CUDA out of memory"
+      dependencies:
+        - fault_name: "scheduler_deadlock"
+          condition: "after"
+          delay_seconds: 10
+
+# Network chaos scenario
+network_chaos:
+  name: "Network Chaos"
+  description: "Simulate various network failures"
+  enabled: true
+  cascade_mode: "tree"
+  cascade_interval_seconds: 5
+  max_cascade_depth: 2
+
+  faults:
+    - name: "network_delay"
+      type: "network_delay"
+      layer: "orchestration"
+      delay_ms: 500
+      target:
+        mode: "random"
+        count: 3
+      trigger:
+        type: "probabilistic"
+        probability: 0.3
+
+    - name: "packet_loss"
+      type: "network_loss"
+      layer: "orchestration"
+      loss_rate: 0.1
+      target:
+        mode: "host"
+        hosts: ["worker1", "worker2"]
+      trigger:
+        type: "conditional"
+        condition: "network_delay.status == 'completed'"
+      dependencies:
+        - fault_name: "network_delay"
+          condition: "on_success"
+          delay_seconds: 2
+
+    - name: "bandwidth_limit"
+      type: "network_delay"
+      layer: "orchestration"
+      delay_ms: 100
+      bandwidth_limit: 10000  # 10 Mbps
+      target:
+        mode: "rank"
+        ranks: [2, 3]
+      trigger:
+        type: "timed"
+        delay_seconds: 10
+      dependencies:
+        - fault_name: "packet_loss"
+          condition: "after"
+          delay_seconds: 5
+
+# Resource exhaustion scenario
+resource_exhaustion:
+  name: "Resource Exhaustion"
+  description: "Simulate resource exhaustion failures"
+  enabled: true
+  cascade_mode: "linear"
+  cascade_interval_seconds: 15
+
+  faults:
+    - name: "memory_leak"
+      type: "memory_leak"
+      layer: "worker"
+      leak_rate_mb_per_sec: 100
+      target:
+        mode: "random"
+        count: 2
+      trigger:
+        type: "count"
+        count_threshold: 50
+
+    - name: "disk_full"
+      type: "disk_full"
+      layer: "orchestration"
+      disk_path: "/tmp"
+      target:
+        mode: "all"
+      trigger:
+        type: "conditional"
+        condition: "memory_leak.status == 'completed'"
+      dependencies:
+        - fault_name: "memory_leak"
+          condition: "on_success"
+          delay_seconds: 10
+
+    - name: "fd_exhaustion"
+      type: "fd_exhaustion"
+      layer: "orchestration"
+      fd_count: 10000
+      target:
+        mode: "random"
+        count: 1
+      trigger:
+        type: "timed"
+        delay_seconds: 30
+      dependencies:
+        - fault_name: "disk_full"
+          condition: "after"
+          delay_seconds: 5
+
+# Ray cluster instability scenario
+ray_cluster_instability:
+  name: "Ray Cluster Instability"
+  description: "Simulate Ray cluster instability"
+  enabled: true
+  cascade_mode: "linear"
+  cascade_interval_seconds: 20
+  stop_on_failure: false
+
+  faults:
+    - name: "actor_crash"
+      type: "actor_crash"
+      layer: "orchestration"
+      actor_name: "RolloutWorker"
+      actor_death_type: "exception"
+      crash_delay: 5
+      target:
+        mode: "random"
+        count: 2
+      trigger:
+        type: "immediate"
+
+    - name: "placement_group_failure"
+      type: "placement_group_fault"
+      layer: "orchestration"
+      placement_group_name: "training_pg"
+      pg_fault_type: "creation_failure"
+      target:
+        mode: "all"
+      trigger:
+        type: "conditional"
+        condition: "actor_crash.status == 'completed'"
+      dependencies:
+        - fault_name: "actor_crash"
+          condition: "on_success"
+          delay_seconds: 10
+
+    - name: "task_scheduling_failure"
+      type: "task_scheduling_failure"
+      layer: "orchestration"
+      task_name_pattern: "train.*"
+      failure_rate: 0.5
+      failure_type: "exception"
+      target:
+        mode: "all"
+      trigger:
+        type: "timed"
+        delay_seconds: 30
+      dependencies:
+        - fault_name: "placement_group_failure"
+          condition: "after"
+          delay_seconds: 10
+
+# CUDA-specific failures scenario
+cuda_failures:
+  name: "CUDA Failures"
+  description: "Simulate CUDA-specific failures"
+  enabled: true
+  cascade_mode: "tree"
+  cascade_interval_seconds: 8
+  max_cascade_depth: 2
+
+  faults:
+    - name: "cuda_oom"
+      type: "cuda_oom"
+      layer: "worker"
+      memory_mb: 8192
+      target:
+        mode: "random"
+        count: 1
+      trigger:
+        type: "metric_threshold"
+        condition: "gpu_memory_usage > 0.90"
+
+    - name: "cuda_error"
+      type: "cuda_error"
+      layer: "engine"
+      error_type: "illegal_memory_access"
+      target:
+        mode: "random"
+        count: 1
+      trigger:
+        type: "conditional"
+        condition: "cuda_oom.status == 'completed'"
+      dependencies:
+        - fault_name: "cuda_oom"
+          condition: "on_failure"
+          delay_seconds: 3
+
+    - name: "nccl_crash"
+      type: "nccl_failure"
+      layer: "engine"
+      nccl_error_type: "crash"
+      nccl_timeout_ms: 10000
+      target:
+        mode: "random"
+        count: 2
+      trigger:
+        type: "timed"
+        delay_seconds: 15
+      dependencies:
+        - fault_name: "cuda_error"
+          condition: "after"
+          delay_seconds: 5
+
+# Configuration corruption scenario
+config_corruption:
+  name: "Configuration Corruption"
+  description: "Simulate configuration corruption failures"
+  enabled: true
+  cascade_mode: "burst"
+
+  faults:
+    - name: "hydra_config_error"
+      type: "hydra_config_error"
+      layer: "ui"
+      hydra_error_type: "validate"
+      hydra_config_path: "config/main.yaml"
+      target:
+        mode: "all"
+      trigger:
+        type: "immediate"
+
+    - name: "env_var_missing"
+      type: "env_var_error"
+      layer: "ui"
+      env_var_unset: "RAY_ADDRESS"
+      target:
+        mode: "all"
+      trigger:
+        type: "immediate"
+      dependencies:
+        - fault_name: "hydra_config_error"
+          condition: "after"
+          delay_seconds: 1
+
+    - name: "cli_arg_invalid"
+      type: "cli_arg_error"
+      layer: "ui"
+      cli_arg_invalid: "learning_rate"
+      target:
+        mode: "all"
+      trigger:
+        type: "immediate"
+      dependencies:
+        - fault_name: "env_var_missing"
+          condition: "after"
+          delay_seconds: 1

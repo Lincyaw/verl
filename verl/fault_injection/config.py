@@ -385,11 +385,49 @@ class RecoveryConfig:
 
 
 @dataclass
+class FaultDependencyConfig:
+    """Configuration for fault dependencies."""
+
+    fault_name: str  # Name of the fault this depends on
+    condition: str  # Condition type: "after", "on_success", "on_failure"
+    delay_seconds: Optional[float] = None  # Delay after dependency
+
+
+@dataclass
+class FaultScenarioConfig:
+    """Configuration for a fault scenario with dependencies."""
+
+    name: str
+    description: str = ""
+    enabled: bool = True
+    faults: List[FaultConfig] = field(default_factory=list)
+    dependencies: List[FaultDependencyConfig] = field(default_factory=list)
+    cascade_mode: str = "none"  # none, linear, tree, burst
+    cascade_interval_seconds: float = 5.0  # Interval between cascaded faults
+    max_cascade_depth: int = 3  # Maximum depth for tree cascade
+    stop_on_failure: bool = False  # Stop scenario if a fault fails
+
+
+@dataclass
+class FaultScenarioTemplate:
+    """Template for common fault scenarios."""
+
+    name: str
+    description: str
+    category: str  # category: system, network, resource, training, inference
+    faults: List[Dict[str, Any]] = field(default_factory=list)
+    dependencies: List[Dict[str, Any]] = field(default_factory=list)
+    cascade_config: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class FaultInjectionConfig:
     """Main configuration for the fault injection system."""
 
     enabled: bool = False
     faults: List[FaultConfig] = field(default_factory=list)
+    scenarios: List[FaultScenarioConfig] = field(default_factory=list)
+    templates: List[FaultScenarioTemplate] = field(default_factory=list)
     global_cooldown_seconds: float = 60.0  # Cooldown between faults
     max_concurrent_faults: int = 1  # Maximum concurrent faults
     log_level: str = "INFO"
