@@ -21,7 +21,7 @@
       "添加Ray初始化失败模拟",
       "支持CLI参数和环境变量故障"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-003",

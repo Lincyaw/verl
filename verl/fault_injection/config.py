@@ -44,6 +44,14 @@ class FaultType(Enum):
     CONFIG_CORRUPTION = "config_corruption"
     ENV_VAR_MISSING = "env_var_missing"
 
+    # UI layer faults
+    HYDRA_CONFIG_ERROR = "hydra_config_error"
+    RAY_INIT_FAILURE = "ray_init_failure"
+    CLI_ARG_ERROR = "cli_arg_error"
+    ENV_VAR_ERROR = "env_var_error"
+    UI_FREEZE = "ui_freeze"
+    UI_CRASH = "ui_crash"
+
     # Data faults
     CHECKPOINT_CORRUPTION = "checkpoint_corruption"
     GRADIENT_NAN = "gradient_nan"
@@ -193,6 +201,32 @@ class InferenceFaultConfig(BaseFaultConfig):
     compilation_stage: str = ""  # Compilation stage to fail
 
 
+@dataclass
+class UIFaultConfig(BaseFaultConfig):
+    """Configuration for UI layer faults."""
+
+    # Hydra config errors
+    hydra_error_type: str = ""  # Type of Hydra error (parse, validate, merge)
+    hydra_config_path: Optional[str] = None  # Path to config file
+
+    # Ray initialization errors
+    ray_init_error: str = ""  # Ray initialization error message
+    ray_address: Optional[str] = None  # Ray address to fail
+
+    # CLI argument errors
+    cli_arg_missing: Optional[str] = None  # Missing required argument
+    cli_arg_invalid: Optional[str] = None  # Invalid argument value
+
+    # Environment variable errors
+    env_var_unset: Optional[str] = None  # Environment variable to unset
+    env_var_invalid: Optional[str] = None  # Environment variable with invalid value
+    env_var_value: Optional[str] = None  # Value to set for env var
+
+    # UI freeze/crash
+    freeze_duration_seconds: float = 30.0  # Duration to freeze
+    crash_message: str = "Simulated UI crash"
+
+
 # Union type for all fault configurations
 FaultConfig = Union[
     ProcessFaultConfig,
@@ -203,6 +237,7 @@ FaultConfig = Union[
     DataFaultConfig,
     EngineFaultConfig,
     InferenceFaultConfig,
+    UIFaultConfig,
     BaseFaultConfig,
 ]
 

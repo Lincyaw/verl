@@ -50,3 +50,39 @@
 - 实现具体的故障注入器（UI层、工作器层、引擎层、推理层）
 - 集成到verl主流程中
 - 添加测试和文档
+
+### fault-injection-002: 实现用户界面层故障注入 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **UI层故障注入器实现**
+   - `HydraConfigErrorInjector`: 模拟Hydra配置解析、验证和合并错误
+   - `RayInitFailureInjector`: 模拟Ray集群初始化失败
+   - `CLIArgErrorInjector`: 模拟CLI参数错误（缺失或无效）
+   - `EnvVarErrorInjector`: 模拟环境变量错误（未设置或无效值）
+   - `UIFreezeInjector`: 模拟UI冻结
+   - `UICrashInjector`: 模拟UI崩溃
+
+2. **配置扩展**
+   - 在`FaultType`枚举中添加了UI层故障类型
+   - 创建了`UIFaultConfig`配置类，支持所有UI故障参数
+   - 更新了`FaultConfig`联合类型以包含UI配置
+
+3. **示例和测试**
+   - 创建了`ui_faults.yaml`示例配置文件，展示各种UI故障场景
+   - 编写了测试脚本来验证故障注入器的功能
+   - 所有UI故障注入器都通过`FaultInjectorRegistry`正确注册
+
+**Key Files Created/Modified**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/config.py` - 添加UI故障类型和配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/ui.py` - UI故障注入器实现
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/ui_faults.yaml` - 示例配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_ui_standalone.py` - 测试脚本
+
+**Next Steps**:
+- 实现编排层故障注入（fault-injection-003）
+- 创建工作器层故障注入器
+- 继续实现其他层的故障注入

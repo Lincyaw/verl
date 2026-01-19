@@ -20,6 +20,9 @@ from .integration import (
     create_fault_injection_hooks,
 )
 
+# Import injectors to register them
+from . import injectors
+
 __all__ = [
     "FaultOrchestrator",
     "FaultInjectionConfig",

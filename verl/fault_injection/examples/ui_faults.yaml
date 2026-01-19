@@ -1,0 +1,127 @@
+# Example configuration for UI layer fault injection in verl
+# This file demonstrates various UI layer faults that can be injected
+
+enabled: true
+global_cooldown_seconds: 30.0
+max_concurrent_faults: 1
+log_level: INFO
+output_dir: ./fault_logs
+
+faults:
+  # Example 1: Hydra configuration parsing error
+  - name: "hydra_parse_error"
+    layer: "ui"
+    type: "hydra_config_error"
+    enabled: false
+    description: "Simulate Hydra configuration parsing error"
+    hydra_error_type: "parse"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+  # Example 2: Hydra configuration validation error
+  - name: "hydra_validation_error"
+    layer: "ui"
+    type: "hydra_config_error"
+    enabled: false
+    description: "Simulate Hydra configuration validation error"
+    hydra_error_type: "validate"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+  # Example 3: Ray initialization failure
+  - name: "ray_init_failure"
+    layer: "ui"
+    type: "ray_init_failure"
+    enabled: false
+    description: "Simulate Ray cluster initialization failure"
+    ray_init_error: "Failed to connect to Ray GCS - connection timeout"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+  # Example 4: Missing CLI argument
+  - name: "missing_cli_arg"
+    layer: "ui"
+    type: "cli_arg_error"
+    enabled: false
+    description: "Simulate missing required CLI argument"
+    cli_arg_missing: "--config-path"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+  # Example 5: Invalid CLI argument
+  - name: "invalid_cli_arg"
+    layer: "ui"
+    type: "cli_arg_error"
+    enabled: false
+    description: "Simulate invalid CLI argument"
+    cli_arg_invalid: "--invalid-option=value"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+  # Example 6: Missing environment variable
+  - name: "missing_env_var"
+    layer: "ui"
+    type: "env_var_error"
+    enabled: false
+    description: "Simulate missing required environment variable"
+    env_var_unset: "CUDA_VISIBLE_DEVICES"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+  # Example 7: Invalid environment variable value
+  - name: "invalid_env_var"
+    layer: "ui"
+    type: "env_var_error"
+    enabled: false
+    description: "Simulate invalid environment variable value"
+    env_var_invalid: "TRANSFORMERS_CACHE"
+    env_var_value: "/nonexistent/path"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+  # Example 8: UI freeze
+  - name: "ui_freeze"
+    layer: "ui"
+    type: "ui_freeze"
+    enabled: false
+    description: "Simulate UI freeze for 30 seconds"
+    freeze_duration_seconds: 30.0
+    trigger:
+      type: "timed"
+      delay_seconds: 5.0
+    target:
+      mode: "all"
+
+  # Example 9: UI crash
+  - name: "ui_crash"
+    layer: "ui"
+    type: "ui_crash"
+    enabled: false
+    description: "Simulate UI crash with error message"
+    crash_message: "Fatal error: Unable to initialize training components"
+    trigger:
+      type: "immediate"
+    target:
+      mode: "all"
+
+# Usage instructions:
+# 1. Enable specific faults by setting "enabled: true"
+# 2. Adjust trigger conditions as needed (immediate, timed, count, probabilistic)
+# 3. Modify fault parameters in the configuration
+# 4. Load this config in your verl training script:
+#    fault_config = FaultInjectionConfig.from_yaml("ui_faults.yaml")
+#    fault_orchestrator = FaultOrchestrator(fault_config)
