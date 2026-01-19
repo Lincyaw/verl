@@ -21,6 +21,15 @@ from .worker import (
     WorkerCrashInjector,
     WorkerHangInjector,
 )
+from .engine import (
+    EngineInitFailureInjector,
+    EngineHangInjector,
+    CheckpointCorruptionInjector,
+    NCCLFailureInjector,
+    DeviceMeshErrorInjector,
+    PrecisionErrorInjector,
+    DeviceMapErrorInjector,
+)
 
 __all__ = [
     "ProcessKillInjector",
@@ -43,4 +52,11 @@ __all__ = [
     "CudaMemoryFragmentationInjector",
     "WorkerCrashInjector",
     "WorkerHangInjector",
+    "EngineInitFailureInjector",
+    "EngineHangInjector",
+    "CheckpointCorruptionInjector",
+    "NCCLFailureInjector",
+    "DeviceMeshErrorInjector",
+    "PrecisionErrorInjector",
+    "DeviceMapErrorInjector",
 ]

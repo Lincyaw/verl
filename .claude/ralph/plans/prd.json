@@ -57,7 +57,7 @@
       "添加精度转换和设备映射错误",
       "支持引擎初始化失败"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-006",

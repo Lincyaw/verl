@@ -187,3 +187,51 @@
 - 实现引擎层故障注入（fault-injection-005）
 - 实现推理层故障注入（fault-injection-006）
 - 实现智能故障恢复机制（fault-injection-007）
+
+### fault-injection-005: 实现引擎层故障注入 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **扩展故障类型枚举**
+   - 在`FaultType`枚举中添加了6种新的引擎层故障类型
+   - 包括：`CHECKPOINT_CORRUPTION`、`NCCL_FAILURE`、`DEVICE_MESH_ERROR`、`PRECISION_ERROR`、`DEVICE_MAP_ERROR`
+   - 更新了`EngineFaultConfig`配置类，支持所有新故障的参数
+
+2. **创建引擎层故障注入器**
+   - `EngineInitFailureInjector`: 模拟引擎初始化失败（FSDP、Megatron等）
+   - `EngineHangInjector`: 模拟引擎在执行过程中挂起（前向、反向传播）
+   - `CheckpointCorruptionInjector`: 模拟检查点文件损坏（随机字节、截断、删除）
+   - `NCCLFailureInjector`: 模拟NCCL通信故障（超时、中止、崩溃）
+   - `DeviceMeshErrorInjector`: 模拟设备网格配置错误（无效形状、设备不匹配）
+   - `PrecisionErrorInjector`: 模拟精度转换错误（溢出、下溢、NaN）
+   - `DeviceMapErrorInjector`: 模拟设备映射错误（缺失设备、设备繁忙、对等访问）
+
+3. **更新模块导出**
+   - 在`injectors/__init__.py`中添加了所有引擎故障注入器的导出
+   - 确保故障注入器可以通过`FaultInjectorRegistry`正确注册和发现
+
+4. **创建示例配置**
+   - 创建了`engine_faults.yaml`示例配置文件
+   - 包含15种不同的引擎故障场景，涵盖所有实现的故障类型
+   - 支持多种触发方式（立即、定时、计数、概率）
+
+5. **编写单元测试**
+   - 创建了`test_engine_faults.py`测试文件
+   - 为每个故障注入器编写了完整的单元测试
+   - 测试覆盖了正常注入、异常处理、恢复方法等场景
+   - 使用mock技术避免实际的系统调用和副作用
+
+**Key Files Created/Modified**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/config.py` - 添加引擎故障类型和配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/engine.py` - 引擎故障注入器实现
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/__init__.py` - 更新模块导出
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/engine_faults.yaml` - 示例配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_engine_faults.py` - 单元测试
+
+**Next Steps**:
+- 实现推理层故障注入（fault-injection-006）
+- 实现智能故障恢复机制（fault-injection-007）
+- 创建配置驱动的故障场景（fault-injection-008）

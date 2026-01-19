@@ -79,6 +79,11 @@ class FaultType(Enum):
     # Engine faults
     ENGINE_INIT_FAILURE = "engine_init_failure"
     ENGINE_HANG = "engine_hang"
+    CHECKPOINT_CORRUPTION = "checkpoint_corruption"
+    NCCL_FAILURE = "nccl_failure"
+    DEVICE_MESH_ERROR = "device_mesh_error"
+    PRECISION_ERROR = "precision_error"
+    DEVICE_MAP_ERROR = "device_map_error"
 
     # Inference faults
     INFERENCE_OOM = "inference_oom"
@@ -208,6 +213,26 @@ class EngineFaultConfig(BaseFaultConfig):
     engine_type: str = ""  # Engine type (fsdp, megatron, etc)
     init_error: str = ""  # Initialization error message
     hang_point: str = ""  # Where to hang (forward, backward, etc)
+
+    # Checkpoint corruption
+    corruption_type: str = "random_bytes"  # Type of corruption (random_bytes, truncate, delete)
+    checkpoint_path: Optional[str] = None  # Path to checkpoint file
+
+    # NCCL failure
+    nccl_error_type: str = "timeout"  # Type of NCCL error (timeout, abort, crash)
+    nccl_timeout_ms: int = 60000  # NCCL timeout in milliseconds
+
+    # Device mesh errors
+    mesh_shape: Optional[List[int]] = None  # Device mesh shape
+    mesh_error_type: str = "invalid_shape"  # Type of mesh error
+
+    # Precision errors
+    precision_type: str = "fp16"  # Precision type (fp16, bf16, fp32)
+    precision_error_type: str = "overflow"  # Type of precision error
+
+    # Device mapping errors
+    device_map_error: str = "missing_device"  # Type of device mapping error
+    target_device: Optional[int] = None  # Target device ID
 
 
 @dataclass

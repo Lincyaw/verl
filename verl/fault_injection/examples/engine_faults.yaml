@@ -1,0 +1,209 @@
+# Engine Layer Fault Injection Examples
+# This file demonstrates various engine-level faults that can be injected
+
+faults:
+  # Engine initialization failure
+  - name: "engine_init_failure"
+    layer: "engine"
+    type: "engine_init_failure"
+    description: "Simulate engine initialization failure"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "immediate"
+    engine_type: "fsdp"
+    init_error: "Failed to initialize FSDP engine due to invalid configuration"
+
+  # Engine hang during forward pass
+  - name: "engine_hang_forward"
+    layer: "engine"
+    type: "engine_hang"
+    description: "Simulate engine hang during forward pass"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 60.0
+    hang_point: "forward"
+    hang_duration_seconds: 300.0
+
+  # Engine hang during backward pass
+  - name: "engine_hang_backward"
+    layer: "engine"
+    type: "engine_hang"
+    description: "Simulate engine hang during backward pass"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "count"
+      count_threshold: 10
+    hang_point: "backward"
+    hang_duration_seconds: 600.0
+
+  # Checkpoint corruption with random bytes
+  - name: "checkpoint_corruption_random"
+    layer: "engine"
+    type: "checkpoint_corruption"
+    description: "Corrupt checkpoint with random bytes"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "probabilistic"
+      probability: 0.05
+    corruption_type: "random_bytes"
+    checkpoint_path: "/tmp/model.ckpt"
+
+  # Checkpoint truncation
+  - name: "checkpoint_truncation"
+    layer: "engine"
+    type: "checkpoint_corruption"
+    description: "Truncate checkpoint file"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 120.0
+    corruption_type: "truncate"
+    checkpoint_path: "/tmp/model.ckpt"
+
+  # NCCL timeout failure
+  - name: "nccl_timeout"
+    layer: "engine"
+    type: "nccl_failure"
+    description: "Simulate NCCL communication timeout"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "count"
+      count_threshold: 50
+    nccl_error_type: "timeout"
+    nccl_timeout_ms: 30000
+
+  # NCCL abort failure
+  - name: "nccl_abort"
+    layer: "engine"
+    type: "nccl_failure"
+    description: "Simulate NCCL abort"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "probabilistic"
+      probability: 0.01
+    nccl_error_type: "abort"
+
+  # Device mesh invalid shape error
+  - name: "device_mesh_invalid"
+    layer: "engine"
+    type: "device_mesh_error"
+    description: "Create invalid device mesh configuration"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "immediate"
+    mesh_error_type: "invalid_shape"
+    mesh_shape: [2, 2, 2]
+
+  # Device mesh device mismatch
+  - name: "device_mesh_mismatch"
+    layer: "engine"
+    type: "device_mesh_error"
+    description: "Simulate device mesh device mismatch"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 180.0
+    mesh_error_type: "device_mismatch"
+    mesh_shape: [8, 8, 8]  # Requires 512 devices
+
+  # FP16 overflow error
+  - name: "fp16_overflow"
+    layer: "engine"
+    type: "precision_error"
+    description: "Simulate FP16 precision overflow"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "count"
+      count_threshold: 25
+    precision_type: "fp16"
+    precision_error_type: "overflow"
+
+  # FP16 underflow error
+  - name: "fp16_underflow"
+    layer: "engine"
+    type: "precision_error"
+    description: "Simulate FP16 precision underflow"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "probabilistic"
+      probability: 0.03
+    precision_type: "fp16"
+    precision_error_type: "underflow"
+
+  # BF16 NaN error
+  - name: "bf16_nan"
+    layer: "engine"
+    type: "precision_error"
+    description: "Simulate BF16 NaN values"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 90.0
+    precision_type: "bf16"
+    precision_error_type: "nan"
+
+  # Device mapping missing device
+  - name: "device_missing"
+    layer: "engine"
+    type: "device_map_error"
+    description: "Map to non-existent device"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "immediate"
+    device_map_error: "missing_device"
+    target_device: 999
+
+  # Device busy error
+  - name: "device_busy"
+    layer: "engine"
+    type: "device_map_error"
+    description: "Simulate device busy error"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "count"
+      count_threshold: 75
+    device_map_error: "device_busy"
+    target_device: 0
+
+  # Peer access error
+  - name: "peer_access_error"
+    layer: "engine"
+    type: "device_map_error"
+    description: "Simulate peer access error between devices"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "probabilistic"
+      probability: 0.02
+    device_map_error: "peer_access"
+    target_device: 1
