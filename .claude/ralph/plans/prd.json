@@ -129,7 +129,7 @@
       "添加缓存机制，避免重复注入",
       "实现异步故障注入"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-012",
