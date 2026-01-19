@@ -1,0 +1,145 @@
+# Example fault injection configuration for verl
+
+enabled: true
+log_level: INFO
+max_concurrent_faults: 2
+global_cooldown_seconds: 30.0
+output_dir: /tmp/verl_fault_logs
+
+faults:
+  # UI Layer Faults
+  - name: "hydra_config_corruption"
+    layer: "ui"
+    type: "config_corruption"
+    description: "Corrupt Hydra configuration parsing"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "probabilistic"
+      probability: 0.1
+    config_key: "model.hidden_size"
+    config_value: "invalid_value"
+
+  - name: "ray_init_failure"
+    layer: "ui"
+    type: "process_exit"
+    description: "Simulate Ray initialization failure"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "immediate"
+    exit_code: 1
+
+  # Orchestration Layer Faults
+  - name: "actor_crash"
+    layer: "orchestration"
+    type: "process_kill"
+    description: "Randomly kill actor workers"
+    target:
+      mode: "random"
+      process_types: ["actor"]
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 60.0
+    signal: 9
+
+  - name: "network_partition"
+    layer: "orchestration"
+    type: "network_partition"
+    description: "Create network partition between workers"
+    target:
+      mode: "random"
+      count: 2
+    trigger:
+      type: "count"
+      count_threshold: 10
+    target_ports: [6379, 10001, 10002, 10003]  # Ray ports
+
+  # Worker Layer Faults
+  - name: "cuda_oom_worker"
+    layer: "worker"
+    type: "cuda_oom"
+    description: "Simulate CUDA out of memory in worker"
+    target:
+      mode: "random"
+      process_types: ["actor", "critic"]
+      count: 1
+    trigger:
+      type: "probabilistic"
+      probability: 0.05
+    memory_mb: 8192
+
+  - name: "gradient_nan"
+    layer: "worker"
+    type: "gradient_nan"
+    description: "Inject NaN values into gradients"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "count"
+      count_threshold: 100
+    nan_probability: 0.01
+
+  # Engine Layer Faults
+  - name: "checkpoint_corruption"
+    layer: "engine"
+    type: "checkpoint_corruption"
+    description: "Corrupt checkpoint files"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 300.0
+    corruption_type: "random_bytes"
+
+  - name: "nccl_failure"
+    layer: "engine"
+    type: "nccl_failure"
+    description: "Simulate NCCL communication failure"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "probabilistic"
+      probability: 0.02
+
+  # Inference Layer Faults
+  - name: "inference_oom"
+    layer: "inference"
+    type: "inference_oom"
+    description: "Simulate inference OOM in vLLM/SGLang"
+    target:
+      mode: "random"
+      process_types: ["rollout"]
+      count: 1
+    trigger:
+      type: "count"
+      count_threshold: 50
+    kv_cache_size_mb: 4096
+
+  - name: "scheduler_deadlock"
+    layer: "inference"
+    type: "scheduler_deadlock"
+    description: "Create scheduler deadlock in inference"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 180.0
+    deadlock_type: "request_queue"
+
+# Example usage:
+# from verl.fault_injection import FaultOrchestrator, FaultInjectionConfig
+# config = FaultInjectionConfig.from_yaml("fault_config.yaml")
+# orchestrator = FaultOrchestrator(config)
+#
+# # Start fault injection
+# with orchestrator:
+#     # Run your verl training
+#     main()

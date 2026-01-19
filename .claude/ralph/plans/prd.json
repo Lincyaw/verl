@@ -9,7 +9,7 @@
       "实现故障注入配置管理系统",
       "建立故障注入点和拦截机制"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-002",

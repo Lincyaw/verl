@@ -1,3 +1,52 @@
 # verl Fault Injection System - Development Progress
 
 ==================
+
+## Completed Features
+
+### fault-injection-001: 创建verl故障注入系统的基础架构 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **5层故障注入架构设计**
+   - UI层 (用户界面层)
+   - ORCHESTRATION层 (Ray集群编排层)
+   - WORKER层 (工作器进程层)
+   - ENGINE层 (训练引擎层)
+   - INFERENCE层 (推理后端层)
+
+2. **基础故障注入器基类和接口**
+   - `BaseFaultInjector`: 所有故障注入器的抽象基类
+   - `FaultInjectorRegistry`: 故障注入器注册表
+   - `FaultTargetSelector`: 目标选择器接口及实现
+   - `FaultTrigger`: 触发器接口及实现
+   - `FaultContext` 和 `FaultResult`: 上下文和结果数据结构
+
+3. **故障注入配置管理系统**
+   - `FaultInjectionConfig`: 主配置类
+   - `BaseFaultConfig` 及派生配置类: 支持各种故障类型
+   - 支持YAML配置文件的加载和保存
+   - 完整的类型注解和验证
+
+4. **故障注入点和拦截机制**
+   - `FaultOrchestrator`: 核心编排器，管理故障注入生命周期
+   - `RayFaultInjectionManager`: Ray集成，自动发现和管理worker
+   - `FaultInjectionHooks`: 提供装饰器模式的hook机制
+   - 支持在verl主流程的关键点注入故障
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/config.py`
+- `/Users/bytedance/workspace/verl/verl/fault_injection/base.py`
+- `/Users/bytedance/workspace/verl/verl/fault_injection/orchestrator.py`
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/process.py`
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/network.py`
+- `/Users/bytedance/workspace/verl/verl/fault_injection/integration/ray_integration.py`
+- `/Users/bytedance/workspace/verl/verl/fault_injection/integration/hooks.py`
+
+**Next Steps**:
+- 实现具体的故障注入器（UI层、工作器层、引擎层、推理层）
+- 集成到verl主流程中
+- 添加测试和文档
