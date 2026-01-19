@@ -1,0 +1,146 @@
+[
+  {
+    "id": "fault-injection-001",
+    "story": "创建verl故障注入系统的基础架构",
+    "priority": "high",
+    "requirements": [
+      "设计5层故障注入架构（UI、编排、工作器、引擎、推理）",
+      "创建基础故障注入器基类和接口",
+      "实现故障注入配置管理系统",
+      "建立故障注入点和拦截机制"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-002",
+    "story": "实现用户界面层故障注入",
+    "priority": "high",
+    "requirements": [
+      "创建UI层故障注入器（配置错误、环境故障）",
+      "实现Hydra配置解析故障注入",
+      "添加Ray初始化失败模拟",
+      "支持CLI参数和环境变量故障"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-003",
+    "story": "实现编排层故障注入",
+    "priority": "high",
+    "requirements": [
+      "创建Ray集群故障注入器",
+      "实现Actor崩溃和资源耗尽模拟",
+      "添加任务调度和资源池故障",
+      "支持GCS故障和网络分区"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-004",
+    "story": "实现工作器层故障注入",
+    "priority": "high",
+    "requirements": [
+      "创建FSDP工作器故障注入器",
+      "创建Megatron工作器故障注入器",
+      "实现梯度同步和分片故障",
+      "添加CUDA OOM和内存碎片模拟"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-005",
+    "story": "实现引擎层故障注入",
+    "priority": "high",
+    "requirements": [
+      "创建模型加载和检查点故障",
+      "实现设备网格和NCCL通信故障",
+      "添加精度转换和设备映射错误",
+      "支持引擎初始化失败"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-006",
+    "story": "实现推理层故障注入",
+    "priority": "high",
+    "requirements": [
+      "创建vLLM推理故障注入器",
+      "创建SGLang推理故障注入器",
+      "实现KV缓存OOM和调度死锁",
+      "添加图编译失败和RadixAttention错误"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-007",
+    "story": "实现智能故障恢复机制",
+    "priority": "medium",
+    "requirements": [
+      "创建分层恢复策略系统",
+      "实现智能恢复决策引擎",
+      "添加预防性恢复和降级模式",
+      "支持自动和手动恢复模式"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-008",
+    "story": "创建配置驱动的故障场景",
+    "priority": "medium",
+    "requirements": [
+      "设计YAML格式的故障场景配置",
+      "实现基于触发器的故障注入",
+      "支持故障依赖和级联关系",
+      "创建常见故障场景模板"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-009",
+    "story": "实现实时监控和观测系统",
+    "priority": "medium",
+    "requirements": [
+      "创建实时指标收集器",
+      "实现可视化仪表板",
+      "添加智能告警系统",
+      "支持故障影响分析"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-010",
+    "story": "集成故障注入系统到verl主流程",
+    "priority": "medium",
+    "requirements": [
+      "修改main_ppo.py添加故障注入初始化",
+      "在RayTrainer中添加故障注入钩子",
+      "实现与verl配置系统的集成",
+      "确保对主流程的最小侵入性"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-011",
+    "story": "实现性能优化和开销控制",
+    "priority": "low",
+    "requirements": [
+      "优化故障注入代码性能",
+      "实现条件编译和运行时开关",
+      "添加缓存机制，避免重复注入",
+      "实现异步故障注入"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fault-injection-012",
+    "story": "创建完整的测试和文档",
+    "priority": "low",
+    "requirements": [
+      "为每个故障注入器编写单元测试",
+      "创建集成测试验证端到端场景",
+      "编写API文档和使用指南",
+      "提供示例配置和教程"
+    ],
+    "passes": false
+  }
+]
