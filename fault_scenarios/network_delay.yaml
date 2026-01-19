@@ -1,0 +1,16 @@
+# Network Delay Scenario
+# Adds network latency to trigger communication timeouts
+
+name: "network_delay"
+description: "Add 500ms network delay to trigger timeouts"
+
+faults:
+  - type: network_delay
+    trigger:
+      type: timed
+      after: 10s
+    params:
+      delay_ms: 500
+      interface: eth0
+
+log_output_dir: ./fault_logs/network_delay

@@ -1,0 +1,25 @@
+# Cascade Failure Scenario
+# Multiple faults in sequence to create cascade effect
+
+name: "cascade_failure"
+description: "Network delay followed by process kill - simulates cascade failure"
+
+faults:
+  # First: add network delay
+  - type: network_delay
+    trigger:
+      type: timed
+      after: 20s
+    params:
+      delay_ms: 200
+      interface: eth0
+
+  # Then: kill process after delay has caused issues
+  - type: process_kill
+    trigger:
+      type: timed
+      after: 60s
+    params:
+      signal: SIGTERM
+
+log_output_dir: ./fault_logs/cascade

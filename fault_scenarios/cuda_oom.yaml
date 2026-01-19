@@ -1,0 +1,15 @@
+# CUDA OOM Scenario
+# Triggers CUDA out of memory error during training
+
+name: "cuda_oom"
+description: "Allocate excessive GPU memory to trigger CUDA OOM"
+
+faults:
+  - type: cuda_oom
+    trigger:
+      type: timed
+      after: 30s
+    params:
+      size_gb: 100
+
+log_output_dir: ./fault_logs/cuda_oom

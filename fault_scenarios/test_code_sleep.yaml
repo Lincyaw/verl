@@ -1,0 +1,12 @@
+name: "test_code_sleep"
+description: "Test code-level fault injection with sleep"
+
+faults:
+  - type: code_sleep
+    trigger:
+      type: timed
+      after: 1s
+    params:
+      duration_sec: 3
+
+log_output_dir: ./fault_logs/test_code_sleep

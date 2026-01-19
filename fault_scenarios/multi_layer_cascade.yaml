@@ -1,0 +1,32 @@
+# Multi-Layer Cascade Failure Scenario
+# Combines multiple fault types to create realistic cascade failure
+
+name: "multi_layer_cascade"
+description: "Network delay -> NCCL timeout -> Ray crash cascade"
+
+faults:
+  # Stage 1: Network degradation
+  - type: network_delay
+    trigger:
+      type: timed
+      after: 20s
+    params:
+      delay_ms: 300
+      interface: eth0
+
+  # Stage 2: NCCL timeout due to network delay
+  - type: nccl_timeout
+    target_rank: 0
+    trigger:
+      type: timed
+      after: 60s
+    params:
+      duration_sec: 120
+
+  # Stage 3: Ray actor crash due to timeout
+  - type: ray_actor_crash
+    trigger:
+      type: timed
+      after: 90s
+
+log_output_dir: ./fault_logs/multi_cascade

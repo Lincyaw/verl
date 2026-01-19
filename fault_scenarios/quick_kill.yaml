@@ -1,0 +1,13 @@
+# Quick test scenario - kills process after 2 seconds
+name: "quick_kill"
+description: "Kill process after 2 seconds for testing"
+
+faults:
+  - type: process_kill
+    trigger:
+      type: timed
+      after: 2s
+    params:
+      signal: SIGTERM
+
+log_output_dir: ./fault_logs/quick_kill

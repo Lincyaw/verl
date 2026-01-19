@@ -1,0 +1,13 @@
+# Ray Actor Crash Scenario
+# Simulates Ray distributed worker failure
+
+name: "ray_actor_crash"
+description: "Crash Ray actor to simulate worker failure"
+
+faults:
+  - type: ray_actor_crash
+    trigger:
+      type: timed
+      after: 45s
+
+log_output_dir: ./fault_logs/ray_crash

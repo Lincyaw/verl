@@ -1,0 +1,13 @@
+# HuggingFace Hub Unreachable Scenario
+# Blocks access to HuggingFace Hub to simulate network dependency failure
+
+name: "hf_hub_unreachable"
+description: "Block HuggingFace Hub access to simulate dependency failure"
+
+faults:
+  - type: hf_hub_unreachable
+    trigger:
+      type: timed
+      after: 10s
+
+log_output_dir: ./fault_logs/hf_unreachable

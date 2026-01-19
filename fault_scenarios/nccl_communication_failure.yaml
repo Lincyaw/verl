@@ -1,0 +1,16 @@
+# NCCL Communication Timeout Scenario
+# Simulates distributed training communication failure
+
+name: "nccl_communication_failure"
+description: "NCCL timeout on rank 0 to trigger collective operation failure"
+
+faults:
+  - type: nccl_timeout
+    target_rank: 0
+    trigger:
+      type: timed
+      after: 60s
+    params:
+      duration_sec: 180  # Sleep longer than NCCL timeout
+
+log_output_dir: ./fault_logs/nccl_failure

@@ -1,0 +1,16 @@
+# NCCL Timeout Scenario
+# Simulates a rank hanging, causing NCCL collective operations to timeout
+
+name: "nccl_timeout"
+description: "Inject sleep to trigger NCCL timeout on rank 0"
+
+faults:
+  - type: code_sleep
+    target_rank: 0
+    trigger:
+      type: timed
+      after: 30s
+    params:
+      duration_sec: 120  # Longer than NCCL_TIMEOUT (default 30min, but often set lower)
+
+log_output_dir: ./fault_logs/nccl_timeout

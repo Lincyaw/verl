@@ -1,0 +1,16 @@
+# Rank Desynchronization Scenario
+# Creates timing mismatch between distributed training ranks
+
+name: "rank_desync"
+description: "Desynchronize ranks to trigger barrier timeout"
+
+faults:
+  - type: rank_desync
+    target_rank: 0
+    trigger:
+      type: timed
+      after: 30s
+    params:
+      duration_sec: 60
+
+log_output_dir: ./fault_logs/rank_desync

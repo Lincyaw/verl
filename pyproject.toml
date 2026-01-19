@@ -111,3 +111,7 @@ verl = [
   "trainer/config/*.yaml",
   "trainer/config/*/*.yaml",
 ]
+
+# CLI entry points
+[project.scripts]
+verl-fault-inject = "verl.fault_injection.cli:main"

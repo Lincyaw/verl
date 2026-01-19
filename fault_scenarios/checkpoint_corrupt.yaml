@@ -1,0 +1,15 @@
+# Checkpoint Corruption Scenario
+# Corrupts checkpoint file to simulate storage failure
+
+name: "checkpoint_corrupt"
+description: "Corrupt checkpoint file during training"
+
+faults:
+  - type: checkpoint_corrupt
+    trigger:
+      type: timed
+      after: 120s
+    params:
+      checkpoint_path: /tmp/test_checkpoint.pt
+
+log_output_dir: ./fault_logs/checkpoint_corrupt

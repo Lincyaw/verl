@@ -1,0 +1,51 @@
+# Comprehensive Random Fault Scenario
+# Multiple random faults across different layers for rich log generation
+
+name: "comprehensive_random"
+description: "Random faults across all layers for comprehensive log dataset"
+
+faults:
+  # Network layer
+  - type: network_delay
+    trigger:
+      type: probability
+      probability: 0.3
+      after: 30s
+    params:
+      delay_ms: 200
+      interface: eth0
+
+  # System layer
+  - type: memory_pressure
+    trigger:
+      type: probability
+      probability: 0.2
+      after: 45s
+    params:
+      size_mb: 1000
+
+  # NCCL layer
+  - type: nccl_timeout
+    target_rank: 0
+    trigger:
+      type: probability
+      probability: 0.15
+      after: 60s
+    params:
+      duration_sec: 90
+
+  # DL Framework layer
+  - type: gradient_nan
+    trigger:
+      type: probability
+      probability: 0.1
+      after: 75s
+
+  # Dependency service layer
+  - type: wandb_disconnect
+    trigger:
+      type: probability
+      probability: 0.2
+      after: 90s
+
+log_output_dir: ./fault_logs/comprehensive

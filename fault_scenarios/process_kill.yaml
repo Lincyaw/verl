@@ -1,0 +1,15 @@
+# Process Kill Scenario
+# Kills the training process to simulate unexpected termination
+
+name: "process_kill"
+description: "Kill training process with SIGKILL"
+
+faults:
+  - type: process_kill
+    trigger:
+      type: timed
+      after: 45s
+    params:
+      signal: SIGKILL
+
+log_output_dir: ./fault_logs/process_kill
