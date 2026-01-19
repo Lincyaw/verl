@@ -10,6 +10,17 @@ from .ui import (
     UIFreezeInjector,
     UICrashInjector,
 )
+from .worker import (
+    FSDPSyncFailureInjector,
+    FSDPShardingErrorInjector,
+    MegatronSyncFailureInjector,
+    MegatronPipelineErrorInjector,
+    GradientSyncTimeoutInjector,
+    CudaOOMWorkerInjector,
+    CudaMemoryFragmentationInjector,
+    WorkerCrashInjector,
+    WorkerHangInjector,
+)
 
 __all__ = [
     "ProcessKillInjector",
@@ -23,4 +34,13 @@ __all__ = [
     "EnvVarErrorInjector",
     "UIFreezeInjector",
     "UICrashInjector",
+    "FSDPSyncFailureInjector",
+    "FSDPShardingErrorInjector",
+    "MegatronSyncFailureInjector",
+    "MegatronPipelineErrorInjector",
+    "GradientSyncTimeoutInjector",
+    "CudaOOMWorkerInjector",
+    "CudaMemoryFragmentationInjector",
+    "WorkerCrashInjector",
+    "WorkerHangInjector",
 ]

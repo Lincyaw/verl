@@ -132,3 +132,58 @@
 - 实现工作器层故障注入（fault-injection-004）
 - 实现引擎层故障注入（fault-injection-005）
 - 实现推理层故障注入（fault-injection-006）
+
+### fault-injection-004: 实现工作器层故障注入 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **FSDP工作器故障注入器**
+   - `FSDPSyncFailureInjector`: 模拟FSDP同步失败（all_reduce、broadcast）
+   - `FSDPShardingErrorInjector`: 模拟FSDP分片错误（前向和反向传播）
+   - 支持在特定阶段注入参数和梯度损坏
+
+2. **Megatron工作器故障注入器**
+   - `MegatronSyncFailureInjector`: 模拟Megatron同步失败
+   - 支持all_reduce溢出和broadcast NaN值
+   - `MegatronPipelineErrorInjector`: 模拟Megatron流水线错误
+   - 支持虚拟流水线阶段的故障注入
+
+3. **梯度同步和分片故障**
+   - `GradientSyncTimeoutInjector`: 模拟梯度同步超时
+   - 支持自定义超时时间和触发条件
+   - 与PyTorch分布式训练集成
+
+4. **CUDA OOM和内存碎片模拟**
+   - `CudaOOMWorkerInjector`: 模拟CUDA内存不足
+   - 支持分配指定大小的内存触发OOM
+   - `CudaMemoryFragmentationInjector`: 模拟CUDA内存碎片化
+   - 通过分配和释放小块内存制造碎片
+
+5. **工作器进程故障**
+   - `WorkerCrashInjector`: 模拟工作器崩溃
+   - 支持异常、进程退出和信号三种崩溃方式
+   - `WorkerHangInjector`: 模拟工作器挂起
+   - 支持在前向、反向或step阶段挂起
+
+6. **配置扩展**
+   - 在`FaultType`枚举中添加了工作器层故障类型
+   - 创建了`WorkerFaultConfig`配置类
+   - 支持FSDP、Megatron、梯度、CUDA和工作器进程的各种参数
+
+7. **示例和测试**
+   - 创建了`worker_faults.yaml`示例配置文件
+   - 包含15种不同的工作器故障场景
+   - 编写了完整的单元测试覆盖所有注入器
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/worker.py` - 工作器层故障注入器实现
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/worker_faults.yaml` - 示例配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_worker_faults.py` - 测试文件
+
+**Next Steps**:
+- 实现引擎层故障注入（fault-injection-005）
+- 实现推理层故障注入（fault-injection-006）
+- 实现智能故障恢复机制（fault-injection-007）

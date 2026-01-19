@@ -1,0 +1,226 @@
+# Example configuration for worker layer fault injection in verl
+# This file demonstrates various worker-level faults that can be injected
+
+enabled: true
+global_cooldown_seconds: 30.0
+max_concurrent_faults: 2
+log_level: INFO
+
+faults:
+  # FSDP Synchronization Failures
+  - name: fsdp_all_reduce_failure
+    layer: worker
+    type: fsdp_sync_failure
+    enabled: true
+    description: "Simulate FSDP all_reduce synchronization failure"
+    fsdp_sync_type: all_reduce
+    target:
+      mode: rank
+      ranks: [1, 3]
+    trigger:
+      type: probabilistic
+      probability: 0.1
+    duration_seconds: 5.0
+
+  - name: fsdp_broadcast_failure
+    layer: worker
+    type: fsdp_sync_failure
+    enabled: false
+    description: "Simulate FSDP broadcast synchronization failure"
+    fsdp_sync_type: broadcast
+    target:
+      mode: rank
+      ranks: [0]
+    trigger:
+      type: timed
+      delay_seconds: 60.0
+
+  # FSDP Sharding Errors
+  - name: fsdp_forward_sharding_error
+    layer: worker
+    type: fsdp_sharding_error
+    enabled: false
+    description: "Corrupt parameters during forward pass in FSDP"
+    fsdp_sharding_stage: forward
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: count
+      count_threshold: 100
+
+  - name: fsdp_backward_sharding_error
+    layer: worker
+    type: fsdp_sharding_error
+    enabled: false
+    description: "Corrupt gradients during backward pass in FSDP"
+    fsdp_sharding_stage: backward
+    target:
+      mode: random
+      count: 2
+    trigger:
+      type: probabilistic
+      probability: 0.05
+
+  # Megatron Synchronization Failures
+  - name: megatron_all_reduce_overflow
+    layer: worker
+    type: megatron_sync_failure
+    enabled: false
+    description: "Cause all_reduce overflow in Megatron"
+    megatron_sync_op: all_reduce
+    target:
+      mode: all
+    trigger:
+      type: timed
+      delay_seconds: 120.0
+
+  - name: megatron_broadcast_nan
+    layer: worker
+    type: megatron_sync_failure
+    enabled: false
+    description: "Broadcast NaN values in Megatron"
+    megatron_sync_op: broadcast
+    target:
+      mode: rank
+      ranks: [0]
+    trigger:
+      type: immediate
+
+  # Megatron Pipeline Errors
+  - name: megatron_pipeline_forward_error
+    layer: worker
+    type: megatron_pipeline_error
+    enabled: false
+    description: "Cause forward pass error in Megatron pipeline"
+    megatron_pipeline_stage: forward
+    megatron_virtual_pipeline: 1
+    target:
+      mode: rank
+      ranks: [2]
+    trigger:
+      type: probabilistic
+      probability: 0.02
+
+  - name: megatron_pipeline_backward_error
+    layer: worker
+    type: megatron_pipeline_error
+    enabled: false
+    description: "Break gradient flow in Megatron pipeline backward"
+    megatron_pipeline_stage: backward
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: count
+      count_threshold: 50
+
+  # Gradient Synchronization Issues
+  - name: gradient_sync_timeout
+    layer: worker
+    type: gradient_sync_timeout
+    enabled: false
+    description: "Cause gradient synchronization timeout"
+    gradient_sync_timeout_ms: 1000
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: timed
+      delay_seconds: 180.0
+
+  # CUDA Memory Issues
+  - name: cuda_oom_worker
+    layer: worker
+    type: cuda_oom_worker
+    enabled: false
+    description: "Simulate CUDA out of memory in worker"
+    cuda_memory_mb: 8192
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: probabilistic
+      probability: 0.05
+    recovery_seconds: 10.0
+
+  - name: cuda_memory_fragmentation
+    layer: worker
+    type: cuda_memory_fragmentation
+    enabled: false
+    description: "Fragment CUDA memory"
+    cuda_fragment_size_mb: 128
+    cuda_fragment_count: 200
+    target:
+      mode: all
+    trigger:
+      type: timed
+      delay_seconds: 90.0
+
+  # Worker Process Faults
+  - name: worker_crash_exception
+    layer: worker
+    type: worker_crash
+    enabled: false
+    description: "Crash worker with exception"
+    crash_method: exception
+    worker_type: actor
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: probabilistic
+      probability: 0.01
+
+  - name: worker_hang_forward
+    layer: worker
+    type: worker_hang
+    enabled: false
+    description: "Hang worker during forward pass"
+    hang_location: forward
+    duration_seconds: 60.0
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: count
+      count_threshold: 200
+
+  - name: worker_hang_backward
+    layer: worker
+    type: worker_hang
+    enabled: false
+    description: "Hang worker during backward pass"
+    hang_location: backward
+    duration_seconds: 30.0
+    target:
+      mode: rank
+      ranks: [1]
+    trigger:
+      type: timed
+      delay_seconds: 300.0
+
+  # Gradient Corruption
+  - name: gradient_nan_injection
+    layer: worker
+    type: gradient_nan
+    enabled: false
+    description: "Inject NaN values into gradients"
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: probabilistic
+      probability: 0.03
+
+  - name: parameter_nan_injection
+    layer: worker
+    type: parameter_nan
+    enabled: false
+    description: "Corrupt model parameters with NaN"
+    target:
+      mode: random
+      count: 1
+    trigger:
+      type: count
+      count_threshold: 150

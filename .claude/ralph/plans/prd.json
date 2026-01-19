@@ -45,7 +45,7 @@
       "实现梯度同步和分片故障",
       "添加CUDA OOM和内存碎片模拟"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-005",

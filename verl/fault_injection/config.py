@@ -63,10 +63,18 @@ class FaultType(Enum):
     NETWORK_PARTITION = "network_partition"
     PLACEMENT_GROUP_FAULT = "placement_group_fault"
 
-    # Data faults
-    CHECKPOINT_CORRUPTION = "checkpoint_corruption"
+    # Worker layer faults
+    FSDP_SYNC_FAILURE = "fsdp_sync_failure"
+    FSDP_SHARDING_ERROR = "fsdp_sharding_error"
+    MEGATRON_SYNC_FAILURE = "megatron_sync_failure"
+    MEGATRON_PIPELINE_ERROR = "megatron_pipeline_error"
+    GRADIENT_SYNC_TIMEOUT = "gradient_sync_timeout"
     GRADIENT_NAN = "gradient_nan"
     PARAMETER_NAN = "parameter_nan"
+    CUDA_OOM_WORKER = "cuda_oom_worker"
+    CUDA_MEMORY_FRAGMENTATION = "cuda_memory_fragmentation"
+    WORKER_CRASH = "worker_crash"
+    WORKER_HANG = "worker_hang"
 
     # Engine faults
     ENGINE_INIT_FAILURE = "engine_init_failure"
@@ -281,6 +289,34 @@ class OrchestrationFaultConfig(BaseFaultConfig):
     pg_fault_type: str = "creation_failure"  # Type of placement group fault
 
 
+@dataclass
+class WorkerFaultConfig(BaseFaultConfig):
+    """Configuration for worker layer faults."""
+
+    # FSDP faults
+    fsdp_sync_type: str = "all_reduce"  # Type of FSDP sync (all_reduce, broadcast)
+    fsdp_sharding_stage: str = "forward"  # Stage to inject sharding error
+
+    # Megatron faults
+    megatron_sync_op: str = "all_reduce"  # Megatron sync operation
+    megatron_pipeline_stage: str = "forward"  # Pipeline stage to fail
+    megatron_virtual_pipeline: Optional[int] = None  # Virtual pipeline rank
+
+    # Gradient faults
+    gradient_sync_timeout_ms: int = 30000  # Timeout for gradient sync
+    gradient_nan_probability: float = 1.0  # Probability of NaN gradients
+
+    # CUDA faults
+    cuda_memory_mb: int = 1024  # Amount of CUDA memory to allocate
+    cuda_fragment_size_mb: int = 64  # Size of memory fragments
+    cuda_fragment_count: int = 100  # Number of fragments to create
+
+    # Worker process faults
+    worker_type: str = "actor"  # Type of worker (actor, critic, reward)
+    crash_method: str = "exception"  # Method to crash (exception, exit, signal)
+    hang_location: str = "forward"  # Where to hang (forward, backward, step)
+
+
 # Union type for all fault configurations
 FaultConfig = Union[
     ProcessFaultConfig,
@@ -293,6 +329,7 @@ FaultConfig = Union[
     InferenceFaultConfig,
     UIFaultConfig,
     OrchestrationFaultConfig,
+    WorkerFaultConfig,
     BaseFaultConfig,
 ]
 
