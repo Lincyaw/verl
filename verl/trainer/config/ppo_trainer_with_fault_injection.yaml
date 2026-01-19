@@ -1,0 +1,120 @@
+# Example PPO trainer configuration with fault injection enabled
+# This demonstrates how to configure fault injection in verl
+
+defaults:
+  - ppo_trainer
+
+# Enable fault injection
+fault_injection:
+  enabled: true
+
+  # Define faults to inject
+  faults:
+    # UI layer fault - simulate Ray initialization failure
+    - layer: UI
+      fault_type: RAY_INIT_FAILURE
+      target:
+        type: ALL
+      trigger:
+        type: IMMEDIATE
+      config:
+        failure_rate: 0.1
+        error_message: "Simulated Ray initialization failure"
+
+    # Orchestration layer fault - simulate actor crash
+    - layer: ORCHESTRATION
+      fault_type: ACTOR_CRASH
+      target:
+        type: ROLE
+        role: ActorRollout
+      trigger:
+        type: COUNT
+        count: 5
+      config:
+        crash_type: EXCEPTION
+        exception_type: RuntimeError
+        message: "Simulated actor crash for testing"
+
+    # Worker layer fault - simulate CUDA OOM
+    - layer: WORKER
+      fault_type: CUDA_OOM
+      target:
+        type: ROLE
+        role: ActorRollout
+      trigger:
+        type: PROBABILISTIC
+        probability: 0.05
+      config:
+        allocation_size: 1073741824  # 1GB
+
+    # Engine layer fault - simulate checkpoint corruption
+    - layer: ENGINE
+      fault_type: CHECKPOINT_CORRUPTION
+      target:
+        type: ALL
+      trigger:
+        type: TIMED
+        delay: 300  # 5 minutes
+      config:
+        corruption_type: RANDOM_BYTES
+        corruption_percentage: 10
+
+    # Inference layer fault - simulate scheduler deadlock
+    - layer: INFERENCE
+      fault_type: SCHEDULER_DEADLOCK
+      target:
+        type: ALL
+      trigger:
+        type: CONDITIONAL
+        condition: "global_step > 100"
+      config:
+        deadlock_type: REQUEST_QUEUE
+        timeout: 30
+
+  # Recovery configuration
+  recovery:
+    enabled: true
+    default_strategies:
+      - retry
+      - restart
+      - checkpoint
+    timeout: 300
+    max_attempts: 3
+
+  # Monitoring configuration
+  monitoring:
+    enabled: true
+    metrics_interval: 10
+    dashboard:
+      enabled: true
+      port: 8080
+    alerts:
+      enabled: true
+      rules:
+        - name: high_fault_rate
+          condition: fault_rate > 0.1
+          duration: 60
+        - name: system_health_low
+          condition: system_health_score < 0.5
+          duration: 30
+
+# Override some trainer settings for fault injection testing
+trainer:
+  # Run for fewer epochs to test fault injection
+  total_epochs: 5
+
+  # Save checkpoints more frequently
+  save_freq: 10
+
+  # Validate more frequently
+  test_freq: 5
+
+# Use a small model for testing
+actor_rollout_ref:
+  model:
+    path: "gpt2"
+
+  rollout:
+    temperature: 0.7
+    top_p: 0.9
+    top_k: 50

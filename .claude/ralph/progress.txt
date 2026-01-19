@@ -464,3 +464,55 @@
 
 **Next Steps**:
 - 集成故障注入系统到verl主流程（fault-injection-010）
+
+### fault-injection-010: 集成故障注入系统到verl主流程 ✓
+
+**Date**: 2026-01-20
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **修改main_ppo.py添加故障注入初始化**
+   - 添加了故障注入模块的导入，使用try/except确保可选性
+   - 在`run_ppo`函数中添加故障注入初始化逻辑
+   - 创建了`FaultOrchestrator`实例并初始化Ray故障注入
+   - 将故障注入编排器传递给`TaskRunner`
+   - 添加了错误处理和警告信息
+
+2. **在RayTrainer中添加故障注入钩子**
+   - 修改了`RayPPOTrainer`构造函数，添加`fault_orchestrator`参数
+   - 在`init_workers`方法中添加故障注入钩子
+   - 在`fit`方法中初始化故障注入钩子
+   - 为关键操作添加了故障注入钩子：
+     - rollout生成 (`hook_rollout_generation`)
+     - actor更新 (`hook_actor_update`)
+     - critic更新 (`hook_critic_update`)
+
+3. **实现与verl配置系统的集成**
+   - 创建了默认故障注入配置文件`fault_injection.yaml`
+   - 创建了可选配置文件`optional/fault_injection.yaml`（默认禁用）
+   - 创建了示例配置`ppo_trainer_with_fault_injection.yaml`
+   - 在`ppo_trainer.yaml`中添加了故障注入配置的引用
+   - 支持通过Hydra配置系统管理故障注入设置
+
+4. **确保对主流程的最小侵入性**
+   - 故障注入功能完全可选，通过try/except导入
+   - 默认配置中故障注入被禁用
+   - 只在启用时才会创建故障注入相关对象
+   - 添加了详细的错误处理和警告信息
+   - 所有修改都保持向后兼容性
+
+**Key Files Modified**:
+- `/Users/bytedance/workspace/verl/verl/trainer/main_ppo.py` - 添加故障注入初始化
+- `/Users/bytedance/workspace/verl/verl/trainer/ppo/ray_trainer.py` - 添加故障注入钩子
+- `/Users/bytedance/workspace/verl/verl/trainer/config/ppo_trainer.yaml` - 添加配置引用
+- `/Users/bytedance/workspace/verl/verl/trainer/config/fault_injection.yaml` - 默认配置
+- `/Users/bytedance/workspace/verl/verl/trainer/config/optional/fault_injection.yaml` - 可选配置
+- `/Users/bytedance/workspace/verl/verl/trainer/config/ppo_trainer_with_fault_injection.yaml` - 示例配置
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/tests/test_fault_injection_integration_no_ray.py` - 集成测试
+
+**Next Steps**:
+- 实现性能优化和开销控制（fault-injection-011）
+- 创建完整的测试和文档（fault-injection-012）

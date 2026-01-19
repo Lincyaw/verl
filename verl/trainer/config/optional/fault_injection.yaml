@@ -1,0 +1,6 @@
+# Optional fault injection configuration
+# This file is used when fault injection is not explicitly configured
+# All fault injection features are disabled by default
+
+# Whether to enable fault injection
+enabled: false

@@ -1,0 +1,66 @@
+# Fault injection configuration for verl
+# This file defines the default fault injection settings
+
+# Whether to enable fault injection
+enabled: false
+
+# Fault injection configuration
+# This follows the FaultInjectionConfig schema from verl.fault_injection.config
+faults: []
+
+# Recovery configuration
+recovery:
+  # Whether to enable automatic recovery
+  enabled: true
+
+  # Default recovery strategies to use
+  default_strategies:
+    - retry
+    - restart
+    - checkpoint
+
+  # Recovery timeout in seconds
+  timeout: 300
+
+  # Maximum number of recovery attempts
+  max_attempts: 3
+
+# Monitoring configuration
+monitoring:
+  # Whether to enable monitoring
+  enabled: true
+
+  # Metrics collection interval in seconds
+  metrics_interval: 10
+
+  # Dashboard configuration
+  dashboard:
+    enabled: true
+    port: 8080
+    host: 0.0.0.0
+
+  # Alerting configuration
+  alerts:
+    enabled: true
+
+    # Alert rules
+    rules:
+      - name: high_fault_rate
+        condition: fault_rate > 0.1
+        duration: 60
+
+      - name: system_health_low
+        condition: system_health_score < 0.5
+        duration: 30
+
+      - name: resource_exhaustion
+        condition: gpu_memory_usage > 0.95
+        duration: 10
+
+# Scenario configuration
+scenarios:
+  # Whether to enable scenario-based fault injection
+  enabled: false
+
+  # Scenario file path (relative to config directory)
+  scenario_file: null

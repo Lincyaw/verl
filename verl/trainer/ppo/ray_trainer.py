@@ -301,6 +301,7 @@ class RayPPOTrainer:
         collate_fn=None,
         train_sampler: Optional[Sampler] = None,
         device_name=None,
+        fault_orchestrator=None,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -320,6 +321,7 @@ class RayPPOTrainer:
             collate_fn: Function to collate data samples into batches.
             train_sampler (Optional[Sampler], optional): Sampler for the training dataset. Defaults to None.
             device_name (str, optional): Device name for training (e.g., "cuda", "cpu"). Defaults to None.
+            fault_orchestrator: Fault injection orchestrator for injecting faults during training.
         """
 
         # Store the tokenizer for text processing
@@ -328,6 +330,7 @@ class RayPPOTrainer:
         self.config = config
         self.reward_fn = reward_fn
         self.val_reward_fn = val_reward_fn
+        self.fault_orchestrator = fault_orchestrator
 
         self.hybrid_engine = config.actor_rollout_ref.hybrid_engine
         assert self.hybrid_engine, "Currently, only support hybrid engine"
@@ -792,6 +795,19 @@ class RayPPOTrainer:
         1. Ray resource pools from configuration
         2. Worker groups for each role (actor, critic, etc.)
         """
+        # Add fault injection hook if orchestrator is available
+        if self.fault_orchestrator is not None:
+            try:
+                from verl.fault_injection import create_fault_injection_hooks
+                fault_hooks = create_fault_injection_hooks(self.fault_orchestrator)
+
+                # Hook worker initialization
+                self.resource_pool_manager.create_resource_pool = fault_hooks.hook_worker_initialization(
+                    self.resource_pool_manager.create_resource_pool
+                )
+            except Exception as e:
+                print(f"Warning: Failed to add fault injection hooks to init_workers: {e}")
+
         self.resource_pool_manager.create_resource_pool()
 
         self.resource_pool_to_cls = {pool: {} for pool in self.resource_pool_manager.resource_pool_dict.values()}
@@ -1356,6 +1372,16 @@ class RayPPOTrainer:
 
         from verl.utils.tracking import Tracking
 
+        # Initialize fault injection hooks if available
+        fault_hooks = None
+        if self.fault_orchestrator is not None:
+            try:
+                from verl.fault_injection import create_fault_injection_hooks
+                fault_hooks = create_fault_injection_hooks(self.fault_orchestrator)
+                print("Fault injection hooks initialized in RayPPOTrainer")
+            except Exception as e:
+                print(f"Warning: Failed to create fault injection hooks in fit: {e}")
+
         logger = Tracking(
             project_name=self.config.trainer.project_name,
             experiment_name=self.config.trainer.experiment_name,
@@ -1433,10 +1459,18 @@ class RayPPOTrainer:
                 with marked_timer("step", timing_raw):
                     # generate a batch
                     with marked_timer("gen", timing_raw, color="red"):
-                        if not self.async_rollout_mode:
-                            gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch_output)
+                        # Hook rollout generation
+                        if fault_hooks:
+                            rollout_gen_func = fault_hooks.hook_rollout_generation(
+                                self.actor_rollout_wg.generate_sequences if not self.async_rollout_mode
+                                else self.async_rollout_manager.generate_sequences
+                            )
+                            gen_batch_output = rollout_gen_func(gen_batch_output)
                         else:
-                            gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch_output)
+                            if not self.async_rollout_mode:
+                                gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch_output)
+                            else:
+                                gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch_output)
 
                         timing_raw.update(gen_batch_output.meta_info["timing"])
                         gen_batch_output.meta_info.pop("timing", None)
@@ -1623,7 +1657,12 @@ class RayPPOTrainer:
                     # update critic
                     if self.use_critic:
                         with marked_timer("update_critic", timing_raw, color="pink"):
-                            critic_output = self._update_critic(batch)
+                            # Hook critic update
+                            if fault_hooks:
+                                update_critic_func = fault_hooks.hook_critic_update(self._update_critic)
+                                critic_output = update_critic_func(batch)
+                            else:
+                                critic_output = self._update_critic(batch)
                         critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
                         metrics.update(critic_output_metrics)
 
@@ -1631,7 +1670,12 @@ class RayPPOTrainer:
                     if self.config.trainer.critic_warmup <= self.global_steps:
                         # update actor
                         with marked_timer("update_actor", timing_raw, color="red"):
-                            actor_output = self._update_actor(batch)
+                            # Hook actor update
+                            if fault_hooks:
+                                update_actor_func = fault_hooks.hook_actor_update(self._update_actor)
+                                actor_output = update_actor_func(batch)
+                            else:
+                                actor_output = self._update_actor(batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
 

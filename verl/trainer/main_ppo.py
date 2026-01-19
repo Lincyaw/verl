@@ -31,6 +31,18 @@ from verl.utils.config import validate_config
 from verl.utils.device import auto_set_device, is_cuda_available
 from verl.utils.import_utils import load_extern_object
 
+# Fault injection imports
+try:
+    from verl.fault_injection import (
+        FaultOrchestrator,
+        FaultInjectionConfig,
+        initialize_ray_fault_injection,
+        create_fault_injection_hooks,
+    )
+    FAULT_INJECTION_AVAILABLE = True
+except ImportError:
+    FAULT_INJECTION_AVAILABLE = False
+
 
 @hydra.main(config_path="config", config_name="ppo_trainer", version_base=None)
 def main(config):
@@ -55,6 +67,22 @@ def run_ppo(config, task_runner_class=None) -> None:
                 model paths, and training hyperparameters.
         task_runner_class: For recipe to change TaskRunner.
     """
+    # Initialize fault injection if enabled
+    fault_orchestrator = None
+    if FAULT_INJECTION_AVAILABLE and config.get('fault_injection', {}).get('enabled', False):
+        try:
+            # Load fault injection configuration
+            fault_config = FaultInjectionConfig.from_dict(config.fault_injection)
+            fault_orchestrator = FaultOrchestrator(fault_config)
+
+            # Initialize Ray fault injection
+            initialize_ray_fault_injection(fault_orchestrator)
+
+            print(f"Fault injection enabled with config: {fault_config}")
+        except Exception as e:
+            print(f"Warning: Failed to initialize fault injection: {e}")
+            fault_orchestrator = None
+
     # Check if Ray is not initialized
     if not ray.is_initialized():
         # Initialize Ray with a local cluster configuration
@@ -93,9 +121,9 @@ def run_ppo(config, task_runner_class=None) -> None:
         nsight_options = OmegaConf.to_container(
             config.global_profiler.global_tool_config.nsys.controller_nsight_options
         )
-        runner = task_runner_class.options(runtime_env={"nsight": nsight_options}).remote()
+        runner = task_runner_class.options(runtime_env={"nsight": nsight_options}).remote(fault_orchestrator)
     else:
-        runner = task_runner_class.remote()
+        runner = task_runner_class.remote(fault_orchestrator)
     ray.get(runner.run.remote(config))
 
     # [Optional] get the path of the timeline trace file from the configuration, default to None
@@ -116,9 +144,10 @@ class TaskRunner:
         mapping: Dictionary mapping Role enums to resource pool IDs for GPU allocation
     """
 
-    def __init__(self):
+    def __init__(self, fault_orchestrator=None):
         self.role_worker_mapping = {}
         self.mapping = {}
+        self.fault_orchestrator = fault_orchestrator
 
     def add_actor_rollout_worker(self, config):
         """Add actor rollout worker based on the actor strategy."""
@@ -268,6 +297,15 @@ class TaskRunner:
             config: Training configuration object containing all parameters needed
                    for setting up and running the PPO training process.
         """
+        # Initialize fault injection hooks if available
+        fault_hooks = None
+        if self.fault_orchestrator is not None and FAULT_INJECTION_AVAILABLE:
+            try:
+                fault_hooks = create_fault_injection_hooks(self.fault_orchestrator)
+                print("Fault injection hooks initialized successfully")
+            except Exception as e:
+                print(f"Warning: Failed to create fault injection hooks: {e}")
+
         # Print the initial configuration. `resolve=True` will evaluate symbolic values.
         from pprint import pprint
 
@@ -359,9 +397,15 @@ class TaskRunner:
             val_dataset=val_dataset,
             collate_fn=collate_fn,
             train_sampler=train_sampler,
+            fault_orchestrator=self.fault_orchestrator,  # Pass fault orchestrator
         )
-        # Initialize the workers of the trainer.
-        trainer.init_workers()
+
+        # Initialize the workers of the trainer with fault injection hook
+        if fault_hooks:
+            init_workers_func = fault_hooks.hook_worker_initialization(trainer.init_workers)
+            init_workers_func()
+        else:
+            trainer.init_workers()
 
         # Start the training process.
         trainer.fit()
