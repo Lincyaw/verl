@@ -81,7 +81,7 @@
       "添加预防性恢复和降级模式",
       "支持自动和手动恢复模式"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-008",

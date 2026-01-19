@@ -18,6 +18,7 @@ from .base import (
     create_target_selector,
 )
 from .config import FaultConfig, FaultInjectionConfig, FaultLayer
+from .recovery.integration import create_recovery_integration, RecoveryOrchestratorIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,11 @@ class FaultOrchestrator:
         self._executor = ThreadPoolExecutor(max_workers=config.max_concurrent_faults)
         self._shutdown = False
         self._monitor_thread: Optional[threading.Thread] = None
+
+        # Initialize recovery integration if enabled
+        self._recovery_integration: Optional[RecoveryOrchestratorIntegration] = None
+        if config.recovery.enabled:
+            self._recovery_integration = create_recovery_integration(self, config)
         self._available_targets: List[FaultContext] = []
         self._target_update_callbacks: List[callable] = []
 
@@ -152,6 +158,15 @@ class FaultOrchestrator:
                     del self._active_faults[fault_id]
 
             logger.info(f"Fault injection completed: {fault_id} - Status: {result.status.value}")
+
+            # Trigger recovery if enabled
+            if self._recovery_integration and result.status in [FaultStatus.COMPLETED, FaultStatus.FAILED]:
+                recovered_result = self._recovery_integration.on_fault_completed(result, target_context)
+                if recovered_result:
+                    with self._lock:
+                        self._metrics.recovered_faults += 1
+                    return recovered_result
+
             return result
 
         except Exception as e:
@@ -256,6 +271,12 @@ class FaultOrchestrator:
         """Get currently active faults."""
         with self._lock:
             return self._active_faults.copy()
+
+    def get_recovery_statistics(self) -> Optional[Dict[str, Any]]:
+        """Get recovery statistics if recovery is enabled."""
+        if self._recovery_integration:
+            return self._recovery_integration.get_recovery_statistics()
+        return None
 
     def start_monitoring(self) -> None:
         """Start the monitoring thread."""

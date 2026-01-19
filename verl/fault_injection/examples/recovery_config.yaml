@@ -1,0 +1,205 @@
+# Example recovery configuration for verl fault injection system
+# This file demonstrates various recovery strategies and their configurations
+
+# Recovery system settings
+recovery:
+  enabled: true
+  mode: "automatic"  # Options: automatic, manual, semi_automatic
+  max_recovery_attempts: 3
+  recovery_timeout_seconds: 300
+  enable_preventive_recovery: true
+  degradation_threshold: 0.5  # Degrade when success rate below 50%
+
+  # Recovery strategies configuration
+  strategies:
+    # Low-impact strategies (tried first)
+    - name: "ignore"
+      enabled: true
+      priority: 4
+      parameters: {}
+
+    - name: "retry"
+      enabled: true
+      priority: 3
+      parameters:
+        retry_count: 3
+        retry_delay: 1.0
+
+    # Medium-impact strategies
+    - name: "checkpoint_recovery"
+      enabled: true
+      priority: 2
+      parameters:
+        checkpoint_path: "/tmp/checkpoint.pt"
+        load_timeout: 60.0
+
+    - name: "resource_recovery"
+      enabled: true
+      priority: 2
+      parameters:
+        release_allocated_memory: true
+        close_leaked_fds: true
+
+    - name: "degradation"
+      enabled: true
+      priority: 2
+      parameters:
+        allow_degradation: true
+        degradation_level: "partial"
+        reduced_batch_size: 1
+        reduce_precision: true
+        disable_optimizations: true
+
+    # High-impact strategies (tried when others fail)
+    - name: "restart"
+      enabled: true
+      priority: 1
+      parameters:
+        restart_delay: 5.0
+        cleanup_timeout: 30.0
+
+    - name: "process_recovery"
+      enabled: true
+      priority: 1
+      parameters:
+        restart_command: "python -m verl.trainer.main_ppo"
+
+    # Critical strategies (last resort)
+    - name: "ray_recovery"
+      enabled: true
+      priority: 0
+      parameters:
+        restart_actors: true
+        reconnect_gcs: true
+        recreate_placement_groups: true
+        redistribute_tasks: true
+        recovery_time: 10.0
+
+    - name: "manual"
+      enabled: true
+      priority: 0
+      parameters:
+        instructions: "Contact system administrator for manual intervention"
+        simulated_wait_time: 30.0
+
+    - name: "redeploy"
+      enabled: true
+      priority: 0
+      parameters:
+        stop_services: true
+        cleanup_state: false
+        redeploy_services: true
+        restore_from_backup: false
+        redeploy_time: 60.0
+
+# Example fault configurations that work with recovery
+faults:
+  # UI layer fault with retry recovery
+  - name: "hydra_config_error"
+    layer: "ui"
+    type: "hydra_config_error"
+    enabled: true
+    description: "Simulate Hydra configuration error"
+    target:
+      mode: "all"
+    trigger:
+      type: "immediate"
+    recovery_seconds: 5
+
+  # Worker layer fault with process recovery
+  - name: "worker_crash"
+    layer: "worker"
+    type: "worker_crash"
+    enabled: true
+    description: "Simulate worker process crash"
+    target:
+      mode: "random"
+      count: 1
+    trigger:
+      type: "timed"
+      delay_seconds: 30
+    duration_seconds: 10
+    recovery_seconds: 15
+
+  # Engine layer fault with checkpoint recovery
+  - name: "checkpoint_corruption"
+    layer: "engine"
+    type: "checkpoint_corruption"
+    enabled: true
+    description: "Simulate checkpoint file corruption"
+    target:
+      mode: "all"
+    trigger:
+      type: "count"
+      count_threshold: 5
+    engine_type: "fsdp"
+    corruption_type: "random_bytes"
+    checkpoint_path: "/tmp/model_checkpoint.pt"
+
+  # Orchestration layer fault with Ray recovery
+  - name: "actor_crash"
+    layer: "orchestration"
+    type: "actor_crash"
+    enabled: true
+    description: "Simulate Ray actor crash"
+    target:
+      mode: "random"
+      count: 2
+    trigger:
+      type: "probabilistic"
+      probability: 0.1
+    actor_name: "RolloutWorker"
+    actor_death_type: "exception"
+    crash_delay: 2.0
+
+  # Inference layer fault with degradation
+  - name: "inference_oom"
+    layer: "inference"
+    type: "inference_oom"
+    enabled: true
+    description: "Simulate inference OOM"
+    target:
+      mode: "all"
+    trigger:
+      type: "immediate"
+    backend: "vllm"
+    kv_cache_size_mb: 2048
+
+# Example recovery scenarios
+recovery_scenarios:
+  # Scenario 1: Gradual degradation
+  - name: "gradual_degradation"
+    description: "Gradually degrade system performance under faults"
+    triggers:
+      - success_rate_below: 0.7
+      - consecutive_failures: 3
+    actions:
+      - strategy: "degradation"
+        parameters:
+          degradation_level: "partial"
+      - strategy: "retry"
+        parameters:
+          retry_count: 5
+
+  # Scenario 2: Critical failure response
+  - name: "critical_failure"
+    description: "Handle critical system failures"
+    triggers:
+      - fault_type: "ray_cluster_failure"
+      - fault_layer: "orchestration"
+    actions:
+      - strategy: "ray_recovery"
+      - strategy: "restart"
+      - strategy: "manual"
+
+  # Scenario 3: Prevention mode
+  - name: "prevention_mode"
+    description: "Prevent faults before they occur"
+    triggers:
+      - memory_usage_above: 0.9
+      - disk_usage_above: 0.95
+    actions:
+      - strategy: "resource_recovery"
+      - strategy: "checkpoint_recovery"
+        parameters:
+          checkpoint_path: "/tmp/preemptive_checkpoint.pt"

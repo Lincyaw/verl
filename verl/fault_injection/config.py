@@ -360,6 +360,31 @@ FaultConfig = Union[
 
 
 @dataclass
+class RecoveryStrategyConfig:
+    """Configuration for recovery strategies."""
+
+    name: str
+    enabled: bool = True
+    priority: int = 1
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    max_attempts: int = 3
+    timeout_seconds: float = 300.0
+
+
+@dataclass
+class RecoveryConfig:
+    """Configuration for fault recovery system."""
+
+    enabled: bool = False
+    mode: str = "automatic"  # automatic, manual, semi_automatic
+    strategies: List[RecoveryStrategyConfig] = field(default_factory=list)
+    max_recovery_attempts: int = 3
+    recovery_timeout_seconds: float = 300.0
+    enable_preventive_recovery: bool = True
+    degradation_threshold: float = 0.5  # Degrade when success rate below this
+
+
+@dataclass
 class FaultInjectionConfig:
     """Main configuration for the fault injection system."""
 
@@ -369,6 +394,7 @@ class FaultInjectionConfig:
     max_concurrent_faults: int = 1  # Maximum concurrent faults
     log_level: str = "INFO"
     output_dir: Optional[str] = None  # Directory for fault logs
+    recovery: RecoveryConfig = field(default_factory=RecoveryConfig)
 
     @classmethod
     def from_yaml(cls, path: Union[str, Path]) -> "FaultInjectionConfig":

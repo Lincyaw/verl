@@ -277,5 +277,77 @@
 
 **Next Steps**:
 - 实现智能故障恢复机制（fault-injection-007）
+### fault-injection-007: 实现智能故障恢复机制 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **基础恢复策略类和接口**
+   - `BaseRecoveryStrategy`: 所有恢复策略的抽象基类
+   - `RecoveryContext`: 恢复操作上下文信息
+   - `RecoveryResult`: 恢复操作结果
+   - `RecoveryDecision`: 恢复决策数据结构
+   - `RecoveryStatus`, `RecoveryMode`, `RecoveryPriority`: 枚举类型
+
+2. **分层恢复策略系统**
+   - 实现了11种不同的恢复策略：
+     - `IgnoreRecoveryStrategy`: 忽略故障（无操作恢复）
+     - `RetryRecoveryStrategy`: 重试失败的操作
+     - `RestartRecoveryStrategy`: 重启受影响的组件
+     - `ProcessRecoveryStrategy`: 进程级故障恢复
+     - `ResourceRecoveryStrategy`: 资源耗尽故障恢复
+     - `CheckpointRecoveryStrategy`: 从检查点恢复
+     - `DegradationRecoveryStrategy`: 降级功能以继续运行
+     - `ManualRecoveryStrategy`: 需要手动干预的恢复
+     - `RayRecoveryStrategy`: Ray特定的故障恢复
+     - `RedeployRecoveryStrategy`: 完整系统重新部署
+
+3. **智能恢复决策引擎**
+   - `IntelligentRecoveryDecisionEngine`: 基于上下文和历史记录做决策
+   - 考虑因素包括：策略能力、尝试次数、影响评估、历史成功率、层级特定加成
+   - 支持故障依赖和级联恢复策略
+
+4. **分层恢复管理器**
+   - `HierarchicalRecoveryManager`: 管理跨不同故障层的恢复策略
+   - 支持自动、手动和半自动恢复模式
+   - 实现恢复超时和重试机制
+   - 提供恢复统计和历史记录
+
+5. **预防性恢复和降级模式**
+   - 支持在故障发生前进行预防性恢复
+   - 实现基于成功率的自动降级
+   - 支持部分和最小功能降级级别
+
+6. **恢复配置系统**
+   - 扩展了`FaultInjectionConfig`以包含恢复配置
+   - `RecoveryConfig`: 主恢复配置类
+   - `RecoveryStrategyConfig`: 单个策略配置
+   - 创建了`recovery_config.yaml`示例配置文件
+
+7. **与故障注入编排器集成**
+   - `RecoveryOrchestratorIntegration`: 将恢复系统与故障注入编排器集成
+   - 在故障注入完成后自动触发恢复
+   - 更新故障状态为RECOVERED当恢复成功时
+   - 提供恢复统计信息
+
+8. **完整的单元测试**
+   - `test_recovery_strategies.py`: 测试所有恢复策略
+   - `test_recovery_hierarchical.py`: 测试分层恢复管理器
+   - `test_recovery_integration.py`: 测试与编排器的集成
+   - 创建了独立的测试验证核心功能
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/recovery/__init__.py` - Recovery module exports
+- `/Users/bytedance/workspace/verl/verl/fault_injection/recovery/base.py` - Base recovery classes
+- `/Users/bytedance/workspace/verl/verl/fault_injection/recovery/hierarchical.py` - Hierarchical recovery manager
+- `/Users/bytedance/workspace/verl/verl/fault_injection/recovery/strategies.py` - Recovery strategy implementations
+- `/Users/bytedance/workspace/verl/verl/fault_injection/recovery/integration.py` - Integration with orchestrator
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/recovery_config.yaml` - Example configuration
+- `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_recovery_*.py` - Unit tests
+
+**Next Steps**:
 - 创建配置驱动的故障场景（fault-injection-008）
+- 实现实时监控和观测系统（fault-injection-009）
 - 集成故障注入系统到verl主流程（fault-injection-010）
