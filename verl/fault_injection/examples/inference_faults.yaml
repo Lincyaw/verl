@@ -1,0 +1,285 @@
+# Inference layer fault injection configuration examples
+# This file demonstrates various inference faults that can be injected
+# into vLLM and SGLang backends during rollout generation
+
+inference_faults:
+  # 1. vLLM KV Cache Out of Memory
+  vllm_kv_cache_oom:
+    layer: INFERENCE
+    fault_type: INFERENCE_OOM
+    description: "Simulate vLLM KV cache out of memory error"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: 0
+    config:
+      backend: vllm
+      kv_cache_size_mb: 2048  # Try to allocate 2GB for KV cache
+    trigger:
+      type: IMMEDIATE
+    metadata:
+      severity: high
+      recovery: automatic
+
+  # 2. SGLang Memory Pool Exhaustion
+  sglang_memory_exhaustion:
+    layer: INFERENCE
+    fault_type: INFERENCE_OOM
+    description: "Simulate SGLang memory pool exhaustion"
+    target:
+      process_type: rollout
+      backend: sglang
+      rank: 1
+    config:
+      backend: sglang
+      kv_cache_size_mb: 4096  # Try to allocate 4GB
+    trigger:
+      type: PROBABILITY
+      probability: 0.1  # 10% chance on each request
+    metadata:
+      severity: high
+      recovery: manual
+
+  # 3. vLLM Scheduler Deadlock - Request Queue
+  vllm_scheduler_deadlock:
+    layer: INFERENCE
+    fault_type: SCHEDULER_DEADLOCK
+    description: "Simulate vLLM scheduler deadlock in request queue"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: 0
+    config:
+      backend: vllm
+      deadlock_type: request_queue
+    trigger:
+      type: COUNT
+      count: 5  # Inject after 5 requests
+    metadata:
+      severity: critical
+      recovery: restart_required
+
+  # 4. SGLang RadixAttention Deadlock
+  sglang_radix_deadlock:
+    layer: INFERENCE
+    fault_type: SCHEDULER_DEADLOCK
+    description: "Simulate SGLang RadixAttention cache deadlock"
+    target:
+      process_type: rollout
+      backend: sglang
+      rank: 2
+    config:
+      backend: sglang
+      deadlock_type: kv_cache
+    trigger:
+      type: TIMER
+      delay_seconds: 30  # Inject after 30 seconds
+    metadata:
+      severity: critical
+      recovery: automatic
+
+  # 5. vLLM Batch Scheduling Deadlock
+  vllm_batch_deadlock:
+    layer: INFERENCE
+    fault_type: SCHEDULER_DEADLOCK
+    description: "Simulate vLLM batch scheduling circular dependency"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: 0
+    config:
+      backend: vllm
+      deadlock_type: batch_schedule
+    trigger:
+      type: PROBABILITY
+      probability: 0.05  # 5% chance
+    metadata:
+      severity: critical
+      recovery: restart_required
+
+  # 6. vLLM CUDA Graph Compilation Failure
+  vllm_cuda_graph_failure:
+    layer: INFERENCE
+    fault_type: COMPILATION_FAILURE
+    description: "Simulate vLLM CUDA graph capture failure"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: 0
+    config:
+      backend: vllm
+      compilation_stage: graph_capture
+    trigger:
+      type: IMMEDIATE
+    metadata:
+      severity: high
+      recovery: automatic
+
+  # 7. vLLM Graph Optimization Failure
+  vllm_optimization_failure:
+    layer: INFERENCE
+    fault_type: COMPILATION_FAILURE
+    description: "Simulate vLLM graph optimization failure"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: 1
+    config:
+      backend: vllm
+      compilation_stage: optimization
+    trigger:
+      type: COUNT
+      count: 3
+    metadata:
+      severity: medium
+      recovery: automatic
+
+  # 8. vLLM Memory Planning Failure
+  vllm_memory_planning_failure:
+    layer: INFERENCE
+    fault_type: COMPILATION_FAILURE
+    description: "Simulate vLLM memory planning failure"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: 0
+    config:
+      backend: vllm
+      compilation_stage: memory_planning
+    trigger:
+      type: PROBABILITY
+      probability: 0.2  # 20% chance
+    metadata:
+      severity: high
+      recovery: manual
+
+  # 9. SGLang RadixAttention Compilation Failure
+  sglang_radix_compilation_failure:
+    layer: INFERENCE
+    fault_type: COMPILATION_FAILURE
+    description: "Simulate SGLang RadixAttention kernel compilation failure"
+    target:
+      process_type: rollout
+      backend: sglang
+      rank: 2
+    config:
+      backend: sglang
+      compilation_stage: radix_attention
+    trigger:
+      type: IMMEDIATE
+    metadata:
+      severity: high
+      recovery: automatic
+
+  # 10. SGLang FlashInfer Compilation Failure
+  sglang_flashinfer_failure:
+    layer: INFERENCE
+    fault_type: COMPILATION_FAILURE
+    description: "Simulate SGLang FlashInfer kernel compilation failure"
+    target:
+      process_type: rollout
+      backend: sglang
+      rank: 3
+    config:
+      backend: sglang
+      compilation_stage: flashinfer
+    trigger:
+      type: TIMER
+      delay_seconds: 10
+    metadata:
+      severity: high
+      recovery: manual
+
+  # 11. SGLang Torch Compile Failure
+  sglang_torch_compile_failure:
+    layer: INFERENCE
+    fault_type: COMPILATION_FAILURE
+    description: "Simulate SGLang torch.compile() failure"
+    target:
+      process_type: rollout
+      backend: sglang
+      rank: 1
+    config:
+      backend: sglang
+      compilation_stage: torch_compile
+    trigger:
+      type: PROBABILITY
+      probability: 0.15  # 15% chance
+    metadata:
+      severity: medium
+      recovery: automatic
+
+  # 12. Mixed Backend Fault Scenario
+  mixed_backend_oom:
+    layer: INFERENCE
+    fault_type: INFERENCE_OOM
+    description: "Simulate OOM across multiple backends"
+    target:
+      process_type: rollout
+      backend: any  # Target any backend
+      rank: any
+    config:
+      backend: vllm  # Default to vllm if backend not specified
+      kv_cache_size_mb: 8192  # Large allocation
+    trigger:
+      type: PROBABILITY
+      probability: 0.05  # 5% chance
+    metadata:
+      severity: high
+      recovery: automatic
+
+  # 13. Gradual Memory Leak
+  gradual_memory_leak:
+    layer: INFERENCE
+    fault_type: INFERENCE_OOM
+    description: "Simulate gradual memory leak leading to OOM"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: 0
+    config:
+      backend: vllm
+      kv_cache_size_mb: 512  # Small but frequent allocations
+    trigger:
+      type: COUNT
+      count: 10  # Inject every 10 requests
+    metadata:
+      severity: medium
+      recovery: automatic
+
+  # 14. Compilation Timeout
+  compilation_timeout:
+    layer: INFERENCE
+    fault_type: COMPILATION_FAILURE
+    description: "Simulate compilation timeout"
+    target:
+      process_type: rollout
+      backend: sglang
+      rank: 2
+    config:
+      backend: sglang
+      compilation_stage: torch_compile
+    trigger:
+      type: TIMER
+      delay_seconds: 60  # Inject after 1 minute
+    metadata:
+      severity: medium
+      recovery: manual
+
+  # 15. Concurrent Fault Injection
+  concurrent_inference_faults:
+    layer: INFERENCE
+    fault_type: INFERENCE_OOM
+    description: "Simulate concurrent faults across multiple ranks"
+    target:
+      process_type: rollout
+      backend: vllm
+      rank: [0, 1, 2]  # Target multiple ranks
+    config:
+      backend: vllm
+      kv_cache_size_mb: 1024
+    trigger:
+      type: IMMEDIATE
+    metadata:
+      severity: critical
+      recovery: restart_required

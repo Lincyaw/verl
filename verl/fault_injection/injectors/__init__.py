@@ -30,6 +30,11 @@ from .engine import (
     PrecisionErrorInjector,
     DeviceMapErrorInjector,
 )
+from .inference import (
+    InferenceOOMInjector,
+    SchedulerDeadlockInjector,
+    CompilationFailureInjector,
+)
 
 __all__ = [
     "ProcessKillInjector",
@@ -59,4 +64,7 @@ __all__ = [
     "DeviceMeshErrorInjector",
     "PrecisionErrorInjector",
     "DeviceMapErrorInjector",
+    "InferenceOOMInjector",
+    "SchedulerDeadlockInjector",
+    "CompilationFailureInjector",
 ]

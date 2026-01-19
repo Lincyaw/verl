@@ -235,3 +235,47 @@
 - 实现推理层故障注入（fault-injection-006）
 - 实现智能故障恢复机制（fault-injection-007）
 - 创建配置驱动的故障场景（fault-injection-008）
+
+### fault-injection-006: 实现推理层故障注入 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **创建推理层故障注入器**
+   - `InferenceOOMInjector`: 模拟推理过程中的内存不足错误（vLLM/SGLang KV缓存OOM）
+   - `SchedulerDeadlockInjector`: 模拟调度器死锁（请求队列、KV缓存、批调度死锁）
+   - `CompilationFailureInjector`: 模拟编译失败（CUDA图捕获、图优化、内存规划失败）
+
+2. **vLLM特定故障注入**
+   - 支持KV缓存分配故障注入
+   - 支持调度器故障注入
+   - 支持注意力计算故障注入
+   - 提供`vLLMFaultInjector`辅助类供运行时调用
+
+3. **SGLang特定故障注入**
+   - 支持RadixAttention缓存故障注入
+   - 支持内存池分配故障注入
+   - 支持分词器故障注入
+   - 提供`SGLangFaultInjector`辅助类供运行时调用
+
+4. **配置扩展**
+   - 在`FaultType`枚举中已定义推理层故障类型
+   - `InferenceFaultConfig`配置类支持所有推理故障参数
+   - 支持指定后端（vllm/sglang）和具体故障参数
+
+5. **示例配置和测试**
+   - 创建了`inference_faults.yaml`示例配置文件，包含15种不同的推理故障场景
+   - 编写了完整的单元测试`test_inference_faults.py`，覆盖所有注入器
+   - 测试包括正常注入、异常处理、恢复方法等场景
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/inference.py` - 推理层故障注入器实现
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/inference_faults.yaml` - 示例配置
+- `/Users/bytedance/workspace/verl/verl/fault_injection/tests/test_inference_faults.py` - 单元测试
+
+**Next Steps**:
+- 实现智能故障恢复机制（fault-injection-007）
+- 创建配置驱动的故障场景（fault-injection-008）
+- 集成故障注入系统到verl主流程（fault-injection-010）

@@ -69,7 +69,7 @@
       "实现KV缓存OOM和调度死锁",
       "添加图编译失败和RadixAttention错误"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-007",
