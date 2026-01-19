@@ -86,3 +86,49 @@
 - 实现编排层故障注入（fault-injection-003）
 - 创建工作器层故障注入器
 - 继续实现其他层的故障注入
+
+### fault-injection-003: 实现编排层故障注入 ✓
+
+**Date**: 2026-01-19
+**Status**: Completed
+
+**Implementation Details**:
+
+1. **Ray集群故障注入器**
+   - `RayClusterFailureInjector`: 模拟Ray集群整体故障
+   - 支持GCS故障模拟（断开GCS连接）
+   - 支持节点故障模拟（杀死特定节点上的Actor）
+   - 可配置故障持续时间和影响节点
+
+2. **Actor崩溃和资源耗尽模拟**
+   - `ActorCrashInjector`: 模拟Ray Actor崩溃
+   - 支持多种Actor死亡方式（异常、退出、强制杀死）
+   - `ResourceExhaustionInjector`: 模拟资源耗尽
+   - 支持内存和CPU资源耗尽，可配置耗尽程度和持续时间
+
+3. **任务调度和资源池故障**
+   - `TaskSchedulingFailureInjector`: 模拟任务调度失败
+   - 支持按任务名称模式匹配注入故障
+   - 支持多种失败类型（异常、挂起、丢失）
+   - `ResourcePoolFaultInjector`: 模拟资源池故障
+   - 支持阻塞资源获取和释放操作
+
+4. **GCS故障和网络分区**
+   - `GCSFailureInjector`: 模拟全局控制存储故障
+   - 支持GCS断开连接和慢速响应
+   - `NetworkPartitionInjector`: 模拟网络分区
+   - 支持部分分区和完全分区，可隔离特定rank
+
+5. **Placement Group故障**
+   - `PlacementGroupFaultInjector`: 模拟资源放置组故障
+   - 支持创建失败和删除失败
+   - 可配置放置组名称和故障类型
+
+**Key Files Created**:
+- `/Users/bytedance/workspace/verl/verl/fault_injection/injectors/orchestration.py` - 编排层故障注入器实现
+- `/Users/bytedance/workspace/verl/verl/fault_injection/examples/orchestration_faults.yaml` - 示例配置
+
+**Next Steps**:
+- 实现工作器层故障注入（fault-injection-004）
+- 实现引擎层故障注入（fault-injection-005）
+- 实现推理层故障注入（fault-injection-006）

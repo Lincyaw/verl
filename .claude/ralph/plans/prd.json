@@ -33,7 +33,7 @@
       "添加任务调度和资源池故障",
       "支持GCS故障和网络分区"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fault-injection-004",

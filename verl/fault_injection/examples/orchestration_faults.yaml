@@ -1,0 +1,163 @@
+# Orchestration Layer Fault Injection Examples
+# This file demonstrates various orchestration layer faults that can be injected
+
+enabled: true
+global_cooldown_seconds: 30
+max_concurrent_faults: 2
+log_level: INFO
+output_dir: /tmp/verl_fault_logs
+
+faults:
+  # Ray Cluster Failure - GCS disconnection
+  - name: gcs_disconnection
+    layer: orchestration
+    type: gcs_failure
+    enabled: true
+    description: "Simulate GCS disconnection for 30 seconds"
+    trigger:
+      type: immediate
+    gcs_failure_type: disconnect
+    gcs_isolation_duration: 30
+
+  # Ray Cluster Failure - Node failure
+  - name: node_failure
+    layer: orchestration
+    type: ray_cluster_failure
+    enabled: false
+    description: "Simulate node failure in Ray cluster"
+    trigger:
+      type: timed
+      delay_seconds: 60
+    cluster_failure_type: node
+    failure_duration: 30
+    affected_nodes:
+      - "127.0.0.1"
+      - "192.168.1.100"
+
+  # Actor Crash - Exception
+  - name: actor_crash_exception
+    layer: orchestration
+    type: actor_crash
+    enabled: true
+    description: "Crash actors with exceptions"
+    trigger:
+      type: count
+      count_threshold: 5
+    target:
+      mode: random
+      count: 2
+    actor_name: "RolloutWorker"
+    actor_death_type: exception
+    crash_delay: 10
+
+  # Actor Death - Force kill
+  - name: actor_kill
+    layer: orchestration
+    type: actor_death
+    enabled: false
+    description: "Force kill actors"
+    trigger:
+      type: probabilistic
+      probability: 0.1
+    actor_name: "PPOActor"
+    actor_death_type: kill
+    crash_delay: 5
+
+  # Resource Exhaustion - Memory
+  - name: memory_exhaustion
+    layer: orchestration
+    type: resource_exhaustion
+    enabled: false
+    description: "Exhaust system memory"
+    trigger:
+      type: immediate
+    resource_type: memory
+    exhaustion_amount: 8192  # MB
+    exhaustion_duration: 60
+
+  # Resource Exhaustion - CPU
+  - name: cpu_exhaustion
+    layer: orchestration
+    type: resource_exhaustion
+    enabled: false
+    description: "Exhaust CPU resources"
+    trigger:
+      type: timed
+      delay_seconds: 30
+    resource_type: cpu
+    exhaustion_duration: 120
+
+  # Task Scheduling Failure
+  - name: task_scheduling_fail
+    layer: orchestration
+    type: task_scheduling_failure
+    enabled: true
+    description: "Cause task scheduling failures"
+    trigger:
+      type: probabilistic
+      probability: 0.3
+    task_name_pattern: "train_step"
+    failure_rate: 0.5
+    failure_type: exception  # exception, hang, lost
+
+  # Resource Pool Fault - Block acquire
+  - name: resource_pool_block
+    layer: orchestration
+    type: resource_pool_fault
+    enabled: false
+    description: "Block resource pool acquisition"
+    trigger:
+      type: immediate
+    pool_name: "training_pool"
+    pool_operation: acquire
+    pool_block_duration: 45
+
+  # Network Partition - Partial
+  - name: network_partition_partial
+    layer: orchestration
+    type: network_partition
+    enabled: false
+    description: "Create partial network partition"
+    trigger:
+      type: timed
+      delay_seconds: 60
+    partition_type: partial
+    partition_duration: 30
+
+  # Network Partition - Isolate specific ranks
+  - name: network_partition_ranks
+    layer: orchestration
+    type: network_partition
+    enabled: true
+    description: "Isolate specific worker ranks"
+    trigger:
+      type: conditional
+      condition: "training_step > 100"
+    partition_type: partial
+    isolated_ranks:
+      - 2
+      - 3
+    partition_duration: 45
+
+  # Placement Group Fault - Creation failure
+  - name: placement_group_fail
+    layer: orchestration
+    type: placement_group_fault
+    enabled: false
+    description: "Cause placement group creation to fail"
+    trigger:
+      type: immediate
+    placement_group_name: "training_pg"
+    pg_fault_type: creation_failure
+
+  # Placement Group Fault - Removal failure
+  - name: placement_group_stuck
+    layer: orchestration
+    type: placement_group_fault
+    enabled: false
+    description: "Make placement group impossible to remove"
+    trigger:
+      type: count
+      count_threshold: 3
+    placement_group_name: "inference_pg"
+    pg_fault_type: removal_failure

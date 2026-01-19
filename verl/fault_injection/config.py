@@ -52,6 +52,17 @@ class FaultType(Enum):
     UI_FREEZE = "ui_freeze"
     UI_CRASH = "ui_crash"
 
+    # Orchestration layer faults
+    RAY_CLUSTER_FAILURE = "ray_cluster_failure"
+    ACTOR_CRASH = "actor_crash"
+    ACTOR_DEATH = "actor_death"
+    RESOURCE_EXHAUSTION = "resource_exhaustion"
+    TASK_SCHEDULING_FAILURE = "task_scheduling_failure"
+    RESOURCE_POOL_FAULT = "resource_pool_fault"
+    GCS_FAILURE = "gcs_failure"
+    NETWORK_PARTITION = "network_partition"
+    PLACEMENT_GROUP_FAULT = "placement_group_fault"
+
     # Data faults
     CHECKPOINT_CORRUPTION = "checkpoint_corruption"
     GRADIENT_NAN = "gradient_nan"
@@ -227,6 +238,49 @@ class UIFaultConfig(BaseFaultConfig):
     crash_message: str = "Simulated UI crash"
 
 
+@dataclass
+class OrchestrationFaultConfig(BaseFaultConfig):
+    """Configuration for orchestration layer faults."""
+
+    # Ray cluster failures
+    cluster_failure_type: str = ""  # Type of cluster failure (gcs, node, cluster)
+    failure_duration: float = 30.0  # Duration of failure in seconds
+    affected_nodes: Optional[List[str]] = None  # List of affected node IPs
+
+    # Actor crashes/deaths
+    actor_name: Optional[str] = None  # Name pattern of actor to crash
+    actor_death_type: str = "exception"  # How to kill actor (exception, exit, kill)
+    crash_delay: float = 0.0  # Delay before crashing in seconds
+
+    # Resource exhaustion
+    resource_type: str = "memory"  # Type of resource (memory, cpu, gpu)
+    exhaustion_amount: Optional[int] = None  # Amount to exhaust (MB for memory)
+    exhaustion_duration: float = 60.0  # How long to maintain exhaustion
+
+    # Task scheduling failures
+    task_name_pattern: Optional[str] = None  # Pattern of tasks to fail
+    failure_rate: float = 1.0  # Rate of task failures (0.0-1.0)
+    failure_type: str = "exception"  # Type of failure (exception, hang, lost)
+
+    # Resource pool faults
+    pool_name: Optional[str] = None  # Name of resource pool
+    pool_operation: str = "acquire"  # Operation to fail (acquire, release)
+    pool_block_duration: float = 30.0  # Duration to block pool operations
+
+    # GCS failures
+    gcs_failure_type: str = "disconnect"  # Type of GCS failure
+    gcs_isolation_duration: float = 30.0  # Duration of GCS isolation
+
+    # Network partitions
+    partition_type: str = "partial"  # Type of partition (partial, total)
+    isolated_ranks: Optional[List[int]] = None  # Ranks to isolate
+    partition_duration: float = 30.0  # Duration of partition
+
+    # Placement group faults
+    placement_group_name: Optional[str] = None  # Name of placement group
+    pg_fault_type: str = "creation_failure"  # Type of placement group fault
+
+
 # Union type for all fault configurations
 FaultConfig = Union[
     ProcessFaultConfig,
@@ -238,6 +292,7 @@ FaultConfig = Union[
     EngineFaultConfig,
     InferenceFaultConfig,
     UIFaultConfig,
+    OrchestrationFaultConfig,
     BaseFaultConfig,
 ]
 
