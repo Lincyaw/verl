@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Optimized integration hooks for fault injection with minimal overhead."""
 
 import asyncio
@@ -5,11 +20,10 @@ import logging
 import os
 import time
 from functools import wraps
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 from ..base import FaultContext, FaultLayer
 from ..performance import (
-    PerformanceConfig,
     get_performance_config,
     get_profiler,
     profile_method,
@@ -34,9 +48,9 @@ class OptimizedFaultInjectionHooks:
     def __init__(self, orchestrator: Any):
         self.orchestrator = orchestrator
         self._hooks_enabled = HOOK_ENABLED
-        self._hook_counters: Dict[str, int] = {}
-        self._hook_last_call: Dict[str, float] = {}
-        self._pending_injections: Dict[str, list] = {}
+        self._hook_counters: dict[str, int] = {}
+        self._hook_last_call: dict[str, float] = {}
+        self._pending_injections: dict[str, list] = {}
         self._perf_config = get_performance_config()
         self._profiler = get_profiler()
 
@@ -71,19 +85,14 @@ class OptimizedFaultInjectionHooks:
         return self._hook_counters[hook_name]
 
     @profile_method("_try_inject_faults_optimized")
-    def _try_inject_faults(self, layer: FaultLayer, hook_name: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def _try_inject_faults(self, layer: FaultLayer, hook_name: str, context: Optional[dict[str, Any]] = None) -> None:
         """Try to inject faults for a specific layer and hook with optimization."""
         if self._should_skip_hook(hook_name):
             return
 
         # Create fault context
         fault_context = FaultContext(
-            layer=layer,
-            metadata={
-                'hook': hook_name,
-                'counter': self._increment_counter(hook_name),
-                **(context or {})
-            }
+            layer=layer, metadata={"hook": hook_name, "counter": self._increment_counter(hook_name), **(context or {})}
         )
 
         # Batch injections if enabled
@@ -110,16 +119,13 @@ class OptimizedFaultInjectionHooks:
         contexts = self._pending_injections.pop(key, [])
 
         # Run batch injection in background thread
-        if HOOK_ASYNC and hasattr(self.orchestrator, 'inject_fault_async'):
+        if HOOK_ASYNC and hasattr(self.orchestrator, "inject_fault_async"):
             asyncio.create_task(self._async_batch_injection(layer, contexts))
         else:
             # Use thread pool for sync batch processing
             import threading
-            threading.Thread(
-                target=self._sync_batch_injection,
-                args=(layer, contexts),
-                daemon=True
-            ).start()
+
+            threading.Thread(target=self._sync_batch_injection, args=(layer, contexts), daemon=True).start()
 
     async def _async_batch_injection(self, layer: FaultLayer, contexts: list) -> None:
         """Async batch fault injection."""
@@ -131,7 +137,7 @@ class OptimizedFaultInjectionHooks:
             tasks = []
             for fault_id in fault_ids:
                 for context in contexts:
-                    if hasattr(self.orchestrator, 'inject_fault_async'):
+                    if hasattr(self.orchestrator, "inject_fault_async"):
                         task = self.orchestrator.inject_fault_async(fault_id, context)
                     else:
                         # Fallback to sync in thread pool
@@ -166,7 +172,7 @@ class OptimizedFaultInjectionHooks:
             fault_ids = self._get_enabled_faults_for_layer(layer)
 
             # Run injections
-            if HOOK_ASYNC and hasattr(self.orchestrator, 'inject_fault_async'):
+            if HOOK_ASYNC and hasattr(self.orchestrator, "inject_fault_async"):
                 # Schedule async injections
                 for fault_id in fault_ids:
                     asyncio.create_task(self.orchestrator.inject_fault_async(fault_id, context))
@@ -183,17 +189,18 @@ class OptimizedFaultInjectionHooks:
         # Cache results if enabled
         if HOOK_CACHE_RESULTS:
             cache_key = f"enabled_faults:{layer.value}"
-            if hasattr(self, '_enabled_faults_cache'):
+            if hasattr(self, "_enabled_faults_cache"):
                 cached = self._enabled_faults_cache.get(cache_key)
                 if cached and time.time() - cached[1] < 60:  # 1 minute TTL
                     return cached[0]
 
             # Build cache
-            if not hasattr(self, '_enabled_faults_cache'):
+            if not hasattr(self, "_enabled_faults_cache"):
                 self._enabled_faults_cache = {}
 
             fault_ids = [
-                fid for fid, injector in self.orchestrator._injectors.items()
+                fid
+                for fid, injector in self.orchestrator._injectors.items()
                 if injector.config.layer == layer and injector.config.enabled
             ]
 
@@ -202,7 +209,8 @@ class OptimizedFaultInjectionHooks:
 
         # No cache, query directly
         return [
-            fid for fid, injector in self.orchestrator._injectors.items()
+            fid
+            for fid, injector in self.orchestrator._injectors.items()
             if injector.config.layer == layer and injector.config.enabled
         ]
 
@@ -218,6 +226,7 @@ class OptimizedFaultInjectionHooks:
 # Optimized hook decorators
 def optimized_fault_hook(layer: FaultLayer, hook_name: str, context_extractor: Optional[Callable] = None):
     """Optimized decorator for fault injection hooks."""
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -236,11 +245,11 @@ def optimized_fault_hook(layer: FaultLayer, hook_name: str, context_extractor: O
             # Get hooks instance from args
             hooks = None
             for arg in args:
-                if hasattr(arg, '_hooks_enabled'):
+                if hasattr(arg, "_hooks_enabled"):
                     hooks = arg
                     break
 
-            if hooks and hasattr(hooks, '_try_inject_faults'):
+            if hooks and hasattr(hooks, "_try_inject_faults"):
                 # Use optimized injection
                 hooks._try_inject_faults(layer, hook_name, context)
 
@@ -256,25 +265,34 @@ class PrecompiledHooks:
     """Pre-compiled hook functions for minimal overhead."""
 
     @staticmethod
-    def rollout_generation_hook(hooks: OptimizedFaultInjectionHooks, context: Optional[Dict] = None) -> None:
+    def rollout_generation_hook(hooks: OptimizedFaultInjectionHooks, context: Optional[dict] = None) -> None:
         """Pre-compiled rollout generation hook."""
         if hooks._should_skip_hook("rollout_generation"):
             return
-        hooks._immediate_injection(FaultLayer.WORKER, "rollout_generation",
-                                  FaultContext(layer=FaultLayer.WORKER, metadata={"hook": "rollout_generation", **(context or {})}))
+        hooks._immediate_injection(
+            FaultLayer.WORKER,
+            "rollout_generation",
+            FaultContext(layer=FaultLayer.WORKER, metadata={"hook": "rollout_generation", **(context or {})}),
+        )
 
     @staticmethod
-    def actor_update_hook(hooks: OptimizedFaultInjectionHooks, context: Optional[Dict] = None) -> None:
+    def actor_update_hook(hooks: OptimizedFaultInjectionHooks, context: Optional[dict] = None) -> None:
         """Pre-compiled actor update hook."""
         if hooks._should_skip_hook("actor_update"):
             return
-        hooks._immediate_injection(FaultLayer.WORKER, "actor_update",
-                                  FaultContext(layer=FaultLayer.WORKER, metadata={"hook": "actor_update", **(context or {})}))
+        hooks._immediate_injection(
+            FaultLayer.WORKER,
+            "actor_update",
+            FaultContext(layer=FaultLayer.WORKER, metadata={"hook": "actor_update", **(context or {})}),
+        )
 
     @staticmethod
-    def critic_update_hook(hooks: OptimizedFaultInjectionHooks, context: Optional[Dict] = None) -> None:
+    def critic_update_hook(hooks: OptimizedFaultInjectionHooks, context: Optional[dict] = None) -> None:
         """Pre-compiled critic update hook."""
         if hooks._should_skip_hook("critic_update"):
             return
-        hooks._immediate_injection(FaultLayer.WORKER, "critic_update",
-                                  FaultContext(layer=FaultLayer.WORKER, metadata={"hook": "critic_update", **(context or {})}))
+        hooks._immediate_injection(
+            FaultLayer.WORKER,
+            "critic_update",
+            FaultContext(layer=FaultLayer.WORKER, metadata={"hook": "critic_update", **(context or {})}),
+        )

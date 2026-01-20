@@ -1,5 +1,21 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Intelligent alerting system for fault injection events."""
 
+import json
 import logging
 import smtplib
 import threading
@@ -7,9 +23,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
-from typing import Any, Callable, Dict, List, Optional, Union
-
-from ..base import FaultLayer, FaultStatus
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +34,7 @@ class AlertRule:
 
     name: str
     condition: str  # Type of condition: "threshold", "rate", "pattern", "custom"
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     severity: str = "warning"  # info, warning, error, critical
     enabled: bool = True
     cooldown_seconds: float = 300  # Prevent alert spam
@@ -36,7 +50,7 @@ class Alert:
     title: str
     message: str
     timestamp: datetime
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     acknowledged: bool = False
     acknowledged_by: Optional[str] = None
     acknowledged_at: Optional[datetime] = None
@@ -47,8 +61,8 @@ class AlertConfig:
     """Configuration for the alert manager."""
 
     enabled: bool = True
-    rules: List[AlertRule] = field(default_factory=list)
-    notification_channels: List[Dict[str, Any]] = field(default_factory=list)
+    rules: list[AlertRule] = field(default_factory=list)
+    notification_channels: list[dict[str, Any]] = field(default_factory=list)
     max_alerts_per_minute: int = 10
     alert_retention_hours: int = 24
     enable_auto_recovery: bool = True
@@ -59,11 +73,11 @@ class AlertManager:
 
     def __init__(self, config: AlertConfig):
         self.config = config
-        self._alerts: List[Alert] = []
-        self._alert_history: List[Alert] = []
-        self._rule_last_triggered: Dict[str, datetime] = {}
+        self._alerts: list[Alert] = []
+        self._alert_history: list[Alert] = []
+        self._rule_last_triggered: dict[str, datetime] = {}
         self._lock = threading.Lock()
-        self._notification_handlers: Dict[str, Callable] = {}
+        self._notification_handlers: dict[str, Callable] = {}
         self._running = False
         self._monitor_thread: Optional[threading.Thread] = None
 
@@ -106,7 +120,7 @@ class AlertManager:
             self.config.rules = [r for r in self.config.rules if r.name != rule_name]
             return len(self.config.rules) < original_count
 
-    def evaluate_rules(self, metrics: Dict[str, Any]) -> List[Alert]:
+    def evaluate_rules(self, metrics: dict[str, Any]) -> list[Alert]:
         """Evaluate all alert rules against current metrics."""
         triggered_alerts = []
 
@@ -153,12 +167,12 @@ class AlertManager:
                 return True
         return False
 
-    def get_active_alerts(self) -> List[Alert]:
+    def get_active_alerts(self) -> list[Alert]:
         """Get all active (unacknowledged) alerts."""
         with self._lock:
             return [a for a in self._alerts if not a.acknowledged]
 
-    def get_alert_history(self, hours: int = 24) -> List[Alert]:
+    def get_alert_history(self, hours: int = 24) -> list[Alert]:
         """Get alert history for the specified number of hours."""
         cutoff = datetime.now() - timedelta(hours=hours)
         with self._lock:
@@ -170,11 +184,10 @@ class AlertManager:
 
     def _register_default_handlers(self) -> None:
         """Register default notification handlers."""
+
         # Console logger
         def console_handler(alert: Alert) -> None:
-            logger.warning(
-                f"ALERT [{alert.severity.upper()}] {alert.title}: {alert.message}"
-            )
+            logger.warning(f"ALERT [{alert.severity.upper()}] {alert.title}: {alert.message}")
 
         self.register_notification_handler("console", console_handler)
 
@@ -188,7 +201,7 @@ class AlertManager:
         if webhook_config:
             self.register_notification_handler("webhook", self._create_webhook_handler(webhook_config))
 
-    def _evaluate_rule(self, rule: AlertRule, metrics: Dict[str, Any]) -> bool:
+    def _evaluate_rule(self, rule: AlertRule, metrics: dict[str, Any]) -> bool:
         """Evaluate a single rule."""
         condition = rule.condition
         params = rule.parameters
@@ -209,7 +222,7 @@ class AlertManager:
 
         return False
 
-    def _evaluate_threshold(self, params: Dict[str, Any], metrics: Dict[str, Any]) -> bool:
+    def _evaluate_threshold(self, params: dict[str, Any], metrics: dict[str, Any]) -> bool:
         """Evaluate threshold-based rule."""
         metric_name = params.get("metric")
         threshold = params.get("threshold")
@@ -230,7 +243,7 @@ class AlertManager:
             logger.warning(f"Unknown threshold operator: {operator}")
             return False
 
-    def _evaluate_rate(self, params: Dict[str, Any], metrics: Dict[str, Any]) -> bool:
+    def _evaluate_rate(self, params: dict[str, Any], metrics: dict[str, Any]) -> bool:
         """Evaluate rate-based rule."""
         # This would require historical data to calculate rates
         # For now, we'll use a simple threshold on recent faults
@@ -239,7 +252,7 @@ class AlertManager:
 
         return recent_faults > max_rate
 
-    def _evaluate_pattern(self, params: Dict[str, Any], metrics: Dict[str, Any]) -> bool:
+    def _evaluate_pattern(self, params: dict[str, Any], metrics: dict[str, Any]) -> bool:
         """Evaluate pattern-based rule."""
         pattern = params.get("pattern")
         metric_name = params.get("metric")
@@ -255,13 +268,14 @@ class AlertManager:
 
         # Regex pattern (if specified)
         import re
+
         regex_pattern = params.get("regex_pattern")
         if regex_pattern:
             return bool(re.search(regex_pattern, value))
 
         return False
 
-    def _create_alert(self, rule: AlertRule, metrics: Dict[str, Any]) -> Alert:
+    def _create_alert(self, rule: AlertRule, metrics: dict[str, Any]) -> Alert:
         """Create an alert from a triggered rule."""
         title = f"{rule.name} - {rule.severity.upper()}"
         message = rule.description or self._generate_alert_message(rule, metrics)
@@ -278,7 +292,7 @@ class AlertManager:
             },
         )
 
-    def _generate_alert_message(self, rule: AlertRule, metrics: Dict[str, Any]) -> str:
+    def _generate_alert_message(self, rule: AlertRule, metrics: dict[str, Any]) -> str:
         """Generate a descriptive alert message."""
         if rule.condition == "threshold":
             metric = rule.parameters.get("metric")
@@ -333,21 +347,21 @@ class AlertManager:
         levels = {"info": 0, "warning": 1, "error": 2, "critical": 3}
         return levels.get(severity, 1)
 
-    def _get_email_config(self) -> Optional[Dict[str, Any]]:
+    def _get_email_config(self) -> Optional[dict[str, Any]]:
         """Get email notification configuration."""
         for channel in self.config.notification_channels:
             if channel.get("type") == "email":
                 return channel
         return None
 
-    def _get_webhook_config(self) -> Optional[Dict[str, Any]]:
+    def _get_webhook_config(self) -> Optional[dict[str, Any]]:
         """Get webhook notification configuration."""
         for channel in self.config.notification_channels:
             if channel.get("type") == "webhook":
                 return channel
         return None
 
-    def _create_email_handler(self, config: Dict[str, Any]) -> Callable:
+    def _create_email_handler(self, config: dict[str, Any]) -> Callable:
         """Create email notification handler."""
         smtp_host = config.get("smtp_host", "localhost")
         smtp_port = config.get("smtp_port", 587)
@@ -356,7 +370,7 @@ class AlertManager:
         from_email = config.get("from_email", "alerts@fault-injection.local")
         to_emails = config.get("to_emails", [])
 
-        def email_handler(alert: Alert, channel_config: Dict[str, Any]) -> None:
+        def email_handler(alert: Alert, channel_config: dict[str, Any]) -> None:
             try:
                 # Create message
                 msg = MIMEText(self._format_email_body(alert))
@@ -378,7 +392,7 @@ class AlertManager:
 
         return email_handler
 
-    def _create_webhook_handler(self, config: Dict[str, Any]) -> Callable:
+    def _create_webhook_handler(self, config: dict[str, Any]) -> Callable:
         """Create webhook notification handler."""
         import requests
 
@@ -386,7 +400,7 @@ class AlertManager:
         headers = config.get("headers", {})
         timeout = config.get("timeout", 10)
 
-        def webhook_handler(alert: Alert, channel_config: Dict[str, Any]) -> None:
+        def webhook_handler(alert: Alert, channel_config: dict[str, Any]) -> None:
             try:
                 payload = {
                     "rule_name": alert.rule_name,
@@ -421,7 +435,7 @@ Fault Injection Alert
 
 Rule: {alert.rule_name}
 Severity: {alert.severity.upper()}
-Time: {alert.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+Time: {alert.timestamp.strftime("%Y-%m-%d %H:%M:%S")}
 
 {alert.title}
 
@@ -456,16 +470,10 @@ This alert was generated by the fault injection monitoring system.
 
         with self._lock:
             # Remove old acknowledged alerts
-            self._alerts = [
-                a for a in self._alerts
-                if not a.acknowledged or a.timestamp >= cutoff
-            ]
+            self._alerts = [a for a in self._alerts if not a.acknowledged or a.timestamp >= cutoff]
 
             # Remove old history
-            self._alert_history = [
-                a for a in self._alert_history
-                if a.timestamp >= cutoff
-            ]
+            self._alert_history = [a for a in self._alert_history if a.timestamp >= cutoff]
 
 
 # Predefined alert rules

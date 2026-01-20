@@ -1,12 +1,26 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Tests for worker layer fault injectors."""
 
-import os
+import signal
 import time
 import unittest
 from unittest.mock import MagicMock, patch
 
 import torch
-import torch.distributed as dist
 
 from verl.fault_injection.config import FaultLayer, FaultTargetConfig, FaultTriggerConfig, WorkerFaultConfig
 from verl.fault_injection.injectors.worker import (
@@ -48,9 +62,10 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = FSDPSyncFailureInjector(config)
 
         # Mock distributed environment
-        with patch('torch.distributed.is_initialized', return_value=True), \
-             patch('torch.distributed.get_rank', return_value=0):
-
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_rank", return_value=0),
+        ):
             result = injector.inject(self.context)
 
             self.assertEqual(result.status.value, "completed")
@@ -71,9 +86,10 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = FSDPSyncFailureInjector(config)
 
         # Mock distributed environment
-        with patch('torch.distributed.is_initialized', return_value=True), \
-             patch('torch.distributed.get_rank', return_value=0):
-
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_rank", return_value=0),
+        ):
             result = injector.inject(self.context)
 
             self.assertEqual(result.status.value, "completed")
@@ -94,7 +110,7 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = FSDPShardingErrorInjector(config)
 
         # Mock torch.nn.Module
-        with patch.object(torch.nn.Module, '_forward_unimpl', create=True) as mock_forward:
+        with patch.object(torch.nn.Module, "_forward_unimpl", create=True) as mock_forward:
             mock_forward.return_value = None
 
             result = injector.inject(self.context)
@@ -117,9 +133,10 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = MegatronSyncFailureInjector(config)
 
         # Mock distributed environment and tensor operations
-        with patch('torch.distributed.is_initialized', return_value=True), \
-             patch('torch.distributed.all_reduce') as mock_all_reduce:
-
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.all_reduce") as mock_all_reduce,
+        ):
             mock_all_reduce.side_effect = RuntimeError("Overflow in all_reduce")
 
             result = injector.inject(self.context)
@@ -143,7 +160,7 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = MegatronPipelineErrorInjector(config)
 
         # Mock torch.nn.Module
-        with patch.object(torch.nn.Module, 'forward', create=True) as mock_forward:
+        with patch.object(torch.nn.Module, "forward", create=True) as mock_forward:
             mock_forward.return_value = None
 
             result = injector.inject(self.context)
@@ -167,11 +184,12 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = GradientSyncTimeoutInjector(config)
 
         # Mock distributed environment
-        with patch('torch.distributed.is_initialized', return_value=True), \
-             patch('torch.distributed.get_timeout', return_value=30.0), \
-             patch('torch.distributed.set_timeout') as mock_set_timeout, \
-             patch('torch.distributed.all_reduce') as mock_all_reduce:
-
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_timeout", return_value=30.0),
+            patch("torch.distributed.set_timeout") as mock_set_timeout,
+            patch("torch.distributed.all_reduce") as mock_all_reduce,
+        ):
             mock_all_reduce.side_effect = RuntimeError("Timeout")
 
             result = injector.inject(self.context)
@@ -183,7 +201,7 @@ class TestWorkerFaultInjectors(unittest.TestCase):
             # Verify timeout was set
             mock_set_timeout.assert_called_with(0.1)
 
-    @patch('torch.cuda.is_available')
+    @patch("torch.cuda.is_available")
     def test_cuda_oom_worker_success(self, mock_cuda_available):
         """Test CUDA OOM injection when CUDA is available."""
         mock_cuda_available.return_value = True
@@ -200,16 +218,16 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = CudaOOMWorkerInjector(config)
 
         # Mock CUDA allocation to raise OOM
-        with patch('torch.zeros', side_effect=torch.cuda.OutOfMemoryError(
-            "CUDA out of memory. Tried to allocate 1.00 GiB")):
-
+        with patch(
+            "torch.zeros", side_effect=torch.cuda.OutOfMemoryError("CUDA out of memory. Tried to allocate 1.00 GiB")
+        ):
             result = injector.inject(self.context)
 
             self.assertEqual(result.status.value, "completed")
             self.assertEqual(result.metadata["memory_mb"], 1024)
             self.assertEqual(result.metadata["action"], "cuda_oom")
 
-    @patch('torch.cuda.is_available')
+    @patch("torch.cuda.is_available")
     def test_cuda_oom_worker_no_cuda(self, mock_cuda_available):
         """Test CUDA OOM injection when CUDA is not available."""
         mock_cuda_available.return_value = False
@@ -229,9 +247,9 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         self.assertEqual(result.status.value, "failed")
         self.assertEqual(result.error_message, "CUDA not available")
 
-    @patch('torch.cuda.is_available')
-    @patch('gc.collect')
-    @patch('torch.cuda.empty_cache')
+    @patch("torch.cuda.is_available")
+    @patch("gc.collect")
+    @patch("torch.cuda.empty_cache")
     def test_cuda_memory_fragmentation(self, mock_empty_cache, mock_gc, mock_cuda_available):
         """Test CUDA memory fragmentation."""
         mock_cuda_available.return_value = True
@@ -249,7 +267,7 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         injector = CudaMemoryFragmentationInjector(config)
 
         # Mock tensor allocation
-        with patch('torch.zeros') as mock_zeros:
+        with patch("torch.zeros") as mock_zeros:
             mock_tensor = MagicMock()
             mock_zeros.return_value = mock_tensor
 
@@ -282,7 +300,7 @@ class TestWorkerFaultInjectors(unittest.TestCase):
 
         self.assertIn("Simulated worker crash", str(context.exception))
 
-    @patch('os._exit')
+    @patch("os._exit")
     def test_worker_crash_exit(self, mock_exit):
         """Test worker crash with exit."""
         config = WorkerFaultConfig(
@@ -299,8 +317,8 @@ class TestWorkerFaultInjectors(unittest.TestCase):
 
         mock_exit.assert_called_once_with(1)
 
-    @patch('os.kill')
-    @patch('os.getpid')
+    @patch("os.kill")
+    @patch("os.getpid")
     def test_worker_crash_signal(self, mock_getpid, mock_kill):
         """Test worker crash with signal."""
         mock_getpid.return_value = 12345
@@ -346,5 +364,5 @@ class TestWorkerFaultInjectors(unittest.TestCase):
         self.assertGreaterEqual(end_time - start_time, 1.0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

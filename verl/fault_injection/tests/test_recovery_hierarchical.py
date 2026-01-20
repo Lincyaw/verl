@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Unit tests for hierarchical recovery manager."""
 
 import time
@@ -173,6 +188,7 @@ class TestHierarchicalRecoveryManager(unittest.TestCase):
 
     def test_recovery_timeout(self):
         """Test recovery timeout."""
+
         # Create slow strategy
         class SlowStrategy(BaseRecoveryStrategy):
             @property
@@ -247,7 +263,7 @@ class TestHierarchicalRecoveryManager(unittest.TestCase):
         )
 
         # Mock manual approval (simulate user approval)
-        with patch.object(manager, '_request_manual_approval', return_value=True):
+        with patch.object(manager, "_request_manual_approval", return_value=True):
             # Execute recovery
             result = manager.handle_fault(self.fault_result, self.fault_context, mode=RecoveryMode.MANUAL)
 
@@ -275,7 +291,7 @@ class TestHierarchicalRecoveryManager(unittest.TestCase):
         )
 
         # Mock manual approval denial
-        with patch.object(manager, '_request_manual_approval', return_value=False):
+        with patch.object(manager, "_request_manual_approval", return_value=False):
             # Execute recovery
             result = manager.handle_fault(self.fault_result, self.fault_context, mode=RecoveryMode.MANUAL)
 
@@ -415,6 +431,7 @@ class TestIntelligentRecoveryDecisionEngine(unittest.TestCase):
 
     def test_no_recoverable_strategies(self):
         """Test when no strategies can recover."""
+
         # Create strategies that can't recover
         class NonRecoverableStrategy(BaseRecoveryStrategy):
             @property

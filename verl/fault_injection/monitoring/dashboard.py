@@ -1,17 +1,29 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Web-based dashboard for fault injection monitoring."""
 
-import json
 import logging
 import threading
-import time
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 from flask import Flask, jsonify, render_template_string, request
 from flask_cors import CORS
 
-from .collector import MetricsCollector, AggregatedMetrics
+from .collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +36,7 @@ class DashboardConfig:
     port: int = 8080
     update_interval: float = 2.0  # Seconds between updates
     enable_cors: bool = True
-    authentication: Optional[Dict[str, str]] = None  # username: password
+    authentication: Optional[dict[str, str]] = None  # username: password
     max_datapoints: int = 1000  # Maximum datapoints to show
 
 
@@ -60,18 +72,20 @@ class DashboardServer:
             window = request.args.get("window", 300, type=int)
             aggregation = self.metrics_collector.get_aggregated_metrics(window)
             if aggregation:
-                return jsonify({
-                    "window_start": aggregation.window_start.isoformat(),
-                    "window_end": aggregation.window_end.isoformat(),
-                    "total_faults": aggregation.total_faults,
-                    "successful_faults": aggregation.successful_faults,
-                    "failed_faults": aggregation.failed_faults,
-                    "recovered_faults": aggregation.recovered_faults,
-                    "avg_injection_duration_ms": aggregation.avg_injection_duration_ms,
-                    "recovery_success_rate": aggregation.recovery_success_rate,
-                    "faults_by_layer": aggregation.faults_by_layer,
-                    "faults_by_type": aggregation.faults_by_type,
-                })
+                return jsonify(
+                    {
+                        "window_start": aggregation.window_start.isoformat(),
+                        "window_end": aggregation.window_end.isoformat(),
+                        "total_faults": aggregation.total_faults,
+                        "successful_faults": aggregation.successful_faults,
+                        "failed_faults": aggregation.failed_faults,
+                        "recovered_faults": aggregation.recovered_faults,
+                        "avg_injection_duration_ms": aggregation.avg_injection_duration_ms,
+                        "recovery_success_rate": aggregation.recovery_success_rate,
+                        "faults_by_layer": aggregation.faults_by_layer,
+                        "faults_by_type": aggregation.faults_by_type,
+                    }
+                )
             return jsonify({"error": "No data available"}), 404
 
         @self.app.route("/api/faults/history")
@@ -83,18 +97,20 @@ class DashboardServer:
             # Return recent faults
             recent_faults = list(history)[-limit:] if history else []
 
-            return jsonify([
-                {
-                    "fault_id": f.fault_id,
-                    "fault_type": f.fault_type,
-                    "layer": f.layer.value,
-                    "status": f.status.value,
-                    "timestamp": f.timestamp.isoformat(),
-                    "duration_ms": f.duration_ms,
-                    "recovery_time_ms": f.recovery_time_ms,
-                }
-                for f in recent_faults
-            ])
+            return jsonify(
+                [
+                    {
+                        "fault_id": f.fault_id,
+                        "fault_type": f.fault_type,
+                        "layer": f.layer.value,
+                        "status": f.status.value,
+                        "timestamp": f.timestamp.isoformat(),
+                        "duration_ms": f.duration_ms,
+                        "recovery_time_ms": f.recovery_time_ms,
+                    }
+                    for f in recent_faults
+                ]
+            )
 
         @self.app.route("/api/system/health")
         def get_system_health():
@@ -121,13 +137,15 @@ class DashboardServer:
             elif success_rate < 0.8:
                 health_score -= 15
 
-            return jsonify({
-                "health_score": max(0, health_score),
-                "status": current["system_health"],
-                "active_faults": current["faults_active"],
-                "recent_faults": current["recent_faults"],
-                "success_rate": current["faults_success_rate"],
-            })
+            return jsonify(
+                {
+                    "health_score": max(0, health_score),
+                    "status": current["system_health"],
+                    "active_faults": current["faults_active"],
+                    "recent_faults": current["recent_faults"],
+                    "success_rate": current["faults_success_rate"],
+                }
+            )
 
         @self.app.route("/api/faults/by-layer")
         def get_faults_by_layer():

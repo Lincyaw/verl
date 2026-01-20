@@ -1,8 +1,22 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """UI layer fault injectors for verl fault injection system."""
 
 import os
 import time
-from typing import Any, Dict, Optional
 
 from verl.fault_injection.base import BaseFaultInjector, FaultContext, FaultInjectorRegistry, FaultResult, FaultStatus
 from verl.fault_injection.config import FaultType, UIFaultConfig
@@ -13,7 +27,7 @@ class HydraConfigErrorInjector(BaseFaultInjector):
     """Injector for Hydra configuration errors."""
 
     def __init__(self, config: UIFaultConfig):
-        self.config = config
+        super().__init__(config)
         self._original_config = None
 
     def inject(self, context: FaultContext) -> FaultResult:
@@ -22,7 +36,6 @@ class HydraConfigErrorInjector(BaseFaultInjector):
 
         if error_type == "parse":
             # Simulate parsing error by corrupting config structure
-            import omegaconf
             from omegaconf import OmegaConf
 
             # Create invalid YAML content
@@ -37,30 +50,38 @@ class HydraConfigErrorInjector(BaseFaultInjector):
                 OmegaConf.create(invalid_yaml)
             except Exception as e:
                 return FaultResult(
+                    fault_id=self.fault_id,
                     status=FaultStatus.FAILED,
-                    error_message=f"Hydra config parse error: {str(e)}",
-                    metadata={"error_type": error_type}
+                    start_time=time.time(),
+                    error=Exception(f"Hydra config parse error: {str(e)}"),
+                    metadata={"error_type": error_type},
                 )
 
         elif error_type == "validate":
             # Simulate validation error
             return FaultResult(
+                fault_id=self.fault_id,
                 status=FaultStatus.FAILED,
-                error_message="Hydra config validation failed: missing required field 'model.path'",
-                metadata={"error_type": error_type}
+                start_time=time.time(),
+                error=Exception("Hydra config validation failed: missing required field 'model.path'"),
+                metadata={"error_type": error_type},
             )
 
         elif error_type == "merge":
             # Simulate merge conflict
             return FaultResult(
+                fault_id=self.fault_id,
                 status=FaultStatus.FAILED,
-                error_message="Hydra config merge error: conflicting values for key 'learning_rate'",
-                metadata={"error_type": error_type}
+                start_time=time.time(),
+                error=Exception("Hydra config merge error: conflicting values for key 'learning_rate'"),
+                metadata={"error_type": error_type},
             )
 
         return FaultResult(
+            fault_id=self.fault_id,
             status=FaultStatus.SUCCESS,
-            metadata={"error_type": error_type}
+            start_time=time.time(),
+            metadata={"error_type": error_type},
         )
 
     def recover(self, context: FaultContext) -> None:
@@ -90,15 +111,13 @@ class RayInitFailureInjector(BaseFaultInjector):
 
         ray.init = failing_ray_init
 
-        return FaultResult(
-            status=FaultStatus.SUCCESS,
-            metadata={"error_message": error_msg}
-        )
+        return FaultResult(status=FaultStatus.SUCCESS, metadata={"error_message": error_msg})
 
     def recover(self, context: FaultContext) -> None:
         """Restore original ray.init function."""
         if self._original_ray_init:
             import ray
+
             ray.init = self._original_ray_init
 
 
@@ -122,30 +141,22 @@ class CLIArgErrorInjector(BaseFaultInjector):
             if arg_to_remove in sys.argv:
                 sys.argv.remove(arg_to_remove)
 
-            return FaultResult(
-                status=FaultStatus.SUCCESS,
-                metadata={"action": "removed_arg", "arg": arg_to_remove}
-            )
+            return FaultResult(status=FaultStatus.SUCCESS, metadata={"action": "removed_arg", "arg": arg_to_remove})
 
         elif self.config.cli_arg_invalid:
             # Add invalid argument
             invalid_arg = self.config.cli_arg_invalid
             sys.argv.append(invalid_arg)
 
-            return FaultResult(
-                status=FaultStatus.SUCCESS,
-                metadata={"action": "added_invalid_arg", "arg": invalid_arg}
-            )
+            return FaultResult(status=FaultStatus.SUCCESS, metadata={"action": "added_invalid_arg", "arg": invalid_arg})
 
-        return FaultResult(
-            status=FaultStatus.FAILED,
-            error_message="No CLI argument error configured"
-        )
+        return FaultResult(status=FaultStatus.FAILED, error_message="No CLI argument error configured")
 
     def recover(self, context: FaultContext) -> None:
         """Restore original sys.argv."""
         if self._original_sys_argv:
             import sys
+
             sys.argv = self._original_sys_argv
 
 
@@ -180,15 +191,9 @@ class EnvVarErrorInjector(BaseFaultInjector):
             metadata["set_invalid_var"] = f"{var_name}={invalid_value}"
 
         if metadata:
-            return FaultResult(
-                status=FaultStatus.SUCCESS,
-                metadata=metadata
-            )
+            return FaultResult(status=FaultStatus.SUCCESS, metadata=metadata)
 
-        return FaultResult(
-            status=FaultStatus.FAILED,
-            error_message="No environment variable error configured"
-        )
+        return FaultResult(status=FaultStatus.FAILED, error_message="No environment variable error configured")
 
     def recover(self, context: FaultContext) -> None:
         """Restore original environment variables."""
@@ -217,10 +222,7 @@ class UIFreezeInjector(BaseFaultInjector):
 
         print(f"[UI Freeze] UI unfrozen after {duration} seconds")
 
-        return FaultResult(
-            status=FaultStatus.SUCCESS,
-            metadata={"freeze_duration": duration}
-        )
+        return FaultResult(status=FaultStatus.SUCCESS, metadata={"freeze_duration": duration})
 
     def recover(self, context: FaultContext) -> None:
         """No recovery needed for freeze."""
@@ -243,6 +245,7 @@ class UICrashInjector(BaseFaultInjector):
 
         # Exit the process
         import sys
+
         sys.exit(1)
 
     def recover(self, context: FaultContext) -> None:

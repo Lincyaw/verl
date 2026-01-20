@@ -1,15 +1,27 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Orchestration layer fault injectors for verl fault injection system."""
 
 import os
-import time
-import signal
 import socket
 import threading
-from typing import Any, Dict, List, Optional
+import time
 
 import ray
 from ray.util import placement_group
-from ray.util.placement_group import PlacementGroup
 
 from verl.fault_injection.base import BaseFaultInjector, FaultContext, FaultInjectorRegistry, FaultResult, FaultStatus
 from verl.fault_injection.config import FaultType, OrchestrationFaultConfig
@@ -55,7 +67,7 @@ class RayClusterFailureInjector(BaseFaultInjector):
                     fault_id=self.config.name,
                     status=FaultStatus.INJECTING,
                     start_time=time.time(),
-                    metadata={"failure_type": failure_type, "gcs_address": gcs_address}
+                    metadata={"failure_type": failure_type, "gcs_address": gcs_address},
                 )
 
             except Exception as e:
@@ -64,7 +76,7 @@ class RayClusterFailureInjector(BaseFaultInjector):
                     status=FaultStatus.FAILED,
                     start_time=time.time(),
                     error=e,
-                    metadata={"failure_type": failure_type}
+                    metadata={"failure_type": failure_type},
                 )
 
         elif failure_type == "node":
@@ -86,16 +98,14 @@ class RayClusterFailureInjector(BaseFaultInjector):
 
                 # Place actors on specified nodes and kill them
                 for node in affected_nodes:
-                    killer = NodeKiller.options(
-                        resources={f"node:{node}": 0.1}
-                    ).remote()
+                    killer = NodeKiller.options(resources={f"node:{node}": 0.1}).remote()
 
                     # Schedule the kill after a delay
-                    def delayed_kill():
+                    def delayed_kill(killer_ref=killer):
                         time.sleep(self.config.failure_duration)
                         try:
-                            ray.get(killer.kill.remote())
-                        except:
+                            ray.get(killer_ref.kill.remote())
+                        except Exception:
                             pass
 
                     threading.Thread(target=delayed_kill).start()
@@ -104,7 +114,7 @@ class RayClusterFailureInjector(BaseFaultInjector):
                     fault_id=self.config.name,
                     status=FaultStatus.INJECTING,
                     start_time=time.time(),
-                    metadata={"failure_type": failure_type, "affected_nodes": affected_nodes}
+                    metadata={"failure_type": failure_type, "affected_nodes": affected_nodes},
                 )
 
             except Exception as e:
@@ -113,7 +123,7 @@ class RayClusterFailureInjector(BaseFaultInjector):
                     status=FaultStatus.FAILED,
                     start_time=time.time(),
                     error=e,
-                    metadata={"failure_type": failure_type}
+                    metadata={"failure_type": failure_type},
                 )
 
         return FaultResult(
@@ -121,7 +131,7 @@ class RayClusterFailureInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error=ValueError(f"Unknown cluster failure type: {failure_type}"),
-            metadata={"failure_type": failure_type}
+            metadata={"failure_type": failure_type},
         )
 
 
@@ -152,7 +162,7 @@ class ActorCrashInjector(BaseFaultInjector):
                     status=FaultStatus.FAILED,
                     start_time=time.time(),
                     error=ValueError(f"No actors found matching pattern: {actor_name}"),
-                    metadata={"actor_name": actor_name}
+                    metadata={"actor_name": actor_name},
                 )
 
             # Schedule crashes after delay
@@ -172,13 +182,12 @@ class ActorCrashInjector(BaseFaultInjector):
                             actor.__ray_kill__.remote()
                         elif death_type == "kill":
                             # Send kill signal
-                            import signal
                             # This would need to be done from within the actor
                             pass
 
                         self._crashed_actors.append(actor_info["name"])
 
-                    except Exception as e:
+                    except Exception:
                         # Actor might already be dead
                         pass
 
@@ -194,8 +203,8 @@ class ActorCrashInjector(BaseFaultInjector):
                     "actor_name": actor_name,
                     "death_type": death_type,
                     "target_count": len(target_actors),
-                    "crash_delay": self.config.crash_delay
-                }
+                    "crash_delay": self.config.crash_delay,
+                },
             )
 
         except Exception as e:
@@ -204,7 +213,7 @@ class ActorCrashInjector(BaseFaultInjector):
                 status=FaultStatus.FAILED,
                 start_time=time.time(),
                 error=e,
-                metadata={"actor_name": actor_name}
+                metadata={"actor_name": actor_name},
             )
 
 
@@ -261,7 +270,7 @@ class ResourceExhaustionInjector(BaseFaultInjector):
                         if self._stop_exhaustion.is_set():
                             break
                         # Busy loop
-                        _ = sum(i*i for i in range(1000000))
+                        _ = sum(i * i for i in range(1000000))
 
                 # Start multiple CPU exhaustion threads
                 for _ in range(4):  # Use 4 threads to load multiple cores
@@ -276,8 +285,8 @@ class ResourceExhaustionInjector(BaseFaultInjector):
                 metadata={
                     "resource_type": resource_type,
                     "exhaustion_amount": self.config.exhaustion_amount,
-                    "duration": self.config.exhaustion_duration
-                }
+                    "duration": self.config.exhaustion_duration,
+                },
             )
 
         except Exception as e:
@@ -286,7 +295,7 @@ class ResourceExhaustionInjector(BaseFaultInjector):
                 status=FaultStatus.FAILED,
                 start_time=time.time(),
                 error=e,
-                metadata={"resource_type": resource_type}
+                metadata={"resource_type": resource_type},
             )
 
 
@@ -324,6 +333,7 @@ class TaskSchedulingFailureInjector(BaseFaultInjector):
 
                         def failing_remote(*args, **kwargs):
                             import random
+
                             if random.random() < failure_rate:
                                 if failure_type == "exception":
                                     # Return a failing object
@@ -340,6 +350,7 @@ class TaskSchedulingFailureInjector(BaseFaultInjector):
                                     class HangingObject:
                                         def __getattr__(self, name):
                                             import time
+
                                             time.sleep(3600)  # Hang for an hour
 
                                     return HangingObject()
@@ -363,11 +374,7 @@ class TaskSchedulingFailureInjector(BaseFaultInjector):
                 fault_id=self.config.name,
                 status=FaultStatus.INJECTING,
                 start_time=time.time(),
-                metadata={
-                    "task_pattern": task_pattern,
-                    "failure_rate": failure_rate,
-                    "failure_type": failure_type
-                }
+                metadata={"task_pattern": task_pattern, "failure_rate": failure_rate, "failure_type": failure_type},
             )
 
         except Exception as e:
@@ -376,7 +383,7 @@ class TaskSchedulingFailureInjector(BaseFaultInjector):
                 status=FaultStatus.FAILED,
                 start_time=time.time(),
                 error=e,
-                metadata={"task_pattern": task_pattern}
+                metadata={"task_pattern": task_pattern},
             )
 
 
@@ -425,8 +432,8 @@ class ResourcePoolFaultInjector(BaseFaultInjector):
                 metadata={
                     "pool_name": pool_name,
                     "operation": operation,
-                    "block_duration": self.config.pool_block_duration
-                }
+                    "block_duration": self.config.pool_block_duration,
+                },
             )
 
         except Exception as e:
@@ -435,7 +442,7 @@ class ResourcePoolFaultInjector(BaseFaultInjector):
                 status=FaultStatus.FAILED,
                 start_time=time.time(),
                 error=e,
-                metadata={"pool_name": pool_name}
+                metadata={"pool_name": pool_name},
             )
 
 
@@ -472,7 +479,7 @@ class GCSFailureInjector(BaseFaultInjector):
                     # Hold the connection for the specified duration
                     time.sleep(self.config.gcs_isolation_duration)
 
-                except:
+                except Exception:
                     # Port might be in use, just wait
                     time.sleep(self.config.gcs_isolation_duration)
                 finally:
@@ -493,10 +500,7 @@ class GCSFailureInjector(BaseFaultInjector):
                 fault_id=self.config.name,
                 status=FaultStatus.INJECTING,
                 start_time=time.time(),
-                metadata={
-                    "failure_type": failure_type,
-                    "duration": self.config.gcs_isolation_duration
-                }
+                metadata={"failure_type": failure_type, "duration": self.config.gcs_isolation_duration},
             )
 
         except Exception as e:
@@ -505,7 +509,7 @@ class GCSFailureInjector(BaseFaultInjector):
                 status=FaultStatus.FAILED,
                 start_time=time.time(),
                 error=e,
-                metadata={"failure_type": failure_type}
+                metadata={"failure_type": failure_type},
             )
 
 
@@ -524,13 +528,13 @@ class NetworkPartitionInjector(BaseFaultInjector):
         try:
             # Get current worker info
             current_rank = context.rank or 0
-            current_ip = context.host or ray.util.get_node_ip_address()
+            # current_ip = context.host or ray.util.get_node_ip_address()  # Not used
 
             # Check if this worker should be isolated
             should_isolate = (
-                partition_type == "total" or
-                current_rank in isolated_ranks or
-                (partition_type == "partial" and current_rank % 2 == 0)
+                partition_type == "total"
+                or current_rank in isolated_ranks
+                or (partition_type == "partial" and current_rank % 2 == 0)
             )
 
             if should_isolate:
@@ -547,7 +551,7 @@ class NetworkPartitionInjector(BaseFaultInjector):
                         sock.bind(("0.0.0.0", port))
                         sock.listen(1)
                         blocking_sockets.append(sock)
-                    except:
+                    except Exception:
                         # Port might be in use
                         pass
 
@@ -567,8 +571,8 @@ class NetworkPartitionInjector(BaseFaultInjector):
                     "isolated_ranks": isolated_ranks,
                     "current_rank": current_rank,
                     "should_isolate": should_isolate,
-                    "duration": self.config.partition_duration
-                }
+                    "duration": self.config.partition_duration,
+                },
             )
 
         except Exception as e:
@@ -577,7 +581,7 @@ class NetworkPartitionInjector(BaseFaultInjector):
                 status=FaultStatus.FAILED,
                 start_time=time.time(),
                 error=e,
-                metadata={"partition_type": partition_type}
+                metadata={"partition_type": partition_type},
             )
 
 
@@ -600,7 +604,7 @@ class PlacementGroupFaultInjector(BaseFaultInjector):
                     pg = placement_group(
                         [{"GPU": 1000000, "CPU": 1000000}] * 100,  # Impossible requirements
                         name=pg_name,
-                        strategy="STRICT_PACK"
+                        strategy="STRICT_PACK",
                     )
 
                     # This should timeout or fail
@@ -612,20 +616,12 @@ class PlacementGroupFaultInjector(BaseFaultInjector):
                         fault_id=self.config.name,
                         status=FaultStatus.COMPLETED,
                         start_time=time.time(),
-                        metadata={
-                            "fault_type": fault_type,
-                            "pg_name": pg_name,
-                            "error": str(e)
-                        }
+                        metadata={"fault_type": fault_type, "pg_name": pg_name, "error": str(e)},
                     )
 
             elif fault_type == "removal_failure":
                 # Create a placement group and make it impossible to remove
-                pg = placement_group(
-                    [{"CPU": 1}] * 2,
-                    name=pg_name,
-                    strategy="PACK"
-                )
+                pg = placement_group([{"CPU": 1}] * 2, name=pg_name, strategy="PACK")
 
                 ray.get(pg.ready())
 
@@ -642,16 +638,13 @@ class PlacementGroupFaultInjector(BaseFaultInjector):
                 # Place actors in the placement group
                 occupiers = []
                 for i in range(2):
-                    occupier = PGOccupier.options(
-                        placement_group=pg,
-                        placement_group_bundle_index=i
-                    ).remote()
+                    occupier = PGOccupier.options(placement_group=pg, placement_group_bundle_index=i).remote()
                     occupiers.append(occupier)
 
                 # Now try to remove - this should fail
                 try:
                     placement_group.remove_placement_group(pg)
-                except:
+                except Exception:
                     pass  # Expected to fail
 
                 # Clean up
@@ -662,10 +655,7 @@ class PlacementGroupFaultInjector(BaseFaultInjector):
                 fault_id=self.config.name,
                 status=FaultStatus.INJECTING,
                 start_time=time.time(),
-                metadata={
-                    "fault_type": fault_type,
-                    "pg_name": pg_name
-                }
+                metadata={"fault_type": fault_type, "pg_name": pg_name},
             )
 
         except Exception as e:
@@ -674,5 +664,5 @@ class PlacementGroupFaultInjector(BaseFaultInjector):
                 status=FaultStatus.FAILED,
                 start_time=time.time(),
                 error=e,
-                metadata={"fault_type": fault_type}
+                metadata={"fault_type": fault_type},
             )

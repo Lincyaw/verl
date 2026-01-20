@@ -1,8 +1,23 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Scenario configuration loader and validator."""
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import yaml
 
@@ -17,7 +32,6 @@ from .config import (
     FaultTriggerConfig,
     FaultType,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -88,14 +102,14 @@ class ScenarioConfigLoader:
             FaultType.COMPILATION_FAILURE: "InferenceFaultConfig",
         }
 
-    def load_scenario_from_yaml(self, path: Union[str, Path]) -> FaultScenarioConfig:
+    def load_scenario_from_yaml(self, path: str | Path) -> FaultScenarioConfig:
         """Load a fault scenario from YAML file."""
         path = Path(path)
 
         if not path.exists():
             raise FileNotFoundError(f"Scenario file not found: {path}")
 
-        with open(path, 'r') as f:
+        with open(path) as f:
             data = yaml.safe_load(f)
 
         # Handle multiple scenarios in one file
@@ -107,14 +121,14 @@ class ScenarioConfigLoader:
 
         return self.parse_scenario_config(scenario_name, scenario_data)
 
-    def load_scenarios_from_yaml(self, path: Union[str, Path]) -> Dict[str, FaultScenarioConfig]:
+    def load_scenarios_from_yaml(self, path: str | Path) -> dict[str, FaultScenarioConfig]:
         """Load multiple fault scenarios from YAML file."""
         path = Path(path)
 
         if not path.exists():
             raise FileNotFoundError(f"Scenario file not found: {path}")
 
-        with open(path, 'r') as f:
+        with open(path) as f:
             data = yaml.safe_load(f)
 
         scenarios = {}
@@ -123,7 +137,7 @@ class ScenarioConfigLoader:
 
         return scenarios
 
-    def parse_scenario_config(self, name: str, data: Dict[str, Any]) -> FaultScenarioConfig:
+    def parse_scenario_config(self, name: str, data: dict[str, Any]) -> FaultScenarioConfig:
         """Parse scenario configuration from dictionary."""
 
         # Parse faults
@@ -138,7 +152,7 @@ class ScenarioConfigLoader:
             dep = FaultDependencyConfig(
                 fault_name=dep_data["fault_name"],
                 condition=dep_data["condition"],
-                delay_seconds=dep_data.get("delay_seconds")
+                delay_seconds=dep_data.get("delay_seconds"),
             )
             dependencies.append(dep)
 
@@ -151,10 +165,10 @@ class ScenarioConfigLoader:
             cascade_mode=data.get("cascade_mode", "none"),
             cascade_interval_seconds=data.get("cascade_interval_seconds", 5.0),
             max_cascade_depth=data.get("max_cascade_depth", 3),
-            stop_on_failure=data.get("stop_on_failure", False)
+            stop_on_failure=data.get("stop_on_failure", False),
         )
 
-    def parse_fault_config(self, data: Dict[str, Any]) -> FaultConfig:
+    def parse_fault_config(self, data: dict[str, Any]) -> FaultConfig:
         """Parse fault configuration from dictionary."""
 
         # Extract basic fields
@@ -171,7 +185,7 @@ class ScenarioConfigLoader:
             description=data.get("description", ""),
             duration_seconds=data.get("duration_seconds"),
             recovery_seconds=data.get("recovery_seconds"),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
 
         # Parse trigger config
@@ -182,31 +196,41 @@ class ScenarioConfigLoader:
                 delay_seconds=trigger_data.get("delay_seconds"),
                 count_threshold=trigger_data.get("count_threshold"),
                 probability=trigger_data.get("probability"),
-                condition=trigger_data.get("condition")
+                condition=trigger_data.get("condition"),
             )
 
         # Parse target config
         if "target" in data:
             target_data = data["target"]
             from .config import FaultTarget, FaultTargetConfig
+
             base_config.target = FaultTargetConfig(
                 mode=FaultTarget(target_data["mode"]),
                 ranks=target_data.get("ranks"),
                 hosts=target_data.get("hosts"),
                 process_types=target_data.get("process_types"),
-                count=target_data.get("count", 1)
+                count=target_data.get("count", 1),
             )
 
         # Add fault-specific fields
         for key, value in data.items():
-            if key not in ["name", "type", "layer", "enabled", "description",
-                          "duration_seconds", "recovery_seconds", "metadata",
-                          "trigger", "target"]:
+            if key not in [
+                "name",
+                "type",
+                "layer",
+                "enabled",
+                "description",
+                "duration_seconds",
+                "recovery_seconds",
+                "metadata",
+                "trigger",
+                "target",
+            ]:
                 setattr(base_config, key, value)
 
         return base_config
 
-    def save_scenario_to_yaml(self, scenario: FaultScenarioConfig, path: Union[str, Path]) -> None:
+    def save_scenario_to_yaml(self, scenario: FaultScenarioConfig, path: str | Path) -> None:
         """Save scenario configuration to YAML file."""
         path = Path(path)
 
@@ -220,20 +244,16 @@ class ScenarioConfigLoader:
                 "stop_on_failure": scenario.stop_on_failure,
                 "faults": [self.fault_to_dict(fault) for fault in scenario.faults],
                 "dependencies": [
-                    {
-                        "fault_name": dep.fault_name,
-                        "condition": dep.condition,
-                        "delay_seconds": dep.delay_seconds
-                    }
+                    {"fault_name": dep.fault_name, "condition": dep.condition, "delay_seconds": dep.delay_seconds}
                     for dep in scenario.dependencies
-                ]
+                ],
             }
         }
 
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
-    def fault_to_dict(self, fault: FaultConfig) -> Dict[str, Any]:
+    def fault_to_dict(self, fault: FaultConfig) -> dict[str, Any]:
         """Convert fault config to dictionary."""
         data = {
             "name": fault.name,
@@ -252,10 +272,8 @@ class ScenarioConfigLoader:
             data["recovery_seconds"] = fault.recovery_seconds
 
         # Add trigger
-        if hasattr(fault, 'trigger') and fault.trigger:
-            data["trigger"] = {
-                "type": fault.trigger.type.value
-            }
+        if hasattr(fault, "trigger") and fault.trigger:
+            data["trigger"] = {"type": fault.trigger.type.value}
             if fault.trigger.delay_seconds:
                 data["trigger"]["delay_seconds"] = fault.trigger.delay_seconds
             if fault.trigger.count_threshold:
@@ -266,10 +284,8 @@ class ScenarioConfigLoader:
                 data["trigger"]["condition"] = fault.trigger.condition
 
         # Add target
-        if hasattr(fault, 'target') and fault.target:
-            data["target"] = {
-                "mode": fault.target.mode.value
-            }
+        if hasattr(fault, "target") and fault.target:
+            data["target"] = {"mode": fault.target.mode.value}
             if fault.target.ranks:
                 data["target"]["ranks"] = fault.target.ranks
             if fault.target.hosts:
@@ -281,15 +297,26 @@ class ScenarioConfigLoader:
 
         # Add fault-specific fields
         for key, value in fault.__dict__.items():
-            if key not in ["name", "layer", "type", "enabled", "description",
-                          "duration_seconds", "recovery_seconds", "metadata",
-                          "trigger", "target", "_target", "_trigger"]:
-                if value is not None and not key.startswith('_'):
+            if key not in [
+                "name",
+                "layer",
+                "type",
+                "enabled",
+                "description",
+                "duration_seconds",
+                "recovery_seconds",
+                "metadata",
+                "trigger",
+                "target",
+                "_target",
+                "_trigger",
+            ]:
+                if value is not None and not key.startswith("_"):
                     data[key] = value
 
         return data
 
-    def create_template_library(self) -> Dict[str, FaultScenarioTemplate]:
+    def create_template_library(self) -> dict[str, FaultScenarioTemplate]:
         """Create a library of common fault scenario templates."""
 
         templates = {}
@@ -305,7 +332,7 @@ class ScenarioConfigLoader:
                     "type": "memory_oom",
                     "layer": "orchestration",
                     "memory_mb": 4096,
-                    "target": {"mode": "random", "count": 2}
+                    "target": {"mode": "random", "count": 2},
                 },
                 {
                     "name": "network_partition",
@@ -313,7 +340,7 @@ class ScenarioConfigLoader:
                     "layer": "orchestration",
                     "partition_type": "partial",
                     "partition_duration": 30.0,
-                    "target": {"mode": "rank", "ranks": [0, 1]}
+                    "target": {"mode": "rank", "ranks": [0, 1]},
                 },
                 {
                     "name": "worker_crash",
@@ -321,26 +348,14 @@ class ScenarioConfigLoader:
                     "layer": "worker",
                     "worker_type": "actor",
                     "crash_method": "exception",
-                    "target": {"mode": "random", "count": 1}
-                }
+                    "target": {"mode": "random", "count": 1},
+                },
             ],
             dependencies=[
-                {
-                    "fault_name": "network_partition",
-                    "condition": "on_failure",
-                    "delay_seconds": 5.0
-                },
-                {
-                    "fault_name": "worker_crash",
-                    "condition": "after",
-                    "delay_seconds": 10.0
-                }
+                {"fault_name": "network_partition", "condition": "on_failure", "delay_seconds": 5.0},
+                {"fault_name": "worker_crash", "condition": "after", "delay_seconds": 10.0},
             ],
-            cascade_config={
-                "mode": "tree",
-                "interval": 5.0,
-                "max_depth": 3
-            }
+            cascade_config={"mode": "tree", "interval": 5.0, "max_depth": 3},
         )
 
         # Training disruption template
@@ -354,7 +369,7 @@ class ScenarioConfigLoader:
                     "type": "gradient_nan",
                     "layer": "worker",
                     "gradient_nan_probability": 1.0,
-                    "target": {"mode": "all"}
+                    "target": {"mode": "all"},
                 },
                 {
                     "name": "checkpoint_corruption",
@@ -362,7 +377,7 @@ class ScenarioConfigLoader:
                     "layer": "engine",
                     "corruption_type": "random_bytes",
                     "checkpoint_path": "/tmp/checkpoint.pt",
-                    "target": {"mode": "random", "count": 1}
+                    "target": {"mode": "random", "count": 1},
                 },
                 {
                     "name": "nccl_timeout",
@@ -370,20 +385,11 @@ class ScenarioConfigLoader:
                     "layer": "engine",
                     "nccl_error_type": "timeout",
                     "nccl_timeout_ms": 30000,
-                    "target": {"mode": "random", "count": 2}
-                }
+                    "target": {"mode": "random", "count": 2},
+                },
             ],
-            dependencies=[
-                {
-                    "fault_name": "checkpoint_corruption",
-                    "condition": "on_success",
-                    "delay_seconds": 60.0
-                }
-            ],
-            cascade_config={
-                "mode": "linear",
-                "interval": 30.0
-            }
+            dependencies=[{"fault_name": "checkpoint_corruption", "condition": "on_success", "delay_seconds": 60.0}],
+            cascade_config={"mode": "linear", "interval": 30.0},
         )
 
         # Inference degradation template
@@ -398,28 +404,25 @@ class ScenarioConfigLoader:
                     "layer": "inference",
                     "backend": "vllm",
                     "kv_cache_size_mb": 2048,
-                    "target": {"mode": "random", "count": 1}
+                    "target": {"mode": "random", "count": 1},
                 },
                 {
                     "name": "scheduler_deadlock",
                     "type": "scheduler_deadlock",
                     "layer": "inference",
                     "deadlock_type": "request_queue",
-                    "target": {"mode": "all"}
+                    "target": {"mode": "all"},
                 },
                 {
                     "name": "compilation_failure",
                     "type": "compilation_failure",
                     "layer": "inference",
                     "compilation_stage": "graph_capture",
-                    "target": {"mode": "random", "count": 1}
-                }
+                    "target": {"mode": "random", "count": 1},
+                },
             ],
             dependencies=[],
-            cascade_config={
-                "mode": "burst",
-                "interval": 0.0
-            }
+            cascade_config={"mode": "burst", "interval": 0.0},
         )
 
         return templates

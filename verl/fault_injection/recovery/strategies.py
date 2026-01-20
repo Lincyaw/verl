@@ -1,13 +1,26 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Recovery strategies for different fault types."""
 
 import logging
 import os
-import signal
 import subprocess
 import time
-from typing import Any, Dict, List, Optional
 
-from ..base import BaseRecoveryStrategy, RecoveryContext, RecoveryPriority, RecoveryResult, RecoveryStatus
+from .base import BaseRecoveryStrategy, RecoveryContext, RecoveryPriority, RecoveryResult, RecoveryStatus
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +271,7 @@ class ResourceRecoveryStrategy(BaseRecoveryStrategy):
             metadata={"actions": actions},
         )
 
-    def _recover_memory(self) -> List[str]:
+    def _recover_memory(self) -> list[str]:
         """Recover from memory exhaustion."""
         actions = []
 
@@ -274,6 +287,7 @@ class ResourceRecoveryStrategy(BaseRecoveryStrategy):
 
         # Run garbage collection
         import gc
+
         gc.collect()
         actions.append("ran_garbage_collection")
 
@@ -283,7 +297,7 @@ class ResourceRecoveryStrategy(BaseRecoveryStrategy):
 
         return actions
 
-    def _recover_disk(self) -> List[str]:
+    def _recover_disk(self) -> list[str]:
         """Recover from disk exhaustion."""
         actions = []
 
@@ -302,7 +316,7 @@ class ResourceRecoveryStrategy(BaseRecoveryStrategy):
 
         return actions
 
-    def _recover_fds(self) -> List[str]:
+    def _recover_fds(self) -> list[str]:
         """Recover from file descriptor exhaustion."""
         actions = []
 

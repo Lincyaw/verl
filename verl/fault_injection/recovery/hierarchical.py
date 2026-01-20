@@ -1,11 +1,26 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Hierarchical recovery management system."""
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ..base import FaultContext, FaultResult, FaultStatus
-from ..config import FaultLayer, FaultType
+from ..config import FaultLayer
 from .base import (
     BaseRecoveryStrategy,
     RecoveryContext,
@@ -34,8 +49,8 @@ class HierarchicalRecoveryManager:
         self.max_attempts = max_attempts
         self.recovery_timeout = recovery_timeout
         self.enable_preventive_recovery = enable_preventive_recovery
-        self._active_recoveries: Dict[str, RecoveryContext] = {}
-        self._recovery_history: List[RecoveryResult] = []
+        self._active_recoveries: dict[str, RecoveryContext] = {}
+        self._recovery_history: list[RecoveryResult] = []
 
     def handle_fault(
         self,
@@ -206,11 +221,11 @@ class HierarchicalRecoveryManager:
         # 2. Configure early warning thresholds
         # 3. Register preventive recovery handlers
 
-    def get_recovery_history(self, limit: int = 100) -> List[RecoveryResult]:
+    def get_recovery_history(self, limit: int = 100) -> list[RecoveryResult]:
         """Get recent recovery history."""
         return self._recovery_history[-limit:]
 
-    def get_recovery_statistics(self) -> Dict[str, Any]:
+    def get_recovery_statistics(self) -> dict[str, Any]:
         """Get recovery statistics."""
         if not self._recovery_history:
             return {}
@@ -224,10 +239,7 @@ class HierarchicalRecoveryManager:
             "successful_recoveries": successful,
             "failed_recoveries": failed,
             "success_rate": successful / total if total > 0 else 0.0,
-            "average_recovery_time": sum(
-                r.duration for r in self._recovery_history if r.duration
-            )
-            / total
+            "average_recovery_time": sum(r.duration for r in self._recovery_history if r.duration) / total
             if total > 0
             else 0.0,
         }
@@ -236,13 +248,11 @@ class HierarchicalRecoveryManager:
 class IntelligentRecoveryDecisionEngine(RecoveryDecisionEngine):
     """Intelligent decision engine that considers fault context and history."""
 
-    def __init__(self, strategies: List[BaseRecoveryStrategy], recovery_history: List[RecoveryResult] = None):
+    def __init__(self, strategies: list[BaseRecoveryStrategy], recovery_history: list[RecoveryResult] = None):
         super().__init__(strategies)
         self.recovery_history = recovery_history or []
 
-    def decide_recovery(
-        self, context: RecoveryContext, available_strategies: List[str] = None
-    ) -> RecoveryDecision:
+    def decide_recovery(self, context: RecoveryContext, available_strategies: list[str] = None) -> RecoveryDecision:
         """Make intelligent recovery decision based on context and history."""
         # Evaluate all strategies
         decisions = self.evaluate_strategies(context)
@@ -270,7 +280,7 @@ class IntelligentRecoveryDecisionEngine(RecoveryDecisionEngine):
 
         return best_decision
 
-    def _select_best_strategy(self, decisions: List[RecoveryDecision], context: RecoveryContext) -> RecoveryDecision:
+    def _select_best_strategy(self, decisions: list[RecoveryDecision], context: RecoveryContext) -> RecoveryDecision:
         """Select the best strategy based on multiple factors."""
         # Score each decision
         scored_decisions = []

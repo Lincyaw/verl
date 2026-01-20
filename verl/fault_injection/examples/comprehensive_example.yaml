@@ -1,0 +1,746 @@
+# Comprehensive Example Configuration for verl Fault Injection System
+# This file demonstrates all available fault types and configurations
+
+# Global configuration
+fault_injection:
+  enabled: true
+  monitoring_enabled: true
+  recovery_enabled: true
+  metrics_port: 8080
+  log_level: "INFO"
+  max_concurrent_faults: 10
+  default_timeout: 30.0
+
+  # Monitoring configuration
+  monitoring:
+    collection_interval: 10  # seconds
+    export_metrics: true
+    dashboard_enabled: true
+
+    # Alert rules
+    alerts:
+      - name: "high_fault_rate"
+        condition:
+          type: "threshold"
+          metric: "fault_injection_rate"
+          threshold: 5  # faults per minute
+          window: 60  # seconds
+        actions: ["console", "webhook"]
+        webhook_url: "https://alerts.example.com/webhook"
+        cooldown: 300  # seconds
+
+      - name: "system_health_degraded"
+        condition:
+          type: "threshold"
+          metric: "system_health_score"
+          threshold: 0.7
+          comparison: "<"
+        actions: ["console", "email"]
+        email_recipients: ["ops@example.com"]
+        cooldown: 600
+
+      - name: "recovery_failure_rate_high"
+        condition:
+          type: "threshold"
+          metric: "recovery_failure_rate"
+          threshold: 0.3
+          comparison: ">"
+        actions: ["console"]
+        cooldown: 900
+
+  # Recovery configuration
+  recovery:
+    enabled: true
+    mode: "AUTOMATIC"  # AUTOMATIC, MANUAL, SEMI_AUTOMATIC
+    strategies: ["retry", "restart", "checkpoint", "degradation"]
+    max_attempts: 3
+    timeout: 300.0
+    backoff_factor: 2.0
+
+    # Layer-specific recovery settings
+    layer_recovery:
+      UI:
+        primary_strategy: "retry"
+        max_retries: 2
+      ORCHESTRATION:
+        primary_strategy: "ray"
+        fallback_strategies: ["restart", "redeploy"]
+      WORKER:
+        primary_strategy: "restart"
+        checkpoint_before_recovery: true
+      ENGINE:
+        primary_strategy: "checkpoint"
+        fallback_strategies: ["restart"]
+      INFERENCE:
+        primary_strategy: "degradation"
+        degradation_levels: ["partial", "minimal"]
+
+  # Fault definitions
+  faults:
+    # UI Layer Faults
+    - name: "hydra_config_validation_error"
+      layer: "UI"
+      type: "HYDRA_CONFIG_ERROR"
+      enabled: false
+      hydra_error_type: "validate"  # validate, merge, compose
+      description: "Hydra configuration validation error"
+      tags: ["config", "validation", "tutorial"]
+
+    - name: "hydra_config_merge_error"
+      layer: "UI"
+      type: "HYDRA_CONFIG_ERROR"
+      enabled: false
+      hydra_error_type: "merge"
+      conflicting_keys: ["model.hidden_size", "model.num_layers"]
+      description: "Hydra configuration merge conflict"
+
+    - name: "ray_init_timeout"
+      layer: "UI"
+      type: "RAY_INIT_FAILURE"
+      enabled: false
+      ray_init_error_type: "timeout"
+      ray_init_timeout: 60.0
+      description: "Ray cluster initialization timeout"
+
+    - name: "ray_init_connection_refused"
+      layer: "UI"
+      type: "RAY_INIT_FAILURE"
+      enabled: false
+      ray_init_error_type: "connection_refused"
+      head_node_port: 6379
+      description: "Ray head node connection refused"
+
+    - name: "missing_required_cli_arg"
+      layer: "UI"
+      type: "CLI_ARG_ERROR"
+      enabled: false
+      cli_arg_error_type: "missing_required"
+      missing_arg: "--model-path"
+      description: "Missing required CLI argument"
+
+    - name: "invalid_cli_arg_value"
+      layer: "UI"
+      type: "CLI_ARG_ERROR"
+      enabled: false
+      cli_arg_error_type: "invalid_value"
+      invalid_arg: "--batch-size"
+      invalid_value: "0"
+      expected_type: "positive_integer"
+      description: "Invalid CLI argument value"
+
+    - name: "missing_env_var"
+      layer: "UI"
+      type: "ENV_VAR_ERROR"
+      enabled: false
+      env_var_error_type: "not_set"
+      env_var_name: "CUDA_VISIBLE_DEVICES"
+      description: "Required environment variable not set"
+
+    - name: "invalid_env_var_value"
+      layer: "UI"
+      type: "ENV_VAR_ERROR"
+      enabled: false
+      env_var_error_type: "invalid_value"
+      env_var_name: "WORLD_SIZE"
+      env_var_value: "abc"
+      expected_pattern: "^[0-9]+$"
+      description: "Invalid environment variable value"
+
+    - name: "ui_freeze_during_load"
+      layer: "UI"
+      type: "UI_FREEZE"
+      enabled: false
+      freeze_duration: 30.0
+      freeze_stage: "config_loading"
+      description: "UI freeze during configuration loading"
+
+    - name: "ui_crash_on_exception"
+      layer: "UI"
+      type: "UI_CRASH"
+      enabled: false
+      crash_type: "exception"
+      exception_type: "RuntimeError"
+      crash_message: "Unexpected error in UI"
+      description: "UI crash due to unhandled exception"
+
+    # Orchestration Layer Faults
+    - name: "ray_cluster_gcs_failure"
+      layer: "ORCHESTRATION"
+      type: "RAY_CLUSTER_FAILURE"
+      enabled: false
+      cluster_failure_type: "gcs_failure"
+      duration: 30.0
+      affected_nodes: ["head"]  # head, worker, all
+      description: "Ray GCS failure"
+
+    - name: "ray_cluster_node_failure"
+      layer: "ORCHESTRATION"
+      type: "RAY_CLUSTER_FAILURE"
+      enabled: false
+      cluster_failure_type: "node_failure"
+      node_failure_type: "worker_crash"
+      affected_node_ids: [1, 2, 3]
+      description: "Ray worker node failure"
+
+    - name: "actor_crash_exception"
+      layer: "ORCHESTRATION"
+      type: "ACTOR_CRASH"
+      enabled: false
+      actor_crash_type: "exception"
+      actor_name_pattern: "RolloutWorker*"
+      exception_type: "RuntimeError"
+      description: "Ray actor crash due to exception"
+
+    - name: "actor_crash_oom"
+      layer: "ORCHESTRATION"
+      type: "ACTOR_CRASH"
+      enabled: false
+      actor_crash_type: "oom"
+      actor_name_pattern: "ActorWorker*"
+      memory_threshold_gb: 16
+      description: "Ray actor crash due to OOM"
+
+    - name: "memory_exhaustion"
+      layer: "ORCHESTRATION"
+      type: "RESOURCE_EXHAUSTION"
+      enabled: false
+      resource_type: "memory"
+      exhaustion_percentage: 0.95
+      duration: 60.0
+      gradual: true
+      description: "System memory exhaustion"
+
+    - name: "cpu_exhaustion"
+      layer: "ORCHESTRATION"
+      type: "RESOURCE_EXHAUSTION"
+      enabled: false
+      resource_type: "cpu"
+      exhaustion_percentage: 0.90
+      duration: 120.0
+      target_cpus: [0, 1, 2, 3]  # Specific CPUs
+      description: "CPU exhaustion"
+
+    - name: "task_scheduling_failure"
+      layer: "ORCHESTRATION"
+      type: "TASK_SCHEDULING_FAILURE"
+      enabled: false
+      task_name_pattern: "train_*"
+      failure_type: "exception"
+      exception_message: "Task scheduling failed"
+      description: "Task scheduling failure"
+
+    - name: "resource_pool_deadlock"
+      layer: "ORCHESTRATION"
+      type: "RESOURCE_POOL_FAULT"
+      enabled: false
+      pool_fault_type: "deadlock"
+      resource_type: "GPU"
+      deadlock_duration: 30.0
+      description: "Resource pool deadlock"
+
+    - name: "gcs_disconnection"
+      layer: "ORCHESTRATION"
+      type: "GCS_FAILURE"
+      enabled: false
+      gcs_failure_type: "disconnection"
+      disconnection_duration: 45.0
+      description: "GCS disconnection"
+
+    - name: "network_partition_partial"
+      layer: "ORCHESTRATION"
+      type: "NETWORK_PARTITION"
+      enabled: false
+      partition_type: "partial"
+      isolated_ranks: [1, 3, 5]
+      partition_duration: 60.0
+      description: "Partial network partition"
+
+    - name: "placement_group_creation_failure"
+      layer: "ORCHESTRATION"
+      type: "PLACEMENT_GROUP_FAULT"
+      enabled: false
+      pg_fault_type: "creation_failure"
+      placement_group_name: "training_pg"
+      bundles: [{"CPU": 4, "GPU": 1}]
+      description: "Placement group creation failure"
+
+    # Worker Layer Faults
+    - name: "fsdp_all_reduce_failure"
+      layer: "WORKER"
+      type: "FSDP_SYNC_FAILURE"
+      enabled: false
+      sync_operation: "all_reduce"
+      world_size: 8
+      rank: 0
+      failure_type: "timeout"
+      timeout_seconds: 30.0
+      description: "FSDP all_reduce synchronization failure"
+
+    - name: "fsdp_broadcast_failure"
+      layer: "WORKER"
+      type: "FSDP_SYNC_FAILURE"
+      enabled: false
+      sync_operation: "broadcast"
+      world_size: 4
+      root_rank: 0
+      failure_type: "nan_value"
+      description: "FSDP broadcast with NaN value"
+
+    - name: "fsdp_parameter_corruption"
+      layer: "WORKER"
+      type: "FSDP_SHARDING_ERROR"
+      enabled: false
+      sharding_error_type: "parameter_corruption"
+      corruption_percentage: 0.1
+      layers_affected: ["model.layers.0", "model.layers.1"]
+      description: "FSDP parameter corruption"
+
+    - name: "megatron_all_reduce_overflow"
+      layer: "WORKER"
+      type: "MEGATRON_SYNC_FAILURE"
+      enabled: false
+      sync_type: "all_reduce"
+      overflow_type: "grad_overflow"
+      model_parallel_size: 2
+      description: "Megatron all_reduce gradient overflow"
+
+    - name: "megatron_pipeline_bubble"
+      layer: "WORKER"
+      type: "MEGATRON_PIPELINE_ERROR"
+      enabled: false
+      pipeline_error_type: "bubble"
+      num_microbatches: 4
+      pipeline_parallel_size: 2
+      virtual_pipeline_size: 2
+      description: "Megatron pipeline bubble issue"
+
+    - name: "gradient_sync_timeout"
+      layer: "WORKER"
+      type: "GRADIENT_SYNC_TIMEOUT"
+      enabled: false
+      timeout_seconds: 60.0
+      sync_type: "all_reduce"
+      world_size: 8
+      description: "Gradient synchronization timeout"
+
+    - name: "cuda_oom_large_batch"
+      layer: "WORKER"
+      type: "CUDA_OOM"
+      enabled: false
+      oom_size_mb: 4096
+      allocation_type: "tensor"
+      tensor_shape: [1024, 1024, 1024]
+      dtype: "float32"
+      description: "CUDA OOM for large tensor allocation"
+
+    - name: "cuda_memory_fragmentation"
+      layer: "WORKER"
+      type: "CUDA_MEMORY_FRAGMENTATION"
+      enabled: false
+      fragmentation_percentage: 0.8
+      allocation_pattern: "alternating"
+      block_size_mb: 64
+      duration: 30.0
+      description: "CUDA memory fragmentation"
+
+    - name: "worker_crash_sigsegv"
+      layer: "WORKER"
+      type: "WORKER_CRASH"
+      enabled: false
+      crash_type: "signal"
+      signal: "SIGSEGV"
+      crash_stage: "forward"
+      description: "Worker crash due to segmentation fault"
+
+    - name: "worker_hang_infinite_loop"
+      layer: "WORKER"
+      type: "WORKER_HANG"
+      enabled: false
+      hang_type: "infinite_loop"
+      hang_duration: 60.0
+      hang_stage: "training_step"
+      description: "Worker hang in infinite loop"
+
+    # Engine Layer Faults
+    - name: "fsdp_engine_init_failure"
+      layer: "ENGINE"
+      type: "ENGINE_INIT_FAILURE"
+      enabled: false
+      engine_type: "fsdp"
+      init_stage: "model_load"
+      failure_type: "timeout"
+      timeout_seconds: 120.0
+      description: "FSDP engine initialization failure"
+
+    - name: "megatron_engine_init_failure"
+      layer: "ENGINE"
+      type: "ENGINE_INIT_FAILURE"
+      enabled: false
+      engine_type: "megatron"
+      init_stage: "topology_setup"
+      failure_type: "invalid_config"
+      config_error: "tensor_model_parallel_size > num_gpus"
+      description: "Megatron engine initialization failure"
+
+    - name: "engine_hang_forward_pass"
+      layer: "ENGINE"
+      type: "ENGINE_HANG"
+      enabled: false
+      hang_stage: "forward"
+      hang_duration: 45.0
+      engine_type: "fsdp"
+      description: "Engine hang during forward pass"
+
+    - name: "checkpoint_corruption_random"
+      layer: "ENGINE"
+      type: "CHECKPOINT_CORRUPTION"
+      enabled: false
+      corruption_type: "random_bytes"
+      checkpoint_path: "/tmp/model_checkpoint.pt"
+      corruption_percentage: 0.1
+      description: "Checkpoint corruption with random bytes"
+
+    - name: "checkpoint_corruption_truncated"
+      layer: "ENGINE"
+      type: "CHECKPOINT_CORRUPTION"
+      enabled: false
+      corruption_type: "truncated"
+      checkpoint_path: "/tmp/model_checkpoint.pt"
+      truncation_percentage: 0.5
+      description: "Truncated checkpoint file"
+
+    - name: "nccl_all_reduce_timeout"
+      layer: "ENGINE"
+      type: "NCCL_FAILURE"
+      enabled: false
+      nccl_failure_type: "timeout"
+      operation: "all_reduce"
+      timeout_seconds: 30.0
+      world_size: 8
+      description: "NCCL all_reduce timeout"
+
+    - name: "nccl_broadcast_abort"
+      layer: "ENGINE"
+      type: "NCCL_FAILURE"
+      enabled: false
+      nccl_failure_type: "abort"
+      operation: "broadcast"
+      abort_reason: "internal_error"
+      description: "NCCL broadcast abort"
+
+    - name: "device_mesh_invalid_shape"
+      layer: "ENGINE"
+      type: "DEVICE_MESH_ERROR"
+      enabled: false
+      mesh_error_type: "invalid_shape"
+      mesh_shape: [3, 3]  # Invalid for 8 GPUs
+      available_devices: 8
+      description: "Invalid device mesh shape"
+
+    - name: "device_mesh_device_mismatch"
+      layer: "ENGINE"
+      type: "DEVICE_MESH_ERROR"
+      enabled: false
+      mesh_error_type: "device_mismatch"
+      requested_device: "cuda:8"  # Doesn't exist
+      available_devices: ["cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+      description: "Device mesh device mismatch"
+
+    - name: "precision_overflow_fp16"
+      layer: "ENGINE"
+      type: "PRECISION_ERROR"
+      enabled: false
+      precision_error_type: "overflow"
+      from_precision: "fp32"
+      to_precision: "fp16"
+      overflow_value: 1e10
+      description: "FP16 precision overflow"
+
+    - name: "device_map_missing_device"
+      layer: "ENGINE"
+      type: "DEVICE_MAP_ERROR"
+      enabled: false
+      device_map_error_type: "missing_device"
+      device_name: "cuda:4"
+      available_devices: ["cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+      description: "Device map missing device"
+
+    # Inference Layer Faults
+    - name: "vllm_kv_cache_oom"
+      layer: "INFERENCE"
+      type: "INFERENCE_OOM"
+      enabled: false
+      backend: "vllm"
+      oom_type: "kv_cache"
+      requested_memory_mb: 8192
+      max_cache_size_mb: 4096
+      description: "vLLM KV cache OOM"
+
+    - name: "sglang_radix_attention_error"
+      layer: "INFERENCE"
+      type: "INFERENCE_OOM"
+      enabled: false
+      backend: "sglang"
+      oom_type: "radix_attention"
+      tree_size_limit: 10000
+      description: "SGLang RadixAttention cache error"
+
+    - name: "scheduler_request_queue_deadlock"
+      layer: "INFERENCE"
+      type: "SCHEDULER_DEADLOCK"
+      enabled: false
+      deadlock_type: "request_queue"
+      max_queue_size: 1000
+      current_queue_size: 1001
+      description: "Scheduler request queue deadlock"
+
+    - name: "scheduler_kv_cache_deadlock"
+      layer: "INFERENCE"
+      type: "SCHEDULER_DEADLOCK"
+      enabled: false
+      deadlock_type: "kv_cache"
+      cache_blocks_allocated: 1000
+      cache_blocks_total: 1000
+      pending_requests: 10
+      description: "Scheduler KV cache deadlock"
+
+    - name: "cuda_graph_compilation_failure"
+      layer: "INFERENCE"
+      type: "COMPILATION_FAILURE"
+      enabled: false
+      compilation_failure_type: "cuda_graph"
+      graph_size: 1000
+      error_message: "CUDA graph too large"
+      description: "CUDA graph compilation failure"
+
+    - name: "memory_planning_failure"
+      layer: "INFERENCE"
+      type: "COMPILATION_FAILURE"
+      enabled: false
+      compilation_failure_type: "memory_planning"
+      requested_memory_mb: 16384
+      available_memory_mb: 8192
+      description: "Memory planning failure"
+
+    # Process Layer Faults
+    - name: "process_crash_sigkill"
+      layer: "PROCESS"
+      type: "PROCESS_CRASH"
+      enabled: false
+      crash_type: "signal"
+      signal: "SIGKILL"
+      process_pattern: "python.*train"
+      description: "Process crash due to SIGKILL"
+
+    - name: "process_hang_io_wait"
+      layer: "PROCESS"
+      type: "PROCESS_HANG"
+      enabled: false
+      hang_type: "io_wait"
+      hang_duration: 60.0
+      blocked_on: "/dev/sda1"
+      description: "Process hang waiting for I/O"
+
+    - name: "memory_leak_gradual"
+      layer: "PROCESS"
+      type: "MEMORY_LEAK"
+      enabled: false
+      leak_type: "gradual"
+      leak_rate_mb_per_min: 100
+      duration: 30.0
+      description: "Gradual memory leak"
+
+    - name: "memory_leak_sudden"
+      layer: "PROCESS"
+      type: "MEMORY_LEAK"
+      enabled: false
+      leak_type: "sudden"
+      leak_size_mb: 2048
+      description: "Sudden memory leak"
+
+    - name: "fd_exhaustion"
+      layer: "PROCESS"
+      type: "FILE_DESCRIPTOR_EXHAUSTION"
+      enabled: false
+      exhaustion_type: "gradual"
+      fd_limit: 1024
+      leak_rate_per_minute: 50
+      duration: 20.0
+      description: "File descriptor exhaustion"
+
+    # Network Layer Faults
+    - name: "network_latency_high"
+      layer: "NETWORK"
+      type: "NETWORK_LATENCY"
+      enabled: false
+      latency_ms: 500
+      jitter_ms: 100
+      target_host: "worker-node-1"
+      packet_loss_rate: 0.01
+      description: "High network latency"
+
+    - name: "network_packet_loss_burst"
+      layer: "NETWORK"
+      type: "NETWORK_PACKET_LOSS"
+      enabled: false
+      loss_type: "burst"
+      loss_rate: 0.1
+      burst_duration: 5.0
+      target_host: "worker-node-2"
+      description: "Burst packet loss"
+
+    - name: "bandwidth_throttle"
+      layer: "NETWORK"
+      type: "NETWORK_BANDWIDTH_THROTTLE"
+      enabled: false
+      throttle_rate_mbps: 10
+      normal_rate_mbps: 1000
+      throttle_duration: 60.0
+      target_host: "storage-node-1"
+      description: "Network bandwidth throttling"
+
+    - name: "network_partition_complete"
+      layer: "NETWORK"
+      type: "NETWORK_PARTITION"
+      enabled: false
+      partition_type: "complete"
+      isolated_ranks: [2, 3, 4, 5]
+      partition_duration: 30.0
+      description: "Complete network partition"
+
+    - name: "dns_resolution_failure"
+      layer: "NETWORK"
+      type: "DNS_RESOLUTION_FAILURE"
+      enabled: false
+      hostname: "worker-node-3.example.com"
+      dns_server: "8.8.8.8"
+      failure_type: "timeout"
+      timeout_seconds: 5.0
+      description: "DNS resolution failure"
+
+    - name: "connection_refused"
+      layer: "NETWORK"
+      type: "CONNECTION_REFUSED"
+      enabled: false
+      target_host: "localhost"
+      target_port: 8080
+      connection_type: "tcp"
+      description: "Connection refused"
+
+    - name: "connection_timeout"
+      layer: "NETWORK"
+      type: "CONNECTION_TIMEOUT"
+      enabled: false
+      target_host: "10.0.0.100"
+      target_port: 9999
+      timeout_seconds: 10.0
+      connection_type: "tcp"
+      description: "Connection timeout"
+
+    - name: "connection_reset"
+      layer: "NETWORK"
+      type: "CONNECTION_RESET"
+      enabled: false
+      target_host: "worker-node-4"
+      target_port: 7777
+      reset_after_bytes: 1024
+      description: "Connection reset"
+
+  # Scenario definitions
+  scenarios:
+    - name: "training_disruption_basic"
+      description: "Basic training disruption scenario"
+      cascade_mode: "linear"
+      faults:
+        - "hydra_config_validation_error"
+        - "ray_cluster_gcs_failure"
+        - "fsdp_all_reduce_failure"
+
+    - name: "system_cascade_failure"
+      description: "Complete system cascade failure"
+      cascade_mode: "tree"
+      root_fault: "memory_exhaustion"
+      cascade_depth: 3
+
+    - name: "network_chaos"
+      description: "Network chaos scenario"
+      cascade_mode: "burst"
+      burst_size: 5
+      burst_interval: 10.0
+      faults:
+        - "network_latency_high"
+        - "network_packet_loss_burst"
+        - "network_partition_complete"
+        - "connection_timeout"
+        - "dns_resolution_failure"
+
+    - name: "inference_degradation"
+      description: "Inference service degradation"
+      cascade_mode: "linear"
+      faults:
+        - "vllm_kv_cache_oom"
+        - "scheduler_request_queue_deadlock"
+        - "cuda_graph_compilation_failure"
+
+  # Trigger configurations
+  triggers:
+    - name: "immediate_trigger"
+      type: "immediate"
+      fault_name: "hydra_config_validation_error"
+
+    - name: "delayed_trigger"
+      type: "timed"
+      fault_name: "ray_cluster_gcs_failure"
+      delay: 300  # 5 minutes
+      recurring: true
+      interval: 1800  # 30 minutes
+
+    - name: "count_trigger"
+      type: "count"
+      fault_name: "fsdp_all_reduce_failure"
+      count: 100
+      reset_on_injection: true
+
+    - name: "metric_trigger"
+      type: "metric_threshold"
+      fault_name: "memory_exhaustion"
+      metric: "gpu_memory_usage"
+      threshold: 0.95
+      comparison: ">"
+      duration: 60  # seconds
+
+    - name: "conditional_trigger"
+      type: "conditional"
+      fault_name: "worker_crash_sigsegv"
+      condition: "training_loss > 10.0"
+      evaluation_interval: 30  # seconds
+
+  # Performance settings
+  performance:
+    mode: "BALANCED"  # DISABLED, MINIMAL, BALANCED, AGGRESSIVE
+    enable_caching: true
+    cache_size: 1000
+    cache_ttl: 300  # seconds
+    enable_async_injection: true
+    max_async_workers: 4
+    batch_injection_size: 10
+
+    # Optimization flags
+    optimizations:
+      skip_validation: false
+      lazy_loading: true
+      compressed_metrics: true
+      parallel_recovery: true
+
+    # Resource limits
+    limits:
+      max_memory_usage_mb: 1024
+      max_cpu_usage_percent: 50
+      max_injection_rate_per_second: 10
+
+    # Debug settings
+    debug:
+      enable_tracing: false
+      save_injection_history: true
+      verbose_logging: false
+      profile_performance: false

@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Base classes and interfaces for fault injection."""
 
 import logging
@@ -6,7 +21,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Optional
 
 from .config import (
     BaseFaultConfig,
@@ -14,7 +29,6 @@ from .config import (
     FaultLayer,
     FaultTarget,
     FaultTargetConfig,
-    FaultTrigger,
     FaultTriggerConfig,
     FaultType,
 )
@@ -41,7 +55,7 @@ class FaultContext:
     host: Optional[str] = None
     process_type: Optional[str] = None
     layer: Optional[FaultLayer] = None
-    metadata: Dict[str, Any] = None
+    metadata: dict[str, Any] = None
 
     def __post_init__(self):
         if self.metadata is None:
@@ -57,7 +71,7 @@ class FaultResult:
     start_time: float
     end_time: Optional[float] = None
     error: Optional[Exception] = None
-    metadata: Dict[str, Any] = None
+    metadata: dict[str, Any] = None
 
     @property
     def duration(self) -> Optional[float]:
@@ -74,7 +88,7 @@ class FaultTargetSelector(ABC):
         self.config = config
 
     @abstractmethod
-    def select_targets(self, available_targets: List[FaultContext]) -> List[FaultContext]:
+    def select_targets(self, available_targets: list[FaultContext]) -> list[FaultContext]:
         """Select targets for fault injection."""
         pass
 
@@ -82,14 +96,14 @@ class FaultTargetSelector(ABC):
 class AllTargetSelector(FaultTargetSelector):
     """Select all available targets."""
 
-    def select_targets(self, available_targets: List[FaultContext]) -> List[FaultContext]:
+    def select_targets(self, available_targets: list[FaultContext]) -> list[FaultContext]:
         return available_targets
 
 
 class RandomTargetSelector(FaultTargetSelector):
     """Randomly select targets."""
 
-    def select_targets(self, available_targets: List[FaultContext]) -> List[FaultContext]:
+    def select_targets(self, available_targets: list[FaultContext]) -> list[FaultContext]:
         import random
 
         count = min(self.config.count, len(available_targets))
@@ -99,7 +113,7 @@ class RandomTargetSelector(FaultTargetSelector):
 class RankTargetSelector(FaultTargetSelector):
     """Select targets by rank."""
 
-    def select_targets(self, available_targets: List[FaultContext]) -> List[FaultContext]:
+    def select_targets(self, available_targets: list[FaultContext]) -> list[FaultContext]:
         targets = []
         for target in available_targets:
             if target.rank in (self.config.ranks or []):
@@ -110,7 +124,7 @@ class RankTargetSelector(FaultTargetSelector):
 class HostTargetSelector(FaultTargetSelector):
     """Select targets by host."""
 
-    def select_targets(self, available_targets: List[FaultContext]) -> List[FaultContext]:
+    def select_targets(self, available_targets: list[FaultContext]) -> list[FaultContext]:
         targets = []
         for target in available_targets:
             if target.host in (self.config.hosts or []):
@@ -121,7 +135,7 @@ class HostTargetSelector(FaultTargetSelector):
 class ProcessTypeTargetSelector(FaultTargetSelector):
     """Select targets by process type."""
 
-    def select_targets(self, available_targets: List[FaultContext]) -> List[FaultContext]:
+    def select_targets(self, available_targets: list[FaultContext]) -> list[FaultContext]:
         targets = []
         for target in available_targets:
             if target.process_type in (self.config.process_types or []):
@@ -129,7 +143,7 @@ class ProcessTypeTargetSelector(FaultTargetSelector):
         return targets
 
 
-class FaultTrigger(ABC):
+class BaseFaultTrigger(ABC):
     """Abstract base class for fault triggers."""
 
     def __init__(self, config: FaultTriggerConfig):
@@ -150,7 +164,7 @@ class FaultTrigger(ABC):
         self._start_time = time.time()
 
 
-class ImmediateTrigger(FaultTrigger):
+class ImmediateTrigger(BaseFaultTrigger):
     """Trigger fault immediately."""
 
     def should_trigger(self, context: FaultContext) -> bool:
@@ -160,7 +174,7 @@ class ImmediateTrigger(FaultTrigger):
         return False
 
 
-class TimedTrigger(FaultTrigger):
+class TimedTrigger(BaseFaultTrigger):
     """Trigger fault after a delay."""
 
     def should_trigger(self, context: FaultContext) -> bool:
@@ -174,7 +188,7 @@ class TimedTrigger(FaultTrigger):
         return False
 
 
-class CountTrigger(FaultTrigger):
+class CountTrigger(BaseFaultTrigger):
     """Trigger fault after N operations."""
 
     def __init__(self, config: FaultTriggerConfig):
@@ -191,7 +205,7 @@ class CountTrigger(FaultTrigger):
         return False
 
 
-class ProbabilisticTrigger(FaultTrigger):
+class ProbabilisticTrigger(BaseFaultTrigger):
     """Trigger fault with a probability."""
 
     def should_trigger(self, context: FaultContext) -> bool:
@@ -216,7 +230,7 @@ class BaseFaultInjector(ABC):
         self._trigger = self._create_trigger()
         self._result: Optional[FaultResult] = None
 
-    def _create_trigger(self) -> FaultTrigger:
+    def _create_trigger(self) -> BaseFaultTrigger:
         """Create trigger based on configuration."""
         trigger_type = self.config.trigger.type
 
@@ -302,7 +316,7 @@ class BaseFaultInjector(ABC):
 class FaultInjectorRegistry:
     """Registry for fault injectors."""
 
-    _injectors: Dict[FaultType, type[BaseFaultInjector]] = {}
+    _injectors: dict[FaultType, type[BaseFaultInjector]] = {}
 
     @classmethod
     def register(cls, fault_type: FaultType):
@@ -324,7 +338,7 @@ class FaultInjectorRegistry:
         return injector_class(config)
 
     @classmethod
-    def get_registered_types(cls) -> List[FaultType]:
+    def get_registered_types(cls) -> list[FaultType]:
         """Get all registered fault types."""
         return list(cls._injectors.keys())
 

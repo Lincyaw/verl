@@ -1,32 +1,40 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Unit tests for monitoring and observability components."""
 
 import json
 import time
 import unittest
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock, patch
+from datetime import datetime
 
-import pytest
-
-from verl.fault_injection.base import FaultLayer, FaultStatus, FaultResult
-from verl.fault_injection.monitoring.collector import (
-    AggregatedMetrics,
-    FaultMetrics,
-    MetricsCollector,
-    SystemMetrics,
-)
+from verl.fault_injection.base import FaultLayer, FaultResult, FaultStatus
 from verl.fault_injection.monitoring.alerts import (
     Alert,
     AlertConfig,
     AlertManager,
     AlertRule,
-    DEFAULT_ALERT_RULES,
 )
 from verl.fault_injection.monitoring.analyzer import (
-    ComponentDependency,
     FaultImpactAnalyzer,
-    ImpactAnalysisResult,
     ImpactMetrics,
+)
+from verl.fault_injection.monitoring.collector import (
+    FaultMetrics,
+    MetricsCollector,
+    SystemMetrics,
 )
 from verl.fault_injection.monitoring.dashboard import DashboardConfig, DashboardServer
 
@@ -395,9 +403,7 @@ class TestFaultImpactAnalyzer(unittest.TestCase):
 
         assert "hydra_config" in affected
         assert FaultLayer.UI in {
-            self.analyzer._dependencies[c].layer
-            for c in affected
-            if c in self.analyzer._dependencies
+            self.analyzer._dependencies[c].layer for c in affected if c in self.analyzer._dependencies
         }
 
     def test_calculate_cascade_probability(self):

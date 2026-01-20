@@ -141,6 +141,6 @@
       "编写API文档和使用指南",
       "提供示例配置和教程"
     ],
-    "passes": false
+    "passes": true
   }
 ]

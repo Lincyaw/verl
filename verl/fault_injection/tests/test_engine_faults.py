@@ -1,24 +1,42 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Unit tests for engine layer fault injectors."""
 
 import os
 import tempfile
-import threading
 import time
 import unittest
-from unittest.mock import MagicMock, patch
-
-import torch
+from unittest.mock import patch
 
 from verl.fault_injection.base import FaultContext, FaultStatus
-from verl.fault_injection.config import EngineFaultConfig, FaultTriggerConfig, FaultTargetConfig, FaultTrigger, FaultTarget
+from verl.fault_injection.config import (
+    EngineFaultConfig,
+    FaultTarget,
+    FaultTargetConfig,
+    FaultTrigger,
+    FaultTriggerConfig,
+)
 from verl.fault_injection.injectors.engine import (
-    EngineInitFailureInjector,
-    EngineHangInjector,
     CheckpointCorruptionInjector,
-    NCCLFailureInjector,
-    DeviceMeshErrorInjector,
-    PrecisionErrorInjector,
     DeviceMapErrorInjector,
+    DeviceMeshErrorInjector,
+    EngineHangInjector,
+    EngineInitFailureInjector,
+    NCCLFailureInjector,
+    PrecisionErrorInjector,
 )
 
 
@@ -27,12 +45,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.context = FaultContext(
-            worker_id="test_worker",
-            rank=0,
-            host="localhost",
-            process_type="actor"
-        )
+        self.context = FaultContext(worker_id="test_worker", rank=0, host="localhost", process_type="actor")
 
     def test_engine_init_failure_injector(self):
         """Test engine initialization failure injector."""
@@ -43,7 +56,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             engine_type="fsdp",
-            init_error="Test initialization error"
+            init_error="Test initialization error",
         )
 
         injector = EngineInitFailureInjector(config)
@@ -64,7 +77,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             hang_point="forward",
-            hang_duration_seconds=0.1  # Short duration for testing
+            hang_duration_seconds=0.1,  # Short duration for testing
         )
 
         injector = EngineHangInjector(config)
@@ -92,13 +105,13 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             corruption_type="random_bytes",
-            checkpoint_path=checkpoint_path
+            checkpoint_path=checkpoint_path,
         )
 
         injector = CheckpointCorruptionInjector(config)
 
         # Read original content
-        with open(checkpoint_path, 'rb') as f:
+        with open(checkpoint_path, "rb") as f:
             original_content = f.read()
 
         # Inject fault
@@ -108,7 +121,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
         self.assertEqual(result.metadata["corruption_type"], "random_bytes")
 
         # Verify file was corrupted
-        with open(checkpoint_path, 'rb') as f:
+        with open(checkpoint_path, "rb") as f:
             corrupted_content = f.read()
 
         self.assertNotEqual(original_content, corrupted_content)
@@ -130,7 +143,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             corruption_type="truncate",
-            checkpoint_path=checkpoint_path
+            checkpoint_path=checkpoint_path,
         )
 
         injector = CheckpointCorruptionInjector(config)
@@ -165,7 +178,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             corruption_type="delete",
-            checkpoint_path=checkpoint_path
+            checkpoint_path=checkpoint_path,
         )
 
         injector = CheckpointCorruptionInjector(config)
@@ -181,7 +194,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
         # Verify file was deleted
         self.assertFalse(os.path.exists(checkpoint_path))
 
-    @patch('os._exit')
+    @patch("os._exit")
     def test_nccl_failure_abort(self, mock_exit):
         """Test NCCL failure with abort."""
         config = EngineFaultConfig(
@@ -190,18 +203,18 @@ class TestEngineFaultInjectors(unittest.TestCase):
             type="nccl_failure",
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
-            nccl_error_type="abort"
+            nccl_error_type="abort",
         )
 
         injector = NCCLFailureInjector(config)
 
         # Inject fault - should call os._exit
-        result = injector.inject(self.context)
+        injector.inject(self.context)
 
         # Verify exit was called
         mock_exit.assert_called_once_with(1)
 
-    @patch('builtins.print')  # Suppress print output
+    @patch("builtins.print")  # Suppress print output
     def test_nccl_failure_timeout(self, mock_print):
         """Test NCCL failure with timeout."""
         config = EngineFaultConfig(
@@ -211,7 +224,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             nccl_error_type="timeout",
-            nccl_timeout_ms=100  # Short timeout for testing
+            nccl_timeout_ms=100,  # Short timeout for testing
         )
 
         injector = NCCLFailureInjector(config)
@@ -234,7 +247,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             mesh_error_type="invalid_shape",
-            mesh_shape=[2, 2, 2]
+            mesh_shape=[2, 2, 2],
         )
 
         injector = DeviceMeshErrorInjector(config)
@@ -254,7 +267,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             mesh_error_type="device_mismatch",
-            mesh_shape=[100, 100, 100]  # Requires 1M devices
+            mesh_shape=[100, 100, 100],  # Requires 1M devices
         )
 
         injector = DeviceMeshErrorInjector(config)
@@ -274,7 +287,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             precision_type="fp16",
-            precision_error_type="overflow"
+            precision_error_type="overflow",
         )
 
         injector = PrecisionErrorInjector(config)
@@ -295,7 +308,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             precision_type="fp16",
-            precision_error_type="nan"
+            precision_error_type="nan",
         )
 
         injector = PrecisionErrorInjector(config)
@@ -307,7 +320,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
         self.assertEqual(result.metadata["precision_type"], "fp16")
         self.assertEqual(result.metadata["error_type"], "nan")
 
-    @patch('torch.cuda.device_count')
+    @patch("torch.cuda.device_count")
     def test_device_map_missing_device(self, mock_device_count):
         """Test device map error with missing device."""
         mock_device_count.return_value = 4  # Only 4 devices available
@@ -319,7 +332,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             device_map_error="missing_device",
-            target_device=999
+            target_device=999,
         )
 
         injector = DeviceMapErrorInjector(config)
@@ -339,7 +352,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             device_map_error="device_busy",
-            target_device=0
+            target_device=0,
         )
 
         injector = DeviceMapErrorInjector(config)
@@ -359,7 +372,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
             target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
             device_map_error="peer_access",
-            target_device=1
+            target_device=1,
         )
 
         injector = DeviceMapErrorInjector(config)
@@ -377,7 +390,7 @@ class TestEngineFaultInjectors(unittest.TestCase):
             layer="engine",
             type="engine_init_failure",
             trigger=FaultTriggerConfig(type=FaultTrigger.IMMEDIATE),
-            target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1)
+            target=FaultTargetConfig(mode=FaultTarget.RANDOM, count=1),
         )
 
         # Test all injector recovery methods

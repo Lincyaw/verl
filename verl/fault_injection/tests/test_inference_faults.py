@@ -1,9 +1,23 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Unit tests for inference layer fault injectors."""
 
-import gc
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -26,7 +40,7 @@ class TestInferenceOOMInjector:
         """Test vLLM OOM fault injection."""
         config = InferenceFaultConfig(
             backend="vllm",
-            kv_cache_size_mb=100  # Small size for testing
+            kv_cache_size_mb=100,  # Small size for testing
         )
         injector = InferenceOOMInjector(config)
         context = FaultContext()
@@ -47,15 +61,12 @@ class TestInferenceOOMInjector:
 
     def test_sglang_oom_injection(self):
         """Test SGLang OOM fault injection."""
-        config = InferenceFaultConfig(
-            backend="sglang",
-            kv_cache_size_mb=200
-        )
+        config = InferenceFaultConfig(backend="sglang", kv_cache_size_mb=200)
         injector = InferenceOOMInjector(config)
         context = FaultContext()
 
         with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.empty") as mock_empty:
+            with patch("torch.empty"):
                 result = injector.inject(context)
 
                 assert result.status == FaultStatus.INJECTED
@@ -85,10 +96,7 @@ class TestSchedulerDeadlockInjector:
 
     def test_request_queue_deadlock(self):
         """Test request queue deadlock injection."""
-        config = InferenceFaultConfig(
-            backend="vllm",
-            deadlock_type="request_queue"
-        )
+        config = InferenceFaultConfig(backend="vllm", deadlock_type="request_queue")
         injector = SchedulerDeadlockInjector(config)
         context = FaultContext()
 
@@ -101,10 +109,7 @@ class TestSchedulerDeadlockInjector:
 
     def test_kv_cache_deadlock(self):
         """Test KV cache deadlock injection."""
-        config = InferenceFaultConfig(
-            backend="sglang",
-            deadlock_type="kv_cache"
-        )
+        config = InferenceFaultConfig(backend="sglang", deadlock_type="kv_cache")
         injector = SchedulerDeadlockInjector(config)
         context = FaultContext()
 
@@ -116,10 +121,7 @@ class TestSchedulerDeadlockInjector:
 
     def test_batch_schedule_deadlock(self):
         """Test batch scheduling deadlock."""
-        config = InferenceFaultConfig(
-            backend="vllm",
-            deadlock_type="batch_schedule"
-        )
+        config = InferenceFaultConfig(backend="vllm", deadlock_type="batch_schedule")
         injector = SchedulerDeadlockInjector(config)
         context = FaultContext()
 
@@ -162,10 +164,7 @@ class TestCompilationFailureInjector:
 
     def test_vllm_graph_capture_failure(self):
         """Test vLLM CUDA graph capture failure."""
-        config = InferenceFaultConfig(
-            backend="vllm",
-            compilation_stage="graph_capture"
-        )
+        config = InferenceFaultConfig(backend="vllm", compilation_stage="graph_capture")
         injector = CompilationFailureInjector(config)
         context = FaultContext()
 
@@ -177,10 +176,7 @@ class TestCompilationFailureInjector:
 
     def test_vllm_optimization_failure(self):
         """Test vLLM graph optimization failure."""
-        config = InferenceFaultConfig(
-            backend="vllm",
-            compilation_stage="optimization"
-        )
+        config = InferenceFaultConfig(backend="vllm", compilation_stage="optimization")
         injector = CompilationFailureInjector(config)
         context = FaultContext()
 
@@ -192,10 +188,7 @@ class TestCompilationFailureInjector:
 
     def test_vllm_memory_planning_failure(self):
         """Test vLLM memory planning failure."""
-        config = InferenceFaultConfig(
-            backend="vllm",
-            compilation_stage="memory_planning"
-        )
+        config = InferenceFaultConfig(backend="vllm", compilation_stage="memory_planning")
         injector = CompilationFailureInjector(config)
         context = FaultContext()
 
@@ -207,10 +200,7 @@ class TestCompilationFailureInjector:
 
     def test_sglang_radix_attention_failure(self):
         """Test SGLang RadixAttention compilation failure."""
-        config = InferenceFaultConfig(
-            backend="sglang",
-            compilation_stage="radix_attention"
-        )
+        config = InferenceFaultConfig(backend="sglang", compilation_stage="radix_attention")
         injector = CompilationFailureInjector(config)
         context = FaultContext()
 
@@ -222,10 +212,7 @@ class TestCompilationFailureInjector:
 
     def test_sglang_flashinfer_failure(self):
         """Test SGLang FlashInfer compilation failure."""
-        config = InferenceFaultConfig(
-            backend="sglang",
-            compilation_stage="flashinfer"
-        )
+        config = InferenceFaultConfig(backend="sglang", compilation_stage="flashinfer")
         injector = CompilationFailureInjector(config)
         context = FaultContext()
 
@@ -237,10 +224,7 @@ class TestCompilationFailureInjector:
 
     def test_sglang_torch_compile_failure(self):
         """Test SGLang torch.compile failure."""
-        config = InferenceFaultConfig(
-            backend="sglang",
-            compilation_stage="torch_compile"
-        )
+        config = InferenceFaultConfig(backend="sglang", compilation_stage="torch_compile")
         injector = CompilationFailureInjector(config)
         context = FaultContext()
 
@@ -263,10 +247,7 @@ class TestCompilationFailureInjector:
 
     def test_unknown_compilation_stage(self):
         """Test unknown compilation stage."""
-        config = InferenceFaultConfig(
-            backend="vllm",
-            compilation_stage="unknown_stage"
-        )
+        config = InferenceFaultConfig(backend="vllm", compilation_stage="unknown_stage")
         injector = CompilationFailureInjector(config)
         context = FaultContext()
 
@@ -283,23 +264,13 @@ class TestvLLMFaultInjector:
         """Test KV cache fault injection."""
         # Test with low probability (should not inject)
         with patch("random.random", return_value=0.5):  # > 0.1
-            result = vLLMFaultInjector.inject_kv_cache_fault(
-                num_tokens=1000,
-                head_dim=128,
-                num_heads=32,
-                num_layers=40
-            )
+            result = vLLMFaultInjector.inject_kv_cache_fault(num_tokens=1000, head_dim=128, num_heads=32, num_layers=40)
             assert result is None
 
         # Test with high probability (should inject)
         with patch("random.random", return_value=0.05):  # < 0.1
             with pytest.raises(RuntimeError) as exc_info:
-                vLLMFaultInjector.inject_kv_cache_fault(
-                    num_tokens=1000,
-                    head_dim=128,
-                    num_heads=32,
-                    num_layers=40
-                )
+                vLLMFaultInjector.inject_kv_cache_fault(num_tokens=1000, head_dim=128, num_heads=32, num_layers=40)
 
             assert "vLLM KV cache allocation failed" in str(exc_info.value)
 
@@ -324,27 +295,18 @@ class TestvLLMFaultInjector:
     def test_attention_fault_injection(self):
         """Test attention fault injection."""
         # Test with short sequence (should not inject)
-        result = vLLMFaultInjector.inject_attention_fault(
-            seq_len=100,
-            max_seq_len=1000
-        )
+        result = vLLMFaultInjector.inject_attention_fault(seq_len=100, max_seq_len=1000)
         assert result is None
 
         # Test with long sequence and low probability
         with patch("random.random", return_value=0.5):  # > 0.1
-            result = vLLMFaultInjector.inject_attention_fault(
-                seq_len=950,
-                max_seq_len=1000
-            )
+            result = vLLMFaultInjector.inject_attention_fault(seq_len=950, max_seq_len=1000)
             assert result is None
 
         # Test with long sequence and high probability
         with patch("random.random", return_value=0.05):  # < 0.1
             with pytest.raises(RuntimeError) as exc_info:
-                vLLMFaultInjector.inject_attention_fault(
-                    seq_len=950,
-                    max_seq_len=1000
-                )
+                vLLMFaultInjector.inject_attention_fault(seq_len=950, max_seq_len=1000)
 
             assert "vLLM attention fault" in str(exc_info.value)
 
@@ -373,53 +335,35 @@ class TestSGLangFaultInjector:
     def test_memory_pool_fault(self):
         """Test memory pool fault injection."""
         # Test with low usage (should not inject)
-        result = SGLangFaultInjector.inject_memory_pool_fault(
-            allocated_mb=500,
-            total_mb=1000
-        )
+        result = SGLangFaultInjector.inject_memory_pool_fault(allocated_mb=500, total_mb=1000)
         assert result is None
 
         # Test with high usage and low probability
         with patch("random.random", return_value=0.5):  # > 0.15
-            result = SGLangFaultInjector.inject_memory_pool_fault(
-                allocated_mb=970,
-                total_mb=1000
-            )
+            result = SGLangFaultInjector.inject_memory_pool_fault(allocated_mb=970, total_mb=1000)
             assert result is None
 
         # Test with high usage and high probability
         with patch("random.random", return_value=0.1):  # < 0.15
             with pytest.raises(RuntimeError) as exc_info:
-                SGLangFaultInjector.inject_memory_pool_fault(
-                    allocated_mb=970,
-                    total_mb=1000
-                )
+                SGLangFaultInjector.inject_memory_pool_fault(allocated_mb=970, total_mb=1000)
 
             assert "SGLang memory pool fault" in str(exc_info.value)
 
     def test_tokenizer_fault(self):
         """Test tokenizer fault injection."""
         # Test with valid token ID (should not inject)
-        result = SGLangFaultInjector.inject_tokenizer_fault(
-            vocab_size=50000,
-            requested_id=1000
-        )
+        result = SGLangFaultInjector.inject_tokenizer_fault(vocab_size=50000, requested_id=1000)
         assert result is None
 
         # Test with invalid token ID and low probability
         with patch("random.random", return_value=0.5):  # > 0.2
-            result = SGLangFaultInjector.inject_tokenizer_fault(
-                vocab_size=50000,
-                requested_id=50000
-            )
+            result = SGLangFaultInjector.inject_tokenizer_fault(vocab_size=50000, requested_id=50000)
             assert result is None
 
         # Test with invalid token ID and high probability
         with patch("random.random", return_value=0.1):  # < 0.2
             with pytest.raises(RuntimeError) as exc_info:
-                SGLangFaultInjector.inject_tokenizer_fault(
-                    vocab_size=50000,
-                    requested_id=50000
-                )
+                SGLangFaultInjector.inject_tokenizer_fault(vocab_size=50000, requested_id=50000)
 
             assert "SGLang tokenizer fault" in str(exc_info.value)

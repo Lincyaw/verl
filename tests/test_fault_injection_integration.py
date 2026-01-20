@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Test script to verify fault injection integration with verl main flow."""
 
-import os
 import sys
 from pathlib import Path
 
 # Add verl to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
 
 def test_fault_injection_integration():
     """Test that fault injection can be integrated with verl main flow."""
@@ -14,32 +14,30 @@ def test_fault_injection_integration():
 
     # Create a minimal test configuration
     test_config = {
-        'fault_injection': {
-            'enabled': True,
-            'faults': [
+        "fault_injection": {
+            "enabled": True,
+            "faults": [
                 {
-                    'layer': 'UI',
-                    'fault_type': 'HYDRA_CONFIG_ERROR',
-                    'target': {'type': 'ALL'},
-                    'trigger': {'type': 'IMMEDIATE'},
-                    'config': {
-                        'error_type': 'VALIDATION_ERROR',
-                        'error_message': 'Test fault injection'
-                    }
+                    "layer": "UI",
+                    "fault_type": "HYDRA_CONFIG_ERROR",
+                    "target": {"type": "ALL"},
+                    "trigger": {"type": "IMMEDIATE"},
+                    "config": {"error_type": "VALIDATION_ERROR", "error_message": "Test fault injection"},
                 }
             ],
-            'recovery': {
-                'enabled': False  # Disable recovery for testing
+            "recovery": {
+                "enabled": False  # Disable recovery for testing
             },
-            'monitoring': {
-                'enabled': False  # Disable monitoring for testing
-            }
+            "monitoring": {
+                "enabled": False  # Disable monitoring for testing
+            },
         }
     }
 
     # Test 1: Import the main module
     try:
         from verl.trainer.main_ppo import FAULT_INJECTION_AVAILABLE
+
         print(f"✓ Fault injection available: {FAULT_INJECTION_AVAILABLE}")
     except ImportError as e:
         print(f"✗ Failed to import main_ppo: {e}")
@@ -48,7 +46,8 @@ def test_fault_injection_integration():
     # Test 2: Test configuration loading
     try:
         from verl.fault_injection import FaultInjectionConfig
-        config = FaultInjectionConfig.from_dict(test_config['fault_injection'])
+
+        config = FaultInjectionConfig.from_dict(test_config["fault_injection"])
         print(f"✓ Configuration loaded successfully: {config.enabled}")
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
@@ -57,19 +56,22 @@ def test_fault_injection_integration():
     # Test 3: Test fault injection hooks creation
     try:
         from verl.fault_injection import FaultOrchestrator, create_fault_injection_hooks
+
         orchestrator = FaultOrchestrator(config)
-        hooks = create_fault_injection_hooks(orchestrator)
-        print(f"✓ Fault injection hooks created successfully")
+        create_fault_injection_hooks(orchestrator)
+        print("✓ Fault injection hooks created successfully")
     except Exception as e:
         print(f"✗ Failed to create hooks: {e}")
         return False
 
     # Test 4: Test RayTrainer accepts fault_orchestrator parameter
     try:
-        from verl.trainer.ppo.ray_trainer import RayPPOTrainer
         import inspect
+
+        from verl.trainer.ppo.ray_trainer import RayPPOTrainer
+
         sig = inspect.signature(RayPPOTrainer.__init__)
-        has_fault_param = 'fault_orchestrator' in sig.parameters
+        has_fault_param = "fault_orchestrator" in sig.parameters
         print(f"✓ RayPPOTrainer accepts fault_orchestrator: {has_fault_param}")
         if not has_fault_param:
             return False
@@ -87,7 +89,8 @@ def test_minimal_invasiveness():
 
     # Check that fault injection is optional
     try:
-        from verl.trainer.main_ppo import run_ppo, FAULT_INJECTION_AVAILABLE
+        from verl.trainer.main_ppo import FAULT_INJECTION_AVAILABLE
+
         # The code should work even if fault injection is not available
         print(f"✓ Fault injection is optional (available: {FAULT_INJECTION_AVAILABLE})")
     except Exception as e:
@@ -100,7 +103,7 @@ def test_minimal_invasiveness():
         with open(config_path) as f:
             content = f.read()
 
-        if 'enabled: false' not in content:
+        if "enabled: false" not in content:
             print("✗ Default configuration has fault injection enabled")
             return False
         print("✓ Default configuration has fault injection disabled")

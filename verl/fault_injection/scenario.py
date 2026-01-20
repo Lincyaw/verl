@@ -1,13 +1,29 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Scenario-based fault injection with dependencies and cascading."""
 
 import asyncio
 import logging
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Optional
 
 from .config import (
+    BaseFaultConfig,
     FaultConfig,
     FaultDependencyConfig,
     FaultScenarioConfig,
@@ -15,7 +31,6 @@ from .config import (
     FaultType,
 )
 from .orchestrator import FaultOrchestrator
-
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +62,8 @@ class FaultExecutionState:
     result: Optional[Any] = None
     start_time: Optional[float] = None
     end_time: Optional[float] = None
-    dependencies: Set[str] = field(default_factory=set)
-    dependents: Set[str] = field(default_factory=set)
+    dependencies: set[str] = field(default_factory=set)
+    dependents: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -56,10 +71,10 @@ class ScenarioExecutionContext:
     """Context for scenario execution."""
 
     scenario_name: str
-    execution_graph: Dict[str, FaultExecutionState] = field(default_factory=dict)
+    execution_graph: dict[str, FaultExecutionState] = field(default_factory=dict)
     ready_queue: deque = field(default_factory=deque)
-    completed: Set[str] = field(default_factory=set)
-    failed: Set[str] = field(default_factory=set)
+    completed: set[str] = field(default_factory=set)
+    failed: set[str] = field(default_factory=set)
     cascade_depth: int = 0
 
 
@@ -68,8 +83,8 @@ class FaultScenarioOrchestrator:
 
     def __init__(self, fault_orchestrator: FaultOrchestrator):
         self.fault_orchestrator = fault_orchestrator
-        self.active_scenarios: Dict[str, ScenarioExecutionContext] = {}
-        self.templates: Dict[str, FaultScenarioTemplate] = {}
+        self.active_scenarios: dict[str, ScenarioExecutionContext] = {}
+        self.templates: dict[str, FaultScenarioTemplate] = {}
         self._load_default_templates()
 
     def _load_default_templates(self) -> None:
@@ -86,7 +101,7 @@ class FaultScenarioOrchestrator:
                     "type": FaultType.MEMORY_OOM,
                     "layer": "orchestration",
                     "memory_mb": 4096,
-                    "target": {"mode": "random", "count": 2}
+                    "target": {"mode": "random", "count": 2},
                 },
                 {
                     "name": "network_partition",
@@ -94,7 +109,7 @@ class FaultScenarioOrchestrator:
                     "layer": "orchestration",
                     "partition_type": "partial",
                     "partition_duration": 30.0,
-                    "target": {"mode": "rank", "ranks": [0, 1]}
+                    "target": {"mode": "rank", "ranks": [0, 1]},
                 },
                 {
                     "name": "worker_crash",
@@ -102,26 +117,14 @@ class FaultScenarioOrchestrator:
                     "layer": "worker",
                     "worker_type": "actor",
                     "crash_method": "exception",
-                    "target": {"mode": "random", "count": 1}
-                }
+                    "target": {"mode": "random", "count": 1},
+                },
             ],
             dependencies=[
-                {
-                    "fault_name": "network_partition",
-                    "condition": "on_failure",
-                    "delay_seconds": 5.0
-                },
-                {
-                    "fault_name": "worker_crash",
-                    "condition": "after",
-                    "delay_seconds": 10.0
-                }
+                {"fault_name": "network_partition", "condition": "on_failure", "delay_seconds": 5.0},
+                {"fault_name": "worker_crash", "condition": "after", "delay_seconds": 10.0},
             ],
-            cascade_config={
-                "mode": "tree",
-                "interval": 5.0,
-                "max_depth": 3
-            }
+            cascade_config={"mode": "tree", "interval": 5.0, "max_depth": 3},
         )
 
         # Training disruption template
@@ -135,14 +138,14 @@ class FaultScenarioOrchestrator:
                     "type": FaultType.GRADIENT_NAN,
                     "layer": "worker",
                     "gradient_nan_probability": 1.0,
-                    "target": {"mode": "all"}
+                    "target": {"mode": "all"},
                 },
                 {
                     "name": "checkpoint_corruption",
                     "type": FaultType.CHECKPOINT_CORRUPTION,
                     "layer": "engine",
                     "corruption_type": "random_bytes",
-                    "target": {"mode": "random", "count": 1}
+                    "target": {"mode": "random", "count": 1},
                 },
                 {
                     "name": "nccl_timeout",
@@ -150,20 +153,11 @@ class FaultScenarioOrchestrator:
                     "layer": "engine",
                     "nccl_error_type": "timeout",
                     "nccl_timeout_ms": 30000,
-                    "target": {"mode": "random", "count": 2}
-                }
+                    "target": {"mode": "random", "count": 2},
+                },
             ],
-            dependencies=[
-                {
-                    "fault_name": "checkpoint_corruption",
-                    "condition": "on_success",
-                    "delay_seconds": 60.0
-                }
-            ],
-            cascade_config={
-                "mode": "linear",
-                "interval": 30.0
-            }
+            dependencies=[{"fault_name": "checkpoint_corruption", "condition": "on_success", "delay_seconds": 60.0}],
+            cascade_config={"mode": "linear", "interval": 30.0},
         )
 
         # Inference degradation template
@@ -178,35 +172,29 @@ class FaultScenarioOrchestrator:
                     "layer": "inference",
                     "backend": "vllm",
                     "kv_cache_size_mb": 2048,
-                    "target": {"mode": "random", "count": 1}
+                    "target": {"mode": "random", "count": 1},
                 },
                 {
                     "name": "scheduler_deadlock",
                     "type": FaultType.SCHEDULER_DEADLOCK,
                     "layer": "inference",
                     "deadlock_type": "request_queue",
-                    "target": {"mode": "all"}
+                    "target": {"mode": "all"},
                 },
                 {
                     "name": "compilation_failure",
                     "type": FaultType.COMPILATION_FAILURE,
                     "layer": "inference",
                     "compilation_stage": "graph_capture",
-                    "target": {"mode": "random", "count": 1}
-                }
+                    "target": {"mode": "random", "count": 1},
+                },
             ],
             dependencies=[],
-            cascade_config={
-                "mode": "burst",
-                "interval": 0.0
-            }
+            cascade_config={"mode": "burst", "interval": 0.0},
         )
 
     def create_scenario_from_template(
-        self,
-        template_name: str,
-        scenario_name: Optional[str] = None,
-        parameters: Optional[Dict[str, Any]] = None
+        self, template_name: str, scenario_name: Optional[str] = None, parameters: Optional[dict[str, Any]] = None
     ) -> FaultScenarioConfig:
         """Create a scenario from a template."""
 
@@ -233,12 +221,7 @@ class FaultScenarioOrchestrator:
             layer = fault_dict.pop("layer")
 
             # This would need proper factory method in real implementation
-            config = BaseFaultConfig(
-                name=f"{scenario_name}_{fault_name}",
-                layer=layer,
-                type=fault_type,
-                **fault_dict
-            )
+            config = BaseFaultConfig(name=f"{scenario_name}_{fault_name}", layer=layer, type=fault_type, **fault_dict)
             faults.append(config)
 
         # Convert dependencies
@@ -253,20 +236,17 @@ class FaultScenarioOrchestrator:
             dependencies=dependencies,
             cascade_mode=template.cascade_config.get("mode", "none"),
             cascade_interval_seconds=template.cascade_config.get("interval", 5.0),
-            max_cascade_depth=template.cascade_config.get("max_depth", 3)
+            max_cascade_depth=template.cascade_config.get("max_depth", 3),
         )
 
-    def build_execution_graph(self, scenario: FaultScenarioConfig) -> Dict[str, FaultExecutionState]:
+    def build_execution_graph(self, scenario: FaultScenarioConfig) -> dict[str, FaultExecutionState]:
         """Build execution graph with dependency relationships."""
 
         graph = {}
 
         # Create states for all faults
         for fault in scenario.faults:
-            graph[fault.name] = FaultExecutionState(
-                name=fault.name,
-                config=fault
-            )
+            graph[fault.name] = FaultExecutionState(name=fault.name, config=fault)
 
         # Build dependency relationships
         for dep in scenario.dependencies:
@@ -289,19 +269,13 @@ class FaultScenarioOrchestrator:
         execution_graph = self.build_execution_graph(scenario)
 
         # Create execution context
-        context = ScenarioExecutionContext(
-            scenario_name=scenario.name,
-            execution_graph=execution_graph
-        )
+        context = ScenarioExecutionContext(scenario_name=scenario.name, execution_graph=execution_graph)
 
         self.active_scenarios[scenario.name] = context
 
         try:
             # Find root faults (no dependencies)
-            ready_faults = [
-                name for name, state in execution_graph.items()
-                if not state.dependencies
-            ]
+            ready_faults = [name for name, state in execution_graph.items() if not state.dependencies]
             context.ready_queue.extend(ready_faults)
 
             # Execute faults based on cascade mode
@@ -325,18 +299,12 @@ class FaultScenarioOrchestrator:
             if scenario.name in self.active_scenarios:
                 del self.active_scenarios[scenario.name]
 
-    async def _execute_burst_mode(
-        self,
-        context: ScenarioExecutionContext,
-        scenario: FaultScenarioConfig
-    ) -> bool:
+    async def _execute_burst_mode(self, context: ScenarioExecutionContext, scenario: FaultScenarioConfig) -> bool:
         """Execute all faults simultaneously."""
 
         tasks = []
         for fault_name in context.execution_graph:
-            task = asyncio.create_task(
-                self._execute_fault_with_deps(fault_name, context, scenario)
-            )
+            task = asyncio.create_task(self._execute_fault_with_deps(fault_name, context, scenario))
             tasks.append(task)
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -347,20 +315,14 @@ class FaultScenarioOrchestrator:
 
         return True
 
-    async def _execute_linear_mode(
-        self,
-        context: ScenarioExecutionContext,
-        scenario: FaultScenarioConfig
-    ) -> bool:
+    async def _execute_linear_mode(self, context: ScenarioExecutionContext, scenario: FaultScenarioConfig) -> bool:
         """Execute faults in sequence."""
 
         while context.ready_queue:
             fault_name = context.ready_queue.popleft()
 
             try:
-                success = await self._execute_fault_with_deps(
-                    fault_name, context, scenario
-                )
+                success = await self._execute_fault_with_deps(fault_name, context, scenario)
 
                 if not success and scenario.stop_on_failure:
                     return False
@@ -383,11 +345,7 @@ class FaultScenarioOrchestrator:
 
         return True
 
-    async def _execute_tree_mode(
-        self,
-        context: ScenarioExecutionContext,
-        scenario: FaultScenarioConfig
-    ) -> bool:
+    async def _execute_tree_mode(self, context: ScenarioExecutionContext, scenario: FaultScenarioConfig) -> bool:
         """Execute faults in tree cascade mode."""
 
         current_level = list(context.ready_queue)
@@ -399,9 +357,7 @@ class FaultScenarioOrchestrator:
             # Execute current level
             tasks = []
             for fault_name in current_level:
-                task = asyncio.create_task(
-                    self._execute_fault_with_deps(fault_name, context, scenario)
-                )
+                task = asyncio.create_task(self._execute_fault_with_deps(fault_name, context, scenario))
                 tasks.append((fault_name, task))
 
             # Wait for completion
@@ -430,11 +386,7 @@ class FaultScenarioOrchestrator:
 
         return True
 
-    async def _execute_sequential_mode(
-        self,
-        context: ScenarioExecutionContext,
-        scenario: FaultScenarioConfig
-    ) -> bool:
+    async def _execute_sequential_mode(self, context: ScenarioExecutionContext, scenario: FaultScenarioConfig) -> bool:
         """Execute faults sequentially without cascading."""
 
         for fault_name in context.execution_graph:
@@ -448,10 +400,7 @@ class FaultScenarioOrchestrator:
         return True
 
     async def _execute_fault_with_deps(
-        self,
-        fault_name: str,
-        context: ScenarioExecutionContext,
-        scenario: FaultScenarioConfig
+        self, fault_name: str, context: ScenarioExecutionContext, scenario: FaultScenarioConfig
     ) -> bool:
         """Execute a single fault considering its dependencies."""
 
@@ -462,10 +411,7 @@ class FaultScenarioOrchestrator:
             dep_state = context.execution_graph[dep_name]
 
             # Find dependency configuration
-            dep_config = next(
-                (d for d in scenario.dependencies if d.fault_name == dep_name),
-                None
-            )
+            dep_config = next((d for d in scenario.dependencies if d.fault_name == dep_name), None)
 
             if not dep_config:
                 continue
@@ -510,7 +456,7 @@ class FaultScenarioOrchestrator:
 
             return False
 
-    def get_scenario_status(self, scenario_name: str) -> Optional[Dict[str, Any]]:
+    def get_scenario_status(self, scenario_name: str) -> Optional[dict[str, Any]]:
         """Get status of a running scenario."""
 
         if scenario_name not in self.active_scenarios:
@@ -529,9 +475,8 @@ class FaultScenarioOrchestrator:
                     "status": state.status,
                     "start_time": state.start_time,
                     "end_time": state.end_time,
-                    "duration": (state.end_time - state.start_time)
-                               if state.start_time and state.end_time else None
+                    "duration": (state.end_time - state.start_time) if state.start_time and state.end_time else None,
                 }
                 for name, state in context.execution_graph.items()
-            }
+            },
         }

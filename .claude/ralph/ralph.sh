@@ -25,7 +25,7 @@ for ((i=1; i<=MAX_ITER; i++)); do
   3. Append your progress to the progress.txt file. \
   Use this to leave a note for the next person working in the codebase. \
   4. Make a git commit of that feature. \
-  5. Check CLAUDE.md to see if there are any special instructions for committing code. \
+  5. Check CLAUDE.md to see if there are any special instructions for committing code, e.g., format code, lint, etc. \
   ONLY WORK ON A SINGLE FEATURE. \
   If, while implementing the feature, you notice the PRD is complete, output <promise>COMPLETE</promise> here.")
 

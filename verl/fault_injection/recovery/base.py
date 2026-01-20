@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Base classes and interfaces for fault recovery."""
 
 import logging
@@ -5,9 +20,9 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Optional, Protocol
 
-from ..base import FaultContext, FaultResult, FaultStatus
+from ..base import FaultContext, FaultResult
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +64,7 @@ class RecoveryContext:
     attempt_count: int = 0
     max_attempts: int = 3
     recovery_start_time: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -62,7 +77,7 @@ class RecoveryResult:
     start_time: float
     end_time: Optional[float] = None
     error: Optional[Exception] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     next_recovery: Optional[str] = None  # Next recovery strategy to try
 
     @property
@@ -82,8 +97,8 @@ class RecoveryDecision:
     mode: RecoveryMode
     confidence: float  # 0.0-1.0 confidence in this recovery
     reason: str
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    alternatives: List[str] = field(default_factory=list)
+    parameters: dict[str, Any] = field(default_factory=dict)
+    alternatives: list[str] = field(default_factory=list)
 
 
 class RecoveryStrategy(Protocol):
@@ -115,7 +130,7 @@ class RecoveryStrategy(Protocol):
 class BaseRecoveryStrategy(ABC):
     """Abstract base class for recovery strategies."""
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         self.config = config or {}
         self.recovery_id = f"{self.name}_{id(self)}"
 
@@ -199,14 +214,12 @@ class BaseRecoveryStrategy(ABC):
 class RecoveryDecisionEngine(ABC):
     """Abstract base class for recovery decision engines."""
 
-    def __init__(self, strategies: List[BaseRecoveryStrategy]):
+    def __init__(self, strategies: list[BaseRecoveryStrategy]):
         self.strategies = strategies
         self._strategy_map = {s.name: s for s in strategies}
 
     @abstractmethod
-    def decide_recovery(
-        self, context: RecoveryContext, available_strategies: List[str] = None
-    ) -> RecoveryDecision:
+    def decide_recovery(self, context: RecoveryContext, available_strategies: list[str] = None) -> RecoveryDecision:
         """Decide which recovery strategy to use."""
         pass
 
@@ -214,7 +227,7 @@ class RecoveryDecisionEngine(ABC):
         """Get a recovery strategy by name."""
         return self._strategy_map.get(name)
 
-    def evaluate_strategies(self, context: RecoveryContext) -> List[RecoveryDecision]:
+    def evaluate_strategies(self, context: RecoveryContext) -> list[RecoveryDecision]:
         """Evaluate all strategies and return ranked decisions."""
         decisions = []
 
@@ -252,7 +265,7 @@ class RecoveryDecisionEngine(ABC):
 class RecoveryStrategyRegistry:
     """Registry for recovery strategies."""
 
-    _strategies: Dict[str, type[BaseRecoveryStrategy]] = {}
+    _strategies: dict[str, type[BaseRecoveryStrategy]] = {}
 
     @classmethod
     def register(cls, name: str):
@@ -265,7 +278,7 @@ class RecoveryStrategyRegistry:
         return decorator
 
     @classmethod
-    def create(cls, name: str, config: Dict[str, Any] = None) -> BaseRecoveryStrategy:
+    def create(cls, name: str, config: dict[str, Any] = None) -> BaseRecoveryStrategy:
         """Create a recovery strategy from configuration."""
         strategy_class = cls._strategies.get(name)
         if strategy_class is None:
@@ -274,6 +287,6 @@ class RecoveryStrategyRegistry:
         return strategy_class(config)
 
     @classmethod
-    def get_registered_names(cls) -> List[str]:
+    def get_registered_names(cls) -> list[str]:
         """Get all registered strategy names."""
         return list(cls._strategies.keys())

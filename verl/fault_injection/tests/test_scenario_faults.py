@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Test scenario-based fault injection."""
 
 import asyncio
@@ -5,18 +20,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import yaml
-
 from verl.fault_injection import (
+    BaseTrigger,
+    CountTrigger,
+    FaultDependencyConfig,
+    FaultOrchestrator,
     FaultScenarioConfig,
     FaultScenarioOrchestrator,
-    FaultOrchestrator,
-    ScenarioConfigLoader,
-    TriggerManager,
-    BaseTrigger,
-    TimedTrigger,
-    CountTrigger,
     ProbabilisticTrigger,
+    ScenarioConfigLoader,
+    TimedTrigger,
+    TriggerManager,
 )
 
 
@@ -32,10 +46,7 @@ class TestScenarioFaultInjection(unittest.TestCase):
     def test_scenario_config_creation(self):
         """Test creating a fault scenario configuration."""
         scenario = FaultScenarioConfig(
-            name="test_scenario",
-            description="Test scenario",
-            cascade_mode="linear",
-            cascade_interval_seconds=5.0
+            name="test_scenario", description="Test scenario", cascade_mode="linear", cascade_interval_seconds=5.0
         )
 
         self.assertEqual(scenario.name, "test_scenario")
@@ -63,7 +74,7 @@ test_scenario:
   dependencies: []
 """
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
 
@@ -103,8 +114,7 @@ test_scenario:
         """Test creating scenarios from templates."""
         # Create scenario from template
         scenario = self.scenario_orchestrator.create_scenario_from_template(
-            "system_failure_cascade",
-            "test_system_failure"
+            "system_failure_cascade", "test_system_failure"
         )
 
         self.assertEqual(scenario.name, "test_system_failure")
@@ -119,12 +129,12 @@ test_scenario:
             faults=[
                 {"name": "fault1", "type": "process_kill", "layer": "orchestration"},
                 {"name": "fault2", "type": "network_delay", "layer": "orchestration"},
-                {"name": "fault3", "type": "memory_oom", "layer": "worker"}
+                {"name": "fault3", "type": "memory_oom", "layer": "worker"},
             ],
             dependencies=[
                 {"fault_name": "fault1", "condition": "after"},
-                {"fault_name": "fault2", "condition": "on_success"}
-            ]
+                {"fault_name": "fault2", "condition": "on_success"},
+            ],
         )
 
         # Build execution graph
@@ -137,9 +147,7 @@ test_scenario:
 
     def test_scenario_execution_context(self):
         """Test scenario execution context."""
-        context = self.scenario_orchestrator.ScenarioExecutionContext(
-            scenario_name="test"
-        )
+        context = self.scenario_orchestrator.ScenarioExecutionContext(scenario_name="test")
 
         self.assertEqual(context.scenario_name, "test")
         self.assertEqual(len(context.completed), 0)
@@ -161,27 +169,16 @@ test_scenario:
     def test_cascade_modes(self):
         """Test different cascade modes."""
         # Test burst mode
-        burst_scenario = FaultScenarioConfig(
-            name="burst_test",
-            cascade_mode="burst"
-        )
+        burst_scenario = FaultScenarioConfig(name="burst_test", cascade_mode="burst")
         self.assertEqual(burst_scenario.cascade_mode, "burst")
 
         # Test linear mode
-        linear_scenario = FaultScenarioConfig(
-            name="linear_test",
-            cascade_mode="linear",
-            cascade_interval_seconds=5
-        )
+        linear_scenario = FaultScenarioConfig(name="linear_test", cascade_mode="linear", cascade_interval_seconds=5)
         self.assertEqual(linear_scenario.cascade_mode, "linear")
         self.assertEqual(linear_scenario.cascade_interval_seconds, 5)
 
         # Test tree mode
-        tree_scenario = FaultScenarioConfig(
-            name="tree_test",
-            cascade_mode="tree",
-            max_cascade_depth=3
-        )
+        tree_scenario = FaultScenarioConfig(name="tree_test", cascade_mode="tree", max_cascade_depth=3)
         self.assertEqual(tree_scenario.cascade_mode, "tree")
         self.assertEqual(tree_scenario.max_cascade_depth, 3)
 
@@ -190,7 +187,7 @@ test_scenario:
         deps = [
             {"fault_name": "f1", "condition": "after"},
             {"fault_name": "f2", "condition": "on_success"},
-            {"fault_name": "f3", "condition": "on_failure"}
+            {"fault_name": "f3", "condition": "on_failure"},
         ]
 
         for dep_data in deps:
@@ -201,9 +198,9 @@ test_scenario:
     def test_scenario_status(self):
         """Test getting scenario status."""
         # Create a mock active scenario
-        scenario = FaultScenarioConfig(name="status_test")
-        self.scenario_orchestrator.active_scenarios["status_test"] = \
+        self.scenario_orchestrator.active_scenarios["status_test"] = (
             self.scenario_orchestrator.ScenarioExecutionContext("status_test")
+        )
 
         status = self.scenario_orchestrator.get_scenario_status("status_test")
         self.assertIsNotNone(status)
@@ -218,13 +215,11 @@ test_scenario:
             name="save_test",
             description="Test save/load",
             cascade_mode="linear",
-            faults=[
-                {"name": "fault1", "type": "process_kill", "layer": "orchestration"}
-            ]
+            faults=[{"name": "fault1", "type": "process_kill", "layer": "orchestration"}],
         )
 
         # Save to file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             self.loader.save_scenario_to_yaml(scenario, f.name)
 
             # Load back
@@ -253,8 +248,8 @@ class TestAsyncScenarioExecution(unittest.TestCase):
             cascade_mode="burst",
             faults=[
                 {"name": "fault1", "type": "process_kill", "layer": "orchestration"},
-                {"name": "fault2", "type": "network_delay", "layer": "orchestration"}
-            ]
+                {"name": "fault2", "type": "network_delay", "layer": "orchestration"},
+            ],
         )
 
         # Execute scenario

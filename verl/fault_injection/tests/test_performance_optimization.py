@@ -1,38 +1,44 @@
+# Copyright 2026 Aoyang Fang Ltd. and/or its affiliates
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Tests for fault injection performance optimizations."""
 
 import asyncio
-import os
 import time
 import unittest
 from unittest.mock import Mock, patch
 
 import pytest
 
-from verl.fault_injection.performance import (
-    PerformanceConfig,
-    PerformanceMode,
-    LRUCache,
-    BatchProcessor,
-    PerformanceProfiler,
-    conditional_injection,
-    optimize_performance,
-    profile_method,
-    profile_async_method,
-    get_performance_config,
-    get_target_cache,
-    get_batch_processor,
-    get_profiler,
-)
-from verl.fault_injection.orchestrator_optimized import OptimizedFaultOrchestrator
 from verl.fault_injection.async_injectors import (
     AsyncBaseFaultInjector,
     AsyncBatchFaultInjector,
     AsyncCachedFaultInjector,
-    run_async_fault_injection,
-    run_batch_async_fault_injection,
 )
-from verl.fault_injection.performance_monitor import PerformanceMonitor, PerformanceBenchmark
-from verl.fault_injection.config import FaultInjectionConfig, FaultConfig, FaultType, FaultLayer
+from verl.fault_injection.config import FaultConfig, FaultInjectionConfig, FaultLayer, FaultType
+from verl.fault_injection.orchestrator_optimized import OptimizedFaultOrchestrator
+from verl.fault_injection.performance import (
+    BatchProcessor,
+    LRUCache,
+    PerformanceConfig,
+    PerformanceMode,
+    PerformanceProfiler,
+    conditional_injection,
+    profile_method,
+)
+from verl.fault_injection.performance_monitor import PerformanceBenchmark, PerformanceMonitor
 
 
 class TestPerformanceConfig(unittest.TestCase):
@@ -198,6 +204,7 @@ class TestDecorators(unittest.TestCase):
 
     def test_conditional_injection(self):
         """Test conditional injection decorator."""
+
         @conditional_injection(enabled=True)
         def test_func():
             return "executed"
@@ -214,6 +221,7 @@ class TestDecorators(unittest.TestCase):
 
     def test_profile_method_decorator(self):
         """Test method profiling decorator."""
+
         class TestClass:
             def __init__(self):
                 self._profiler = PerformanceProfiler()
@@ -251,7 +259,7 @@ class TestOptimizedOrchestrator(unittest.TestCase):
             ],
         )
 
-    @patch('verl.fault_injection.orchestrator_optimized.FaultInjectorRegistry')
+    @patch("verl.fault_injection.orchestrator_optimized.FaultInjectorRegistry")
     def test_orchestrator_initialization(self, mock_registry):
         """Test optimized orchestrator initialization."""
         # Mock injector creation
@@ -267,7 +275,7 @@ class TestOptimizedOrchestrator(unittest.TestCase):
         self.assertIsNotNone(orchestrator._batch_processor)
         self.assertIsNotNone(orchestrator._profiler)
 
-    @patch('verl.fault_injection.orchestrator_optimized.FaultInjectorRegistry')
+    @patch("verl.fault_injection.orchestrator_optimized.FaultInjectorRegistry")
     def test_cached_fault_injection(self, mock_registry):
         """Test cached fault injection."""
         # Mock injector
@@ -298,10 +306,12 @@ class TestAsyncInjectors(unittest.TestCase):
     @pytest.mark.asyncio
     async def test_async_base_injector(self):
         """Test async base fault injector."""
+
         class TestAsyncInjector(AsyncBaseFaultInjector):
             async def _inject_async(self, target_context=None):
                 await asyncio.sleep(0.01)
                 from verl.fault_injection.base import FaultResult
+
                 return FaultResult(
                     fault_id=self.fault_id,
                     status=FaultResult.Status.COMPLETED,
@@ -321,16 +331,20 @@ class TestAsyncInjectors(unittest.TestCase):
     @pytest.mark.asyncio
     async def test_batch_async_injection(self):
         """Test batch async fault injection."""
+
         class TestBatchInjector(AsyncBatchFaultInjector):
             async def _inject_batch_async(self, contexts):
                 results = []
                 for ctx in contexts:
                     from verl.fault_injection.base import FaultResult
-                    results.append(FaultResult(
-                        fault_id=self.fault_id,
-                        status=FaultResult.Status.COMPLETED,
-                        target_context=ctx,
-                    ))
+
+                    results.append(
+                        FaultResult(
+                            fault_id=self.fault_id,
+                            status=FaultResult.Status.COMPLETED,
+                            target_context=ctx,
+                        )
+                    )
                 return results
 
         config = Mock()
@@ -347,6 +361,7 @@ class TestAsyncInjectors(unittest.TestCase):
     @pytest.mark.asyncio
     async def test_cached_async_injector(self):
         """Test cached async fault injector."""
+
         class TestCachedInjector(AsyncCachedFaultInjector):
             def __init__(self, config):
                 super().__init__(config, cache_ttl=1)
@@ -355,6 +370,7 @@ class TestAsyncInjectors(unittest.TestCase):
             async def _inject_async(self, target_context=None):
                 self.call_count += 1
                 from verl.fault_injection.base import FaultResult
+
                 return FaultResult(
                     fault_id=self.fault_id,
                     status=FaultResult.Status.COMPLETED,
@@ -422,6 +438,7 @@ class TestPerformanceBenchmark(unittest.TestCase):
 
     def test_sync_injection_benchmark(self):
         """Test sync injection benchmark."""
+
         def mock_injector_factory():
             injector = Mock()
             result = Mock()
@@ -442,12 +459,14 @@ class TestPerformanceBenchmark(unittest.TestCase):
     @pytest.mark.asyncio
     async def test_async_injection_benchmark(self):
         """Test async injection benchmark."""
+
         def mock_injector_factory():
             from verl.fault_injection.async_injectors import AsyncBaseFaultInjector
 
             class MockAsyncInjector(AsyncBaseFaultInjector):
                 async def _inject_async(self, target_context=None):
                     from verl.fault_injection.base import FaultResult
+
                     return FaultResult(
                         fault_id="mock",
                         status=FaultResult.Status.COMPLETED,

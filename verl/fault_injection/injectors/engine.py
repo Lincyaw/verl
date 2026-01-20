@@ -1,10 +1,24 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Engine layer fault injectors for verl fault injection system."""
 
 import os
 import random
 import threading
 import time
-from typing import Any, Dict, Optional
 
 import torch
 import torch.distributed as dist
@@ -49,7 +63,7 @@ class EngineHangInjector(BaseFaultInjector):
     def inject(self, context: FaultContext) -> FaultResult:
         """Inject engine hang at specified point."""
         hang_point = self.config.hang_point or "forward"
-        hang_duration = getattr(self.config, 'hang_duration_seconds', 300.0)
+        hang_duration = getattr(self.config, "hang_duration_seconds", 300.0)
 
         start_time = time.time()
 
@@ -64,7 +78,7 @@ class EngineHangInjector(BaseFaultInjector):
             status=FaultStatus.COMPLETED,
             start_time=start_time,
             end_time=time.time(),
-            metadata={"hang_point": hang_point, "duration": hang_duration}
+            metadata={"hang_point": hang_point, "duration": hang_duration},
         )
 
     def recover(self, context: FaultContext) -> None:
@@ -88,12 +102,12 @@ class CheckpointCorruptionInjector(BaseFaultInjector):
 
         if not os.path.exists(checkpoint_path):
             # Create a dummy checkpoint file if it doesn't exist
-            with open(checkpoint_path, 'wb') as f:
+            with open(checkpoint_path, "wb") as f:
                 f.write(b"dummy checkpoint data")
 
         if corruption_type == "random_bytes":
             # Corrupt with random bytes
-            with open(checkpoint_path, 'r+b') as f:
+            with open(checkpoint_path, "r+b") as f:
                 # Corrupt 10% of the file with random data
                 f.seek(0, 2)
                 file_size = f.tell()
@@ -109,7 +123,7 @@ class CheckpointCorruptionInjector(BaseFaultInjector):
 
         elif corruption_type == "truncate":
             # Truncate the file
-            with open(checkpoint_path, 'r+b') as f:
+            with open(checkpoint_path, "r+b") as f:
                 f.truncate(random.randint(1, 100))
 
         elif corruption_type == "delete":
@@ -121,7 +135,7 @@ class CheckpointCorruptionInjector(BaseFaultInjector):
             status=FaultStatus.COMPLETED,
             start_time=start_time,
             end_time=time.time(),
-            metadata={"corruption_type": corruption_type, "checkpoint_path": checkpoint_path}
+            metadata={"corruption_type": corruption_type, "checkpoint_path": checkpoint_path},
         )
 
     def recover(self, context: FaultContext) -> None:
@@ -160,6 +174,7 @@ class NCCLFailureInjector(BaseFaultInjector):
             print("Simulating NCCL crash")
             # Access invalid memory to simulate crash
             import ctypes
+
             ctypes.string_at(0)  # This will cause a segfault
 
         return FaultResult(
@@ -167,7 +182,7 @@ class NCCLFailureInjector(BaseFaultInjector):
             status=FaultStatus.COMPLETED,
             start_time=start_time,
             end_time=time.time(),
-            metadata={"nccl_error_type": nccl_error_type, "timeout_ms": timeout_ms}
+            metadata={"nccl_error_type": nccl_error_type, "timeout_ms": timeout_ms},
         )
 
     def recover(self, context: FaultContext) -> None:
@@ -204,8 +219,7 @@ class DeviceMeshErrorInjector(BaseFaultInjector):
 
             if available_devices < required_devices:
                 raise RuntimeError(
-                    f"Not enough devices available. Required: {required_devices}, "
-                    f"Available: {available_devices}"
+                    f"Not enough devices available. Required: {required_devices}, Available: {available_devices}"
                 )
 
         return FaultResult(
@@ -213,7 +227,7 @@ class DeviceMeshErrorInjector(BaseFaultInjector):
             status=FaultStatus.COMPLETED,
             start_time=start_time,
             end_time=time.time(),
-            metadata={"mesh_error_type": mesh_error_type, "mesh_shape": mesh_shape}
+            metadata={"mesh_error_type": mesh_error_type, "mesh_shape": mesh_shape},
         )
 
     def recover(self, context: FaultContext) -> None:
@@ -251,7 +265,7 @@ class PrecisionErrorInjector(BaseFaultInjector):
 
         elif error_type == "nan":
             # Create NaN values
-            nan_tensor = torch.tensor([float('nan')], dtype=torch.float32)
+            torch.tensor([float("nan")], dtype=torch.float32)
             print(f"Creating NaN values in {precision_type}")
 
         return FaultResult(
@@ -259,7 +273,7 @@ class PrecisionErrorInjector(BaseFaultInjector):
             status=FaultStatus.COMPLETED,
             start_time=start_time,
             end_time=time.time(),
-            metadata={"precision_type": precision_type, "error_type": error_type}
+            metadata={"precision_type": precision_type, "error_type": error_type},
         )
 
     def recover(self, context: FaultContext) -> None:
@@ -285,8 +299,10 @@ class DeviceMapErrorInjector(BaseFaultInjector):
             # Try to use a device that doesn't exist
             print(f"Attempting to map to non-existent device: {target_device}")
             if target_device >= torch.cuda.device_count():
-                raise RuntimeError(f"CUDA error: invalid device ordinal. Requested device {target_device}, "
-                                   f"but only {torch.cuda.device_count()} devices available")
+                raise RuntimeError(
+                    f"CUDA error: invalid device ordinal. Requested device {target_device}, "
+                    f"but only {torch.cuda.device_count()} devices available"
+                )
 
         elif error_type == "device_busy":
             # Simulate device being busy
@@ -296,7 +312,7 @@ class DeviceMapErrorInjector(BaseFaultInjector):
 
         elif error_type == "peer_access":
             # Simulate peer access error
-            print(f"Simulating peer access error between devices")
+            print("Simulating peer access error between devices")
             # This would happen in multi-GPU setups
             raise RuntimeError("Peer access is not supported between these devices")
 
@@ -305,7 +321,7 @@ class DeviceMapErrorInjector(BaseFaultInjector):
             status=FaultStatus.COMPLETED,
             start_time=start_time,
             end_time=time.time(),
-            metadata={"error_type": error_type, "target_device": target_device}
+            metadata={"error_type": error_type, "target_device": target_device},
         )
 
     def recover(self, context: FaultContext) -> None:

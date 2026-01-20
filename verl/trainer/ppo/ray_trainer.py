@@ -799,6 +799,7 @@ class RayPPOTrainer:
         if self.fault_orchestrator is not None:
             try:
                 from verl.fault_injection import create_fault_injection_hooks
+
                 fault_hooks = create_fault_injection_hooks(self.fault_orchestrator)
 
                 # Hook worker initialization
@@ -1377,6 +1378,7 @@ class RayPPOTrainer:
         if self.fault_orchestrator is not None:
             try:
                 from verl.fault_injection import create_fault_injection_hooks
+
                 fault_hooks = create_fault_injection_hooks(self.fault_orchestrator)
                 print("Fault injection hooks initialized in RayPPOTrainer")
             except Exception as e:
@@ -1462,7 +1464,8 @@ class RayPPOTrainer:
                         # Hook rollout generation
                         if fault_hooks:
                             rollout_gen_func = fault_hooks.hook_rollout_generation(
-                                self.actor_rollout_wg.generate_sequences if not self.async_rollout_mode
+                                self.actor_rollout_wg.generate_sequences
+                                if not self.async_rollout_mode
                                 else self.async_rollout_manager.generate_sequences
                             )
                             gen_batch_output = rollout_gen_func(gen_batch_output)

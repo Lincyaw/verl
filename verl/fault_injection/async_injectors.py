@@ -1,9 +1,24 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Async fault injection support for performance optimization."""
 
 import asyncio
 import logging
 from abc import abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from .base import BaseFaultInjector, FaultContext, FaultResult
 
@@ -77,7 +92,7 @@ class AsyncBatchFaultInjector(AsyncBaseFaultInjector):
     def __init__(self, config: Any, batch_size: int = 10):
         super().__init__(config)
         self.batch_size = batch_size
-        self._pending_faults: list[Dict[str, Any]] = []
+        self._pending_faults: list[dict[str, Any]] = []
 
     async def execute_batch_async(self, contexts: list[Optional[FaultContext]]) -> list[FaultResult]:
         """Execute multiple fault injections in batch."""
@@ -85,7 +100,7 @@ class AsyncBatchFaultInjector(AsyncBaseFaultInjector):
 
         # Process in batches
         for i in range(0, len(contexts), self.batch_size):
-            batch = contexts[i:i + self.batch_size]
+            batch = contexts[i : i + self.batch_size]
             batch_results = await self._inject_batch_async(batch)
             results.extend(batch_results)
 
@@ -103,7 +118,7 @@ class AsyncCachedFaultInjector(AsyncBaseFaultInjector):
     def __init__(self, config: Any, cache_ttl: int = 300):
         super().__init__(config)
         self.cache_ttl = cache_ttl
-        self._result_cache: Dict[str, tuple[FaultResult, float]] = {}
+        self._result_cache: dict[str, tuple[FaultResult, float]] = {}
 
     async def execute_cached_async(self, target_context: Optional[FaultContext] = None) -> FaultResult:
         """Execute with result caching."""
@@ -125,11 +140,13 @@ class AsyncCachedFaultInjector(AsyncBaseFaultInjector):
         """Generate cache key for the fault and context."""
         key_parts = [self.fault_id]
         if target_context:
-            key_parts.extend([
-                str(target_context.worker_id),
-                str(target_context.rank),
-                str(target_context.layer),
-            ])
+            key_parts.extend(
+                [
+                    str(target_context.worker_id),
+                    str(target_context.rank),
+                    str(target_context.layer),
+                ]
+            )
         return ":".join(key_parts)
 
     async def clear_cache_async(self) -> None:
@@ -208,20 +225,24 @@ class AsyncResourceFaultInjector(AsyncBatchFaultInjector):
         # Process results
         for i, allocation in enumerate(allocations):
             if isinstance(allocation, Exception):
-                results.append(FaultResult(
-                    fault_id=self.fault_id,
-                    status=FaultResult.Status.FAILED,
-                    error=str(allocation),
-                    target_context=contexts[i],
-                ))
+                results.append(
+                    FaultResult(
+                        fault_id=self.fault_id,
+                        status=FaultResult.Status.FAILED,
+                        error=str(allocation),
+                        target_context=contexts[i],
+                    )
+                )
             else:
-                results.append(FaultResult(
-                    fault_id=self.fault_id,
-                    status=FaultResult.Status.COMPLETED,
-                    message="Resource allocated for fault injection",
-                    details={"allocation": allocation},
-                    target_context=contexts[i],
-                ))
+                results.append(
+                    FaultResult(
+                        fault_id=self.fault_id,
+                        status=FaultResult.Status.COMPLETED,
+                        message="Resource allocated for fault injection",
+                        details={"allocation": allocation},
+                        target_context=contexts[i],
+                    )
+                )
 
         return results
 
@@ -261,10 +282,7 @@ async def run_async_fault_injection(
 ) -> FaultResult:
     """Run async fault injection with timeout."""
     try:
-        return await asyncio.wait_for(
-            injector.execute_async(target_context),
-            timeout=timeout
-        )
+        return await asyncio.wait_for(injector.execute_async(target_context), timeout=timeout)
     except asyncio.TimeoutError:
         logger.error(f"Async fault injection timed out: {injector.fault_id}")
         return FaultResult(
@@ -289,7 +307,7 @@ async def run_batch_async_fault_injection(
     # Create tasks
     tasks = [
         asyncio.create_task(run_with_semaphore(injector, context))
-        for injector, context in zip(injectors, contexts)
+        for injector, context in zip(injectors, contexts, strict=False)
     ]
 
     # Wait for all tasks
@@ -299,11 +317,13 @@ async def run_batch_async_fault_injection(
     processed_results = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            processed_results.append(FaultResult(
-                fault_id=injectors[i].fault_id,
-                status=FaultResult.Status.FAILED,
-                error=str(result),
-            ))
+            processed_results.append(
+                FaultResult(
+                    fault_id=injectors[i].fault_id,
+                    status=FaultResult.Status.FAILED,
+                    error=str(result),
+                )
+            )
         else:
             processed_results.append(result)
 

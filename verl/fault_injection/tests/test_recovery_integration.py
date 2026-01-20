@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Unit tests for recovery integration."""
 
 import time
@@ -9,8 +24,8 @@ from verl.fault_injection.config import FaultInjectionConfig, RecoveryConfig, Re
 from verl.fault_injection.orchestrator import FaultOrchestrator
 from verl.fault_injection.recovery.base import RecoveryMode
 from verl.fault_injection.recovery.integration import (
-    create_recovery_integration,
     RecoveryOrchestratorIntegration,
+    create_recovery_integration,
 )
 
 
@@ -175,12 +190,12 @@ class TestRecoveryIntegration(unittest.TestCase):
     def test_enable_preventive_recovery(self):
         """Test enabling preventive recovery."""
         # Enable for specific layer
-        with patch.object(self.integration.recovery_manager, 'enable_preventive_recovery_for_layer') as mock_method:
+        with patch.object(self.integration.recovery_manager, "enable_preventive_recovery_for_layer") as mock_method:
             self.integration.enable_preventive_recovery("worker")
             mock_method.assert_called_once()
 
         # Enable for all layers
-        with patch.object(self.integration.recovery_manager, 'enable_preventive_recovery_for_layer') as mock_method:
+        with patch.object(self.integration.recovery_manager, "enable_preventive_recovery_for_layer") as mock_method:
             self.integration.enable_preventive_recovery()
             # Should be called for each layer
             self.assertEqual(mock_method.call_count, 5)  # Number of fault layers
@@ -235,7 +250,7 @@ class TestRecoveryIntegration(unittest.TestCase):
         )
 
         # Simulate fault injection completion
-        recovered_result = self.integration.on_fault_completed(fault_result, fault_context)
+        self.integration.on_fault_completed(fault_result, fault_context)
 
         # Verify recovery was triggered
         self.integration.recovery_manager.handle_fault.assert_called_once()

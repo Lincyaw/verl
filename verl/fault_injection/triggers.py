@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Trigger-based fault injection system."""
 
 import asyncio
@@ -6,12 +21,12 @@ import re
 import threading
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional
 
-from .config import FaultConfig, FaultTrigger, FaultTriggerConfig
-
+from .config import FaultTrigger, FaultTriggerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +48,7 @@ class TriggerEvent:
 
     event_type: TriggerEventType
     source: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     timestamp: float = field(default_factory=time.time)
 
 
@@ -47,7 +62,7 @@ class BaseTrigger(ABC):
         self.last_trigger_time = 0.0
 
     @abstractmethod
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Check if trigger condition is met."""
         pass
 
@@ -60,7 +75,7 @@ class BaseTrigger(ABC):
 class ImmediateTrigger(BaseTrigger):
     """Trigger that fires immediately."""
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Always trigger immediately."""
         return self.enabled
 
@@ -72,7 +87,7 @@ class TimedTrigger(BaseTrigger):
         super().__init__(config)
         self.start_time = time.time()
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Trigger after specified delay."""
         if not self.enabled:
             return False
@@ -94,7 +109,7 @@ class CountTrigger(BaseTrigger):
         """Increment operation counter."""
         self.operation_count += 1
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Trigger after N operations."""
         if not self.enabled:
             return False
@@ -108,9 +123,9 @@ class ProbabilisticTrigger(BaseTrigger):
 
     def __init__(self, config: FaultTriggerConfig):
         super().__init__(config)
-        self.rng = __import__('random').Random()
+        self.rng = __import__("random").Random()
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Trigger with specified probability."""
         if not self.enabled:
             return False
@@ -126,7 +141,7 @@ class ConditionalTrigger(BaseTrigger):
         super().__init__(config)
         self.condition_func = self._parse_condition(config.condition or "")
 
-    def _parse_condition(self, condition: str) -> Callable[[Dict[str, Any]], bool]:
+    def _parse_condition(self, condition: str) -> Callable[[dict[str, Any]], bool]:
         """Parse condition string into a function."""
         # Simple condition parser - in real implementation would be more sophisticated
         if not condition:
@@ -138,7 +153,7 @@ class ConditionalTrigger(BaseTrigger):
             metric, operator, value = match.groups()
             value = float(value)
 
-            def condition_func(context: Dict[str, Any]) -> bool:
+            def condition_func(context: dict[str, Any]) -> bool:
                 metric_value = context.get("metrics", {}).get(metric)
                 if metric_value is None:
                     return False
@@ -163,7 +178,7 @@ class ConditionalTrigger(BaseTrigger):
         # Return a function that always returns False for unknown conditions
         return lambda ctx: False
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Trigger when condition is met."""
         if not self.enabled:
             return False
@@ -180,7 +195,7 @@ class MetricThresholdTrigger(BaseTrigger):
         self.threshold = threshold
         self.comparison = config.condition or ">"
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Trigger when metric crosses threshold."""
         if not self.enabled:
             return False
@@ -213,29 +228,21 @@ class LogPatternTrigger(BaseTrigger):
         self.match_count = 0
         self.log_monitor = None
 
-    def start_monitoring(self, log_source: Union[str, Callable[[], List[str]]]) -> None:
+    def start_monitoring(self, log_source: str | Callable[[], list[str]]) -> None:
         """Start monitoring logs for pattern matches."""
         if isinstance(log_source, str):
             # Monitor file
-            self.log_monitor = threading.Thread(
-                target=self._monitor_log_file,
-                args=(log_source,),
-                daemon=True
-            )
+            self.log_monitor = threading.Thread(target=self._monitor_log_file, args=(log_source,), daemon=True)
             self.log_monitor.start()
         else:
             # Monitor function
-            self.log_monitor = threading.Thread(
-                target=self._monitor_log_function,
-                args=(log_source,),
-                daemon=True
-            )
+            self.log_monitor = threading.Thread(target=self._monitor_log_function, args=(log_source,), daemon=True)
             self.log_monitor.start()
 
     def _monitor_log_file(self, log_file: str) -> None:
         """Monitor log file for pattern matches."""
         try:
-            with open(log_file, 'r') as f:
+            with open(log_file) as f:
                 # Start from end of file
                 f.seek(0, 2)
 
@@ -251,7 +258,7 @@ class LogPatternTrigger(BaseTrigger):
         except Exception as e:
             logger.error(f"Error monitoring log file: {e}")
 
-    def _monitor_log_function(self, log_func: Callable[[], List[str]]) -> None:
+    def _monitor_log_function(self, log_func: Callable[[], list[str]]) -> None:
         """Monitor logs from function."""
         last_count = 0
 
@@ -271,7 +278,7 @@ class LogPatternTrigger(BaseTrigger):
                 logger.error(f"Error monitoring logs: {e}")
                 time.sleep(1)
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Trigger when pattern is matched enough times."""
         if not self.enabled:
             return False
@@ -285,9 +292,9 @@ class TimeScheduleTrigger(BaseTrigger):
     def __init__(self, config: FaultTriggerConfig, schedule: str):
         super().__init__(config)
         self.schedule = schedule
-        self.cron = __import__('croniter').croniter(schedule) if 'croniter' in __import__('sys').modules else None
+        self.cron = __import__("croniter").croniter(schedule) if "croniter" in __import__("sys").modules else None
 
-    async def check_trigger(self, context: Dict[str, Any]) -> bool:
+    async def check_trigger(self, context: dict[str, Any]) -> bool:
         """Trigger based on cron schedule."""
         if not self.enabled or not self.cron:
             return False
@@ -301,9 +308,9 @@ class TriggerManager:
     """Manages multiple fault triggers."""
 
     def __init__(self):
-        self.triggers: Dict[str, BaseTrigger] = {}
-        self.trigger_history: List[TriggerEvent] = []
-        self.event_handlers: Dict[TriggerEventType, List[Callable]] = defaultdict(list)
+        self.triggers: dict[str, BaseTrigger] = {}
+        self.trigger_history: list[TriggerEvent] = []
+        self.event_handlers: dict[TriggerEventType, list[Callable]] = defaultdict(list)
         self.monitoring = False
         self.monitor_thread = None
 
@@ -342,7 +349,7 @@ class TriggerManager:
             except Exception as e:
                 logger.error(f"Error in event handler: {e}")
 
-    async def check_triggers(self, context: Dict[str, Any]) -> List[str]:
+    async def check_triggers(self, context: dict[str, Any]) -> list[str]:
         """Check all triggers and return list of triggered faults."""
         triggered = []
 
@@ -355,7 +362,7 @@ class TriggerManager:
                     event = TriggerEvent(
                         event_type=TriggerEventType.MANUAL,
                         source="trigger_manager",
-                        data={"fault_name": fault_name, "trigger_type": str(type(trigger))}
+                        data={"fault_name": fault_name, "trigger_type": str(type(trigger))},
                     )
                     self.emit_event(event)
             except Exception as e:
@@ -363,13 +370,11 @@ class TriggerManager:
 
         return triggered
 
-    def start_monitoring(self, context_provider: Optional[Callable[[], Dict[str, Any]]] = None) -> None:
+    def start_monitoring(self, context_provider: Optional[Callable[[], dict[str, Any]]] = None) -> None:
         """Start continuous trigger monitoring."""
         self.monitoring = True
         self.monitor_thread = threading.Thread(
-            target=self._monitor_loop,
-            args=(context_provider or (lambda: {}),),
-            daemon=True
+            target=self._monitor_loop, args=(context_provider or (lambda: {}),), daemon=True
         )
         self.monitor_thread.start()
 
@@ -379,7 +384,7 @@ class TriggerManager:
         if self.monitor_thread:
             self.monitor_thread.join(timeout=5.0)
 
-    def _monitor_loop(self, context_provider: Callable[[], Dict[str, Any]]) -> None:
+    def _monitor_loop(self, context_provider: Callable[[], dict[str, Any]]) -> None:
         """Main monitoring loop."""
         logger.info("Starting trigger monitoring loop")
 
@@ -392,7 +397,7 @@ class TriggerManager:
                 logger.error(f"Error in trigger monitoring loop: {e}")
                 time.sleep(5)  # Wait longer on error
 
-    def get_trigger_history(self, fault_name: Optional[str] = None) -> List[TriggerEvent]:
+    def get_trigger_history(self, fault_name: Optional[str] = None) -> list[TriggerEvent]:
         """Get trigger history."""
         if fault_name:
             return [e for e in self.trigger_history if e.data.get("fault_name") == fault_name]
@@ -425,7 +430,7 @@ class TriggerBasedFaultInjector:
         """Disable fault injection."""
         self.injection_enabled = False
 
-    async def check_and_inject(self, context: Dict[str, Any]) -> List[str]:
+    async def check_and_inject(self, context: dict[str, Any]) -> list[str]:
         """Check triggers and inject faults."""
         if not self.injection_enabled:
             return []

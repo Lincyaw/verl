@@ -1,10 +1,26 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Ray integration for fault injection in verl."""
 
-import ray
 import logging
 import os
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+from typing import Any, Optional
+
+import ray
 
 from ..base import FaultContext, FaultLayer
 from ..orchestrator import FaultOrchestrator
@@ -15,6 +31,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RayWorkerInfo:
     """Information about a Ray worker."""
+
     worker_id: str
     node_id: str
     node_ip: str
@@ -28,7 +45,7 @@ class RayFaultInjectionManager:
 
     def __init__(self, orchestrator: FaultOrchestrator):
         self.orchestrator = orchestrator
-        self._worker_info: Dict[str, RayWorkerInfo] = {}
+        self._worker_info: dict[str, RayWorkerInfo] = {}
         self._registered = False
 
     def register_with_ray(self) -> None:
@@ -44,7 +61,7 @@ class RayFaultInjectionManager:
         except Exception as e:
             logger.error(f"Failed to register Ray hooks: {e}")
 
-    def _collect_worker_info(self, worker_info: Optional[Dict] = None) -> None:
+    def _collect_worker_info(self, worker_info: Optional[dict] = None) -> None:
         """Collect information about Ray workers."""
         try:
             worker = ray.worker.global_worker
@@ -55,7 +72,7 @@ class RayFaultInjectionManager:
                 node_id=worker.current_node_id,
                 node_ip=node_info,
                 pid=os.getpid(),
-                actor_id=getattr(worker, 'actor_id', None)
+                actor_id=getattr(worker, "actor_id", None),
             )
 
             # Determine process type from environment or actor class
@@ -64,7 +81,7 @@ class RayFaultInjectionManager:
             self._worker_info[info.worker_id] = info
 
             # Update orchestrator with new target
-            context = self._create_fault_context(info)
+            self._create_fault_context(info)
             self._update_orchestrator_targets()
 
         except Exception as e:
@@ -73,27 +90,27 @@ class RayFaultInjectionManager:
     def _determine_process_type(self) -> Optional[str]:
         """Determine the type of process (actor, critic, rollout, etc)."""
         # Check environment variables
-        process_type = os.environ.get('VERL_PROCESS_TYPE')
+        process_type = os.environ.get("VERL_PROCESS_TYPE")
         if process_type:
             return process_type
 
         # Check actor class name
         try:
             worker = ray.worker.global_worker
-            if hasattr(worker, 'actor_class'):
+            if hasattr(worker, "actor_class"):
                 class_name = worker.actor_class.__name__
-                if 'Actor' in class_name:
-                    return 'actor'
-                elif 'Critic' in class_name:
-                    return 'critic'
-                elif 'Reward' in class_name:
-                    return 'reward'
-                elif 'Rollout' in class_name:
-                    return 'rollout'
-        except:
+                if "Actor" in class_name:
+                    return "actor"
+                elif "Critic" in class_name:
+                    return "critic"
+                elif "Reward" in class_name:
+                    return "reward"
+                elif "Rollout" in class_name:
+                    return "rollout"
+        except Exception:
             pass
 
-        return 'unknown'
+        return "unknown"
 
     def _create_fault_context(self, worker_info: RayWorkerInfo) -> FaultContext:
         """Create fault context from worker info."""
@@ -106,11 +123,7 @@ class RayFaultInjectionManager:
             host=worker_info.node_ip,
             process_type=worker_info.process_type,
             layer=layer,
-            metadata={
-                'pid': worker_info.pid,
-                'node_id': worker_info.node_id,
-                'actor_id': worker_info.actor_id
-            }
+            metadata={"pid": worker_info.pid, "node_id": worker_info.node_id, "actor_id": worker_info.actor_id},
         )
 
     def _determine_layer(self, process_type: Optional[str]) -> FaultLayer:
@@ -118,9 +131,9 @@ class RayFaultInjectionManager:
         if not process_type:
             return FaultLayer.WORKER
 
-        if process_type in ['actor', 'critic']:
+        if process_type in ["actor", "critic"]:
             return FaultLayer.WORKER
-        elif process_type == 'rollout':
+        elif process_type == "rollout":
             return FaultLayer.INFERENCE
         else:
             return FaultLayer.WORKER
@@ -128,7 +141,7 @@ class RayFaultInjectionManager:
     def _get_rank_from_worker(self, worker_info: RayWorkerInfo) -> Optional[int]:
         """Get rank from worker info."""
         # Try to get rank from environment
-        rank = os.environ.get('RANK')
+        rank = os.environ.get("RANK")
         if rank:
             try:
                 return int(rank)
@@ -141,7 +154,7 @@ class RayFaultInjectionManager:
             if worker_info.actor_id:
                 # Extract rank from actor ID if possible
                 return hash(worker_info.actor_id) % 1000
-        except:
+        except Exception:
             pass
 
         return None
@@ -184,7 +197,7 @@ class RayFaultInjectionManager:
         logger.error(f"No worker found for rank {rank}")
         return False
 
-    def inject_fault_on_process_type(self, process_type: str, fault_id: str) -> List[bool]:
+    def inject_fault_on_process_type(self, process_type: str, fault_id: str) -> list[bool]:
         """Inject a fault on all workers of a specific process type."""
         results = []
         for worker_info in self._worker_info.values():
@@ -197,32 +210,29 @@ class RayFaultInjectionManager:
 
         return results
 
-    def get_worker_summary(self) -> Dict[str, Any]:
+    def get_worker_summary(self) -> dict[str, Any]:
         """Get summary of all workers."""
-        summary = {
-            'total_workers': len(self._worker_info),
-            'workers_by_type': {},
-            'workers_by_host': {},
-            'workers': []
-        }
+        summary = {"total_workers": len(self._worker_info), "workers_by_type": {}, "workers_by_host": {}, "workers": []}
 
         for info in self._worker_info.values():
             # Count by type
-            ptype = info.process_type or 'unknown'
-            summary['workers_by_type'][ptype] = summary['workers_by_type'].get(ptype, 0) + 1
+            ptype = info.process_type or "unknown"
+            summary["workers_by_type"][ptype] = summary["workers_by_type"].get(ptype, 0) + 1
 
             # Count by host
             host = info.node_ip
-            summary['workers_by_host'][host] = summary['workers_by_host'].get(host, 0) + 1
+            summary["workers_by_host"][host] = summary["workers_by_host"].get(host, 0) + 1
 
             # Add worker details
-            summary['workers'].append({
-                'worker_id': info.worker_id,
-                'process_type': ptype,
-                'host': host,
-                'pid': info.pid,
-                'rank': self._get_rank_from_worker(info)
-            })
+            summary["workers"].append(
+                {
+                    "worker_id": info.worker_id,
+                    "process_type": ptype,
+                    "host": host,
+                    "pid": info.pid,
+                    "rank": self._get_rank_from_worker(info),
+                }
+            )
 
         return summary
 

@@ -1,17 +1,31 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 #!/usr/bin/env python3
 """Demonstration of the fault injection monitoring system."""
 
 import logging
 import time
-from datetime import datetime
 
-from verl.fault_injection import FaultOrchestrator, FaultInjectionConfig
+from verl.fault_injection import FaultInjectionConfig, FaultOrchestrator
 from verl.fault_injection.config import (
-    UIFaultConfig,
     FaultLayer,
-    FaultType,
     FaultTrigger,
+    FaultType,
     MonitoringConfig,
+    UIFaultConfig,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -39,9 +53,7 @@ def create_demo_config():
             alerts={
                 "enabled": True,
                 "rules": [],  # Use default rules
-                "notification_channels": [
-                    {"type": "console", "enabled": True, "min_severity": "info"}
-                ],
+                "notification_channels": [{"type": "console", "enabled": True, "min_severity": "info"}],
             },
             impact_analysis={
                 "enabled": True,
@@ -117,7 +129,7 @@ def main():
 
         # Keep running to show dashboard
         logger.info("Demo running. Press Ctrl+C to stop.")
-        logger.info(f"View dashboard at: http://localhost:8080")
+        logger.info("View dashboard at: http://localhost:8080")
 
         while True:
             time.sleep(1)

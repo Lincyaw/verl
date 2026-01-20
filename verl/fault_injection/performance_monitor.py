@@ -1,12 +1,26 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Performance monitoring and benchmarking for fault injection system."""
 
-import asyncio
 import logging
 import statistics
 import time
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from typing import Any, Callable, Deque, Dict, List, Optional
+from collections import deque
+from dataclasses import dataclass
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PerformanceSnapshot:
     """Performance metrics snapshot."""
+
     timestamp: float
     injection_count: int
     avg_latency_ms: float
@@ -29,6 +44,7 @@ class PerformanceSnapshot:
 @dataclass
 class BenchmarkResult:
     """Benchmark execution result."""
+
     name: str
     duration_seconds: float
     total_operations: int
@@ -36,7 +52,7 @@ class BenchmarkResult:
     avg_latency_ms: float
     min_latency_ms: float
     max_latency_ms: float
-    latency_percentiles: Dict[str, float]
+    latency_percentiles: dict[str, float]
     errors: int
 
 
@@ -45,11 +61,11 @@ class PerformanceMonitor:
 
     def __init__(self, window_size: int = 1000):
         self.window_size = window_size
-        self._injection_latencies: Deque[float] = deque(maxlen=window_size)
+        self._injection_latencies: deque[float] = deque(maxlen=window_size)
         self._cache_hits = 0
         self._cache_misses = 0
-        self._batch_sizes: Deque[int] = deque(maxlen=window_size)
-        self._memory_snapshots: Deque[float] = deque(maxlen=100)
+        self._batch_sizes: deque[int] = deque(maxlen=window_size)
+        self._memory_snapshots: deque[float] = deque(maxlen=100)
         self._start_time = time.time()
         self._injection_count = 0
         self._error_count = 0
@@ -137,7 +153,7 @@ class PerformanceBenchmark:
     """Benchmark fault injection performance."""
 
     def __init__(self):
-        self.results: List[BenchmarkResult] = []
+        self.results: list[BenchmarkResult] = []
 
     async def benchmark_async_injection(
         self,
@@ -148,7 +164,7 @@ class PerformanceBenchmark:
         """Benchmark async fault injection performance."""
         from ..async_injectors import run_batch_async_fault_injection
 
-        latencies: List[float] = []
+        latencies: list[float] = []
         errors = 0
         start_time = time.time()
 
@@ -158,8 +174,8 @@ class PerformanceBenchmark:
 
         # Run benchmark
         for i in range(0, num_operations, max_concurrent):
-            batch_injectors = injectors[i:i + max_concurrent]
-            batch_contexts = contexts[i:i + max_concurrent]
+            batch_injectors = injectors[i : i + max_concurrent]
+            batch_contexts = contexts[i : i + max_concurrent]
 
             batch_start = time.time()
             results = await run_batch_async_fault_injection(
@@ -202,7 +218,7 @@ class PerformanceBenchmark:
         num_operations: int = 1000,
     ) -> BenchmarkResult:
         """Benchmark sync fault injection performance."""
-        latencies: List[float] = []
+        latencies: list[float] = []
         errors = 0
         start_time = time.time()
 
@@ -247,7 +263,7 @@ class PerformanceBenchmark:
     ) -> BenchmarkResult:
         """Benchmark cache performance."""
         cache = cache_factory()
-        latencies: List[float] = []
+        latencies: list[float] = []
         errors = 0
         start_time = time.time()
 
@@ -287,7 +303,7 @@ class PerformanceBenchmark:
         self.results.append(result)
         return result
 
-    def _calculate_percentiles(self, values: List[float]) -> Dict[str, float]:
+    def _calculate_percentiles(self, values: list[float]) -> dict[str, float]:
         """Calculate latency percentiles."""
         if not values:
             return {}
@@ -304,7 +320,7 @@ class PerformanceBenchmark:
 
         return percentiles
 
-    def compare_results(self) -> Dict[str, Any]:
+    def compare_results(self) -> dict[str, Any]:
         """Compare all benchmark results."""
         if not self.results:
             return {}

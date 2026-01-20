@@ -1,13 +1,26 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Network fault injectors."""
 
-import time
 import subprocess
-import socket
+import time
 from typing import Optional
 
-from ..base import BaseFaultInjector, FaultContext, FaultResult, FaultStatus
-from ..config import NetworkFaultConfig, FaultType
-from ..base import FaultInjectorRegistry
+from ..base import BaseFaultInjector, FaultContext, FaultInjectorRegistry, FaultResult, FaultStatus
+from ..config import FaultType, NetworkFaultConfig
 
 
 @FaultInjectorRegistry.register(FaultType.NETWORK_DELAY)
@@ -28,7 +41,7 @@ class NetworkDelayInjector(BaseFaultInjector):
 
         try:
             # Check if tc is available
-            result = subprocess.run(['which', 'tc'], capture_output=True, text=True)
+            result = subprocess.run(["which", "tc"], capture_output=True, text=True)
             if result.returncode != 0:
                 raise Exception("tc command not found. Network faults require tc (traffic control)")
 
@@ -41,13 +54,10 @@ class NetworkDelayInjector(BaseFaultInjector):
             self._save_tc_rules(interface)
 
             # Add delay rule
-            cmd = [
-                'tc', 'qdisc', 'add', 'dev', interface, 'root', 'netem',
-                'delay', f'{delay_ms}ms'
-            ]
+            cmd = ["tc", "qdisc", "add", "dev", interface, "root", "netem", "delay", f"{delay_ms}ms"]
 
             if self.config.loss_rate > 0:
-                cmd.extend(['loss', f'{self.config.loss_rate * 100}%'])
+                cmd.extend(["loss", f"{self.config.loss_rate * 100}%"])
 
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
@@ -60,11 +70,7 @@ class NetworkDelayInjector(BaseFaultInjector):
                 status=FaultStatus.COMPLETED,
                 start_time=time.time(),
                 end_time=time.time(),
-                metadata={
-                    "interface": interface,
-                    "delay_ms": delay_ms,
-                    "loss_rate": self.config.loss_rate
-                }
+                metadata={"interface": interface, "delay_ms": delay_ms, "loss_rate": self.config.loss_rate},
             )
 
         except Exception as e:
@@ -75,7 +81,7 @@ class NetworkDelayInjector(BaseFaultInjector):
                 start_time=time.time(),
                 end_time=time.time(),
                 error=e,
-                metadata={"delay_ms": delay_ms}
+                metadata={"delay_ms": delay_ms},
             )
 
     def recover(self, context: FaultContext) -> None:
@@ -86,8 +92,7 @@ class NetworkDelayInjector(BaseFaultInjector):
             interface = self._get_network_interface()
             if interface and self._original_tc_rules:
                 # Remove our added rules
-                subprocess.run(['tc', 'qdisc', 'del', 'dev', interface, 'root'],
-                               capture_output=True)
+                subprocess.run(["tc", "qdisc", "del", "dev", interface, "root"], capture_output=True)
 
                 # Restore original rules
                 self._restore_tc_rules(interface)
@@ -101,17 +106,16 @@ class NetworkDelayInjector(BaseFaultInjector):
         """Get the primary network interface."""
         try:
             # Try to get the default route interface
-            result = subprocess.run(['ip', 'route', 'show', 'default'],
-                                  capture_output=True, text=True)
+            result = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True)
             if result.returncode == 0:
                 parts = result.stdout.split()
-                if 'dev' in parts:
-                    idx = parts.index('dev')
+                if "dev" in parts:
+                    idx = parts.index("dev")
                     if idx + 1 < len(parts):
                         return parts[idx + 1]
 
             # Fallback to common interface names
-            for iface in ['eth0', 'ens3', 'enp0s3']:
+            for iface in ["eth0", "ens3", "enp0s3"]:
                 if self._interface_exists(iface):
                     return iface
 
@@ -123,19 +127,18 @@ class NetworkDelayInjector(BaseFaultInjector):
     def _interface_exists(self, interface: str) -> bool:
         """Check if network interface exists."""
         try:
-            with open(f'/sys/class/net/{interface}/operstate', 'r') as f:
+            with open(f"/sys/class/net/{interface}/operstate"):
                 return True
-        except:
+        except Exception:
             return False
 
     def _save_tc_rules(self, interface: str) -> None:
         """Save current tc rules."""
         try:
-            result = subprocess.run(['tc', 'qdisc', 'show', 'dev', interface],
-                                  capture_output=True, text=True)
+            result = subprocess.run(["tc", "qdisc", "show", "dev", interface], capture_output=True, text=True)
             if result.returncode == 0:
-                self._original_tc_rules = result.stdout.strip().split('\n')
-        except:
+                self._original_tc_rules = result.stdout.strip().split("\n")
+        except Exception:
             pass
 
     def _restore_tc_rules(self, interface: str) -> None:
@@ -147,6 +150,7 @@ class NetworkDelayInjector(BaseFaultInjector):
     def _get_logger(self):
         """Get logger instance."""
         import logging
+
         return logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
 
@@ -179,7 +183,7 @@ class NetworkPartitionInjector(BaseFaultInjector):
                 status=FaultStatus.COMPLETED,
                 start_time=time.time(),
                 end_time=time.time(),
-                metadata={"blocked_ports": list(self._blocked_ports)}
+                metadata={"blocked_ports": list(self._blocked_ports)},
             )
 
         except Exception as e:
@@ -190,7 +194,7 @@ class NetworkPartitionInjector(BaseFaultInjector):
                 start_time=time.time(),
                 end_time=time.time(),
                 error=e,
-                metadata={"target_ports": target_ports}
+                metadata={"target_ports": target_ports},
             )
 
     def recover(self, context: FaultContext) -> None:
@@ -211,32 +215,25 @@ class NetworkPartitionInjector(BaseFaultInjector):
     def _block_port(self, port: int) -> None:
         """Block a port using iptables."""
         # Block incoming
-        subprocess.run([
-            'iptables', '-A', 'INPUT', '-p', 'tcp', '--dport', str(port),
-            '-j', 'DROP'
-        ], check=True)
+        subprocess.run(["iptables", "-A", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"], check=True)
 
         # Block outgoing
-        subprocess.run([
-            'iptables', '-A', 'OUTPUT', '-p', 'tcp', '--sport', str(port),
-            '-j', 'DROP'
-        ], check=True)
+        subprocess.run(["iptables", "-A", "OUTPUT", "-p", "tcp", "--sport", str(port), "-j", "DROP"], check=True)
 
     def _unblock_port(self, port: int) -> None:
         """Unblock a port."""
         # Remove incoming block
-        subprocess.run([
-            'iptables', '-D', 'INPUT', '-p', 'tcp', '--dport', str(port),
-            '-j', 'DROP'
-        ], capture_output=True)
+        subprocess.run(
+            ["iptables", "-D", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"], capture_output=True
+        )
 
         # Remove outgoing block
-        subprocess.run([
-            'iptables', '-D', 'OUTPUT', '-p', 'tcp', '--sport', str(port),
-            '-j', 'DROP'
-        ], capture_output=True)
+        subprocess.run(
+            ["iptables", "-D", "OUTPUT", "-p", "tcp", "--sport", str(port), "-j", "DROP"], capture_output=True
+        )
 
     def _get_logger(self):
         """Get logger instance."""
         import logging
+
         return logging.getLogger(f"{__name__}.{self.__class__.__name__}")

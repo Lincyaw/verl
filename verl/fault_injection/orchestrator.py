@@ -1,12 +1,27 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Fault injection orchestrator for managing faults across the system."""
 
 import logging
 import threading
 import time
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 from .base import (
     BaseFaultInjector,
@@ -14,12 +29,11 @@ from .base import (
     FaultInjectorRegistry,
     FaultResult,
     FaultStatus,
-    FaultTargetConfig,
     create_target_selector,
 )
 from .config import FaultConfig, FaultInjectionConfig, FaultLayer
-from .recovery.integration import create_recovery_integration, RecoveryOrchestratorIntegration
 from .monitoring.integration import MonitoringIntegration
+from .recovery.integration import RecoveryOrchestratorIntegration, create_recovery_integration
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +47,8 @@ class FaultOrchestratorMetrics:
     completed_faults: int = 0
     failed_faults: int = 0
     recovered_faults: int = 0
-    injection_duration: Dict[str, float] = field(default_factory=dict)
-    layer_stats: Dict[FaultLayer, int] = field(default_factory=lambda: defaultdict(int))
+    injection_duration: dict[str, float] = field(default_factory=dict)
+    layer_stats: dict[FaultLayer, int] = field(default_factory=lambda: defaultdict(int))
 
 
 class FaultOrchestrator:
@@ -42,9 +56,9 @@ class FaultOrchestrator:
 
     def __init__(self, config: FaultInjectionConfig):
         self.config = config
-        self._injectors: Dict[str, BaseFaultInjector] = {}
-        self._active_faults: Dict[str, BaseFaultInjector] = {}
-        self._fault_history: List[FaultResult] = []
+        self._injectors: dict[str, BaseFaultInjector] = {}
+        self._active_faults: dict[str, BaseFaultInjector] = {}
+        self._fault_history: list[FaultResult] = []
         self._metrics = FaultOrchestratorMetrics()
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(max_workers=config.max_concurrent_faults)
@@ -58,8 +72,8 @@ class FaultOrchestrator:
 
         # Initialize monitoring integration
         self._monitoring_integration: Optional[MonitoringIntegration] = None
-        self._available_targets: List[FaultContext] = []
-        self._target_update_callbacks: List[callable] = []
+        self._available_targets: list[FaultContext] = []
+        self._target_update_callbacks: list[callable] = []
 
         # Set up logging
         logging.basicConfig(level=getattr(logging, config.log_level))
@@ -82,7 +96,7 @@ class FaultOrchestrator:
         """Register a callback for target updates."""
         self._target_update_callbacks.append(callback)
 
-    def update_available_targets(self, targets: List[FaultContext]) -> None:
+    def update_available_targets(self, targets: list[FaultContext]) -> None:
         """Update the list of available fault targets."""
         with self._lock:
             self._available_targets = targets
@@ -185,7 +199,7 @@ class FaultOrchestrator:
                     del self._active_faults[fault_id]
             return None
 
-    def inject_all_enabled(self) -> List[FaultResult]:
+    def inject_all_enabled(self) -> list[FaultResult]:
         """Inject all enabled faults."""
         results = []
 
@@ -268,19 +282,19 @@ class FaultOrchestrator:
         with self._lock:
             return self._metrics
 
-    def get_fault_history(self, limit: Optional[int] = None) -> List[FaultResult]:
+    def get_fault_history(self, limit: Optional[int] = None) -> list[FaultResult]:
         """Get fault injection history."""
         with self._lock:
             if limit:
                 return self._fault_history[-limit:]
             return self._fault_history.copy()
 
-    def get_active_faults(self) -> Dict[str, BaseFaultInjector]:
+    def get_active_faults(self) -> dict[str, BaseFaultInjector]:
         """Get currently active faults."""
         with self._lock:
             return self._active_faults.copy()
 
-    def get_recovery_statistics(self) -> Optional[Dict[str, Any]]:
+    def get_recovery_statistics(self) -> Optional[dict[str, Any]]:
         """Get recovery statistics if recovery is enabled."""
         if self._recovery_integration:
             return self._recovery_integration.get_recovery_statistics()
@@ -328,7 +342,7 @@ class FaultOrchestrator:
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
 
-    def enable_monitoring(self, monitoring_config: Optional[Dict[str, Any]] = None) -> None:
+    def enable_monitoring(self, monitoring_config: Optional[dict[str, Any]] = None) -> None:
         """Enable monitoring integration."""
         if self._monitoring_integration is not None:
             logger.warning("Monitoring integration already enabled")
@@ -350,7 +364,7 @@ class FaultOrchestrator:
         self._monitoring_integration = None
         logger.info("Monitoring integration disabled")
 
-    def get_monitoring_summary(self) -> Optional[Dict[str, Any]]:
+    def get_monitoring_summary(self) -> Optional[dict[str, Any]]:
         """Get monitoring summary if monitoring is enabled."""
         if self._monitoring_integration:
             return self._monitoring_integration.get_monitoring_summary()

@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 #!/usr/bin/env python3
 """Standalone test for UI fault injectors."""
 
@@ -10,13 +25,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import directly from modules
-from config import FaultType, FaultLayer, UIFaultConfig
 from base import FaultContext, FaultStatus
+from config import FaultLayer, FaultType, UIFaultConfig
 from injectors.ui import (
-    HydraConfigErrorInjector,
-    RayInitFailureInjector,
     CLIArgErrorInjector,
     EnvVarErrorInjector,
+    HydraConfigErrorInjector,
+    RayInitFailureInjector,
     UIFreezeInjector,
 )
 
@@ -31,7 +46,7 @@ def test_hydra_config_error():
         type=FaultType.HYDRA_CONFIG_ERROR,
         enabled=True,
         hydra_error_type="validate",
-        description="Test Hydra config validation error"
+        description="Test Hydra config validation error",
     )
 
     injector = HydraConfigErrorInjector(config)
@@ -56,7 +71,7 @@ def test_ray_init_failure():
         type=FaultType.RAY_INIT_FAILURE,
         enabled=True,
         ray_init_error="Simulated Ray init failure",
-        description="Test Ray initialization failure"
+        description="Test Ray initialization failure",
     )
 
     injector = RayInitFailureInjector(config)
@@ -87,7 +102,7 @@ def test_cli_arg_error():
         type=FaultType.CLI_ARG_ERROR,
         enabled=True,
         cli_arg_missing="--config-path",
-        description="Test missing CLI argument"
+        description="Test missing CLI argument",
     )
 
     injector = CLIArgErrorInjector(config)
@@ -121,7 +136,7 @@ def test_env_var_error():
         type=FaultType.ENV_VAR_ERROR,
         enabled=True,
         env_var_unset="TEST_VAR",
-        description="Test unset environment variable"
+        description="Test unset environment variable",
     )
 
     # Set test variable
@@ -154,7 +169,7 @@ def test_ui_freeze():
         type=FaultType.UI_FREEZE,
         enabled=True,
         freeze_duration_seconds=1.0,  # Short duration for testing
-        description="Test UI freeze"
+        description="Test UI freeze",
     )
 
     injector = UIFreezeInjector(config)
@@ -190,6 +205,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

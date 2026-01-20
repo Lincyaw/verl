@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Performance optimization and overhead control for fault injection system."""
 
 import asyncio
@@ -9,7 +24,7 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +47,7 @@ T = TypeVar("T")
 
 class PerformanceMode(Enum):
     """Performance optimization modes."""
+
     DISABLED = "disabled"
     MINIMAL = "minimal"
     BALANCED = "balanced"
@@ -41,8 +57,9 @@ class PerformanceMode(Enum):
 @dataclass
 class PerformanceMetrics:
     """Performance metrics for fault injection operations."""
+
     injection_count: int = 0
-    injection_latency_ms: List[float] = field(default_factory=list)
+    injection_latency_ms: list[float] = field(default_factory=list)
     cache_hit_rate: float = 0.0
     batch_processed: int = 0
     async_operations: int = 0
@@ -54,9 +71,7 @@ class PerformanceConfig:
     """Configuration for performance optimizations."""
 
     def __init__(self):
-        self.mode = PerformanceMode(
-            os.getenv("VERL_FAULT_INJECTION_MODE", "balanced")
-        )
+        self.mode = PerformanceMode(os.getenv("VERL_FAULT_INJECTION_MODE", "balanced"))
         self.enable_async = ENABLE_ASYNC_INJECTION
         self.enable_caching = ENABLE_CACHING
         self.enable_batching = ENABLE_BATCH_PROCESSING
@@ -178,11 +193,11 @@ class BatchProcessor:
 
     def __init__(self, batch_size: int = BATCH_SIZE):
         self.batch_size = batch_size
-        self._batch_queue: List[Any] = []
+        self._batch_queue: list[Any] = []
         self._processing = False
         self._lock = asyncio.Lock() if ENABLE_ASYNC_INJECTION else None
 
-    async def add_async(self, item: Any) -> Optional[List[Any]]:
+    async def add_async(self, item: Any) -> Optional[list[Any]]:
         """Add item to batch queue asynchronously."""
         if not ENABLE_BATCH_PROCESSING:
             return [item]
@@ -191,13 +206,13 @@ class BatchProcessor:
             self._batch_queue.append(item)
 
             if len(self._batch_queue) >= self.batch_size:
-                batch = self._batch_queue[:self.batch_size]
-                self._batch_queue = self._batch_queue[self.batch_size:]
+                batch = self._batch_queue[: self.batch_size]
+                self._batch_queue = self._batch_queue[self.batch_size :]
                 return batch
 
             return None
 
-    def add(self, item: Any) -> Optional[List[Any]]:
+    def add(self, item: Any) -> Optional[list[Any]]:
         """Add item to batch queue synchronously."""
         if not ENABLE_BATCH_PROCESSING:
             return [item]
@@ -205,20 +220,20 @@ class BatchProcessor:
         self._batch_queue.append(item)
 
         if len(self._batch_queue) >= self.batch_size:
-            batch = self._batch_queue[:self.batch_size]
-            self._batch_queue = self._batch_queue[self.batch_size:]
+            batch = self._batch_queue[: self.batch_size]
+            self._batch_queue = self._batch_queue[self.batch_size :]
             return batch
 
         return None
 
-    async def flush_async(self) -> List[Any]:
+    async def flush_async(self) -> list[Any]:
         """Flush remaining items in batch queue asynchronously."""
         async with self._lock:
             batch = self._batch_queue.copy()
             self._batch_queue.clear()
             return batch
 
-    def flush(self) -> List[Any]:
+    def flush(self) -> list[Any]:
         """Flush remaining items in batch queue synchronously."""
         batch = self._batch_queue.copy()
         self._batch_queue.clear()
@@ -230,7 +245,7 @@ class PerformanceProfiler:
 
     def __init__(self):
         self.metrics = PerformanceMetrics()
-        self._operation_timers: Dict[str, float] = {}
+        self._operation_timers: dict[str, float] = {}
 
     @contextmanager
     def profile(self, operation: str):
@@ -275,6 +290,7 @@ class PerformanceProfiler:
 
 def conditional_injection(enabled: bool = True):
     """Decorator for conditional fault injection based on performance mode."""
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -295,6 +311,7 @@ def conditional_injection(enabled: bool = True):
 
 def optimize_performance(mode: PerformanceMode = PerformanceMode.BALANCED):
     """Class decorator for performance optimization."""
+
     def decorator(cls):
         # Add performance monitoring to key methods
         for attr_name in dir(cls):
@@ -316,6 +333,7 @@ def optimize_performance(mode: PerformanceMode = PerformanceMode.BALANCED):
 
 def profile_method(operation_name: str):
     """Decorator for profiling method execution time."""
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -339,6 +357,7 @@ def profile_method(operation_name: str):
 
 def profile_async_method(operation_name: str):
     """Decorator for profiling async method execution time."""
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def wrapper(self, *args, **kwargs):

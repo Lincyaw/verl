@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang Ltd. and/or its affiliates
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Optimized fault injection orchestrator with performance improvements."""
 
 import asyncio
@@ -5,9 +20,9 @@ import logging
 import threading
 import time
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 from .base import (
     BaseFaultInjector,
@@ -15,13 +30,11 @@ from .base import (
     FaultInjectorRegistry,
     FaultResult,
     FaultStatus,
-    FaultTargetConfig,
     create_target_selector,
 )
 from .config import FaultConfig, FaultInjectionConfig, FaultLayer
+from .monitoring.integration import MonitoringIntegration
 from .performance import (
-    PerformanceConfig,
-    PerformanceProfiler,
     get_batch_processor,
     get_performance_config,
     get_profiler,
@@ -29,8 +42,7 @@ from .performance import (
     profile_async_method,
     profile_method,
 )
-from .recovery.integration import create_recovery_integration, RecoveryOrchestratorIntegration
-from .monitoring.integration import MonitoringIntegration
+from .recovery.integration import RecoveryOrchestratorIntegration, create_recovery_integration
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +56,8 @@ class OptimizedFaultOrchestratorMetrics:
     completed_faults: int = 0
     failed_faults: int = 0
     recovered_faults: int = 0
-    injection_duration: Dict[str, float] = field(default_factory=dict)
-    layer_stats: Dict[FaultLayer, int] = field(default_factory=lambda: defaultdict(int))
+    injection_duration: dict[str, float] = field(default_factory=dict)
+    layer_stats: dict[FaultLayer, int] = field(default_factory=lambda: defaultdict(int))
     cache_hits: int = 0
     cache_misses: int = 0
     batch_operations: int = 0
@@ -57,9 +69,9 @@ class OptimizedFaultOrchestrator:
 
     def __init__(self, config: FaultInjectionConfig):
         self.config = config
-        self._injectors: Dict[str, BaseFaultInjector] = {}
-        self._active_faults: Dict[str, BaseFaultInjector] = {}
-        self._fault_history: List[FaultResult] = []
+        self._injectors: dict[str, BaseFaultInjector] = {}
+        self._active_faults: dict[str, BaseFaultInjector] = {}
+        self._fault_history: list[FaultResult] = []
         self._metrics = OptimizedFaultOrchestratorMetrics()
         self._lock = threading.Lock()
         self._async_lock = asyncio.Lock() if get_performance_config().enable_async else None
@@ -84,8 +96,8 @@ class OptimizedFaultOrchestrator:
             self._monitoring_integration = MonitoringIntegration(config.monitoring, self)
 
         # Target management
-        self._available_targets: List[FaultContext] = []
-        self._target_update_callbacks: List[callable] = []
+        self._available_targets: list[FaultContext] = []
+        self._target_update_callbacks: list[callable] = []
         self._target_cache_key = "available_targets"
 
         # Set up logging
@@ -111,7 +123,7 @@ class OptimizedFaultOrchestrator:
         self._target_update_callbacks.append(callback)
 
     @profile_method("update_available_targets")
-    def update_available_targets(self, targets: List[FaultContext]) -> None:
+    def update_available_targets(self, targets: list[FaultContext]) -> None:
         """Update the list of available fault targets with caching."""
         with self._lock:
             self._available_targets = targets
@@ -127,7 +139,7 @@ class OptimizedFaultOrchestrator:
                 except Exception as e:
                     logger.error(f"Target update callback failed: {e}")
 
-    def _get_cached_targets(self) -> Optional[List[FaultContext]]:
+    def _get_cached_targets(self) -> Optional[list[FaultContext]]:
         """Get targets from cache if available."""
         if not self._perf_config.enable_caching:
             return None
@@ -261,7 +273,9 @@ class OptimizedFaultOrchestrator:
                 return None
 
     @profile_async_method("inject_fault_async")
-    async def inject_fault_async(self, fault_id: str, target_context: Optional[FaultContext] = None) -> Optional[FaultResult]:
+    async def inject_fault_async(
+        self, fault_id: str, target_context: Optional[FaultContext] = None
+    ) -> Optional[FaultResult]:
         """Asynchronously inject a specific fault."""
         if not self._perf_config.enable_async:
             # Fall back to sync version
@@ -308,11 +322,7 @@ class OptimizedFaultOrchestrator:
             try:
                 # Run in thread pool to avoid blocking
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    self._executor,
-                    injector.execute,
-                    target_context
-                )
+                result = await loop.run_in_executor(self._executor, injector.execute, target_context)
 
                 # Cache result
                 if self._perf_config.enable_caching:
@@ -374,7 +384,7 @@ class OptimizedFaultOrchestrator:
         # No cached targets, use current
         return self._select_target_for_fault(fault_config)
 
-    async def _get_cached_targets_async(self) -> Optional[List[FaultContext]]:
+    async def _get_cached_targets_async(self) -> Optional[list[FaultContext]]:
         """Get targets from cache asynchronously."""
         if not self._perf_config.enable_caching:
             return None
@@ -389,7 +399,7 @@ class OptimizedFaultOrchestrator:
         return cached
 
     @profile_method("inject_all_enabled")
-    def inject_all_enabled(self) -> List[FaultResult]:
+    def inject_all_enabled(self) -> list[FaultResult]:
         """Inject all enabled faults with batching support."""
         results = []
 
@@ -399,7 +409,7 @@ class OptimizedFaultOrchestrator:
         # Process in batches if enabled
         if self._perf_config.enable_batching:
             for i in range(0, len(fault_ids), self._perf_config.batch_size):
-                batch = fault_ids[i:i + self._perf_config.batch_size]
+                batch = fault_ids[i : i + self._perf_config.batch_size]
                 batch_results = self._process_fault_batch(batch)
                 results.extend(batch_results)
                 self._metrics.batch_operations += 1
@@ -414,7 +424,7 @@ class OptimizedFaultOrchestrator:
 
         return results
 
-    def _process_fault_batch(self, fault_ids: List[str]) -> List[FaultResult]:
+    def _process_fault_batch(self, fault_ids: list[str]) -> list[FaultResult]:
         """Process a batch of faults."""
         results = []
 
@@ -463,7 +473,7 @@ class OptimizedFaultOrchestrator:
                 async_operations=self._metrics.async_operations,
             )
 
-    def get_performance_metrics(self) -> Dict[str, Any]:
+    def get_performance_metrics(self) -> dict[str, Any]:
         """Get detailed performance metrics."""
         metrics = self.get_metrics()
         perf_metrics = self._profiler.get_metrics()
@@ -472,13 +482,18 @@ class OptimizedFaultOrchestrator:
             "orchestrator": {
                 "total_faults": metrics.total_faults,
                 "active_faults": metrics.active_faults,
-                "cache_hit_rate": metrics.cache_hits / (metrics.cache_hits + metrics.cache_misses) if (metrics.cache_hits + metrics.cache_misses) > 0 else 0,
+                "cache_hit_rate": metrics.cache_hits / (metrics.cache_hits + metrics.cache_misses)
+                if (metrics.cache_hits + metrics.cache_misses) > 0
+                else 0,
                 "batch_operations": metrics.batch_operations,
                 "async_operations": metrics.async_operations,
             },
             "profiler": {
                 "injection_count": perf_metrics.injection_count,
-                "avg_injection_latency_ms": sum(perf_metrics.injection_latency_ms) / len(perf_metrics.injection_latency_ms) if perf_metrics.injection_latency_ms else 0,
+                "avg_injection_latency_ms": sum(perf_metrics.injection_latency_ms)
+                / len(perf_metrics.injection_latency_ms)
+                if perf_metrics.injection_latency_ms
+                else 0,
                 "cache_hit_rate": self._target_cache.hit_rate(),
             },
         }

@@ -1,10 +1,24 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Worker layer fault injectors for verl fault injection system."""
 
 import gc
 import os
 import signal
 import time
-from typing import Any, Dict, Optional
 
 import torch
 import torch.distributed as dist
@@ -32,7 +46,7 @@ class FSDPSyncFailureInjector(BaseFaultInjector):
                     fault_id=self.config.name,
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
-                    metadata={"sync_type": sync_type, "action": "skipped_all_reduce"}
+                    metadata={"sync_type": sync_type, "action": "skipped_all_reduce"},
                 )
 
         elif sync_type == "broadcast":
@@ -43,7 +57,7 @@ class FSDPSyncFailureInjector(BaseFaultInjector):
                     fault_id=self.config.name,
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
-                    metadata={"sync_type": sync_type, "action": "broadcast_failed"}
+                    metadata={"sync_type": sync_type, "action": "broadcast_failed"},
                 )
 
         return FaultResult(
@@ -51,7 +65,7 @@ class FSDPSyncFailureInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message=f"FSDP sync failure not applicable for {sync_type}",
-            metadata={"sync_type": sync_type}
+            metadata={"sync_type": sync_type},
         )
 
 
@@ -68,15 +82,15 @@ class FSDPShardingErrorInjector(BaseFaultInjector):
 
         if stage == "forward":
             # Corrupt forward pass parameters
-            if hasattr(torch.nn.Module, '_forward_unimpl'):
+            if hasattr(torch.nn.Module, "_forward_unimpl"):
                 # Store original forward
                 original_forward = torch.nn.Module._forward_unimpl
 
                 def corrupt_forward(self, *args, **kwargs):
                     # Corrupt parameters
                     for param in self.parameters():
-                        if param is not None and hasattr(param, 'data'):
-                            param.data.fill_(float('nan'))
+                        if param is not None and hasattr(param, "data"):
+                            param.data.fill_(float("nan"))
                     return original_forward(*args, **kwargs)
 
                 torch.nn.Module._forward_unimpl = corrupt_forward
@@ -85,18 +99,18 @@ class FSDPShardingErrorInjector(BaseFaultInjector):
                     fault_id=self.config.name,
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
-                    metadata={"stage": stage, "action": "corrupted_parameters"}
+                    metadata={"stage": stage, "action": "corrupted_parameters"},
                 )
 
         elif stage == "backward":
             # Corrupt gradient computation
-            if hasattr(torch.Tensor, 'backward'):
+            if hasattr(torch.Tensor, "backward"):
                 original_backward = torch.Tensor.backward
 
                 def corrupt_backward(self, gradient=None, retain_graph=None, create_graph=False):
                     # Corrupt gradients
                     if gradient is not None:
-                        gradient.fill_(float('nan'))
+                        gradient.fill_(float("nan"))
                     return original_backward(self, gradient, retain_graph, create_graph)
 
                 torch.Tensor.backward = corrupt_backward
@@ -105,7 +119,7 @@ class FSDPShardingErrorInjector(BaseFaultInjector):
                     fault_id=self.config.name,
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
-                    metadata={"stage": stage, "action": "corrupted_gradients"}
+                    metadata={"stage": stage, "action": "corrupted_gradients"},
                 )
 
         return FaultResult(
@@ -113,7 +127,7 @@ class FSDPShardingErrorInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message=f"FSDP sharding error not implemented for {stage}",
-            metadata={"stage": stage}
+            metadata={"stage": stage},
         )
 
 
@@ -132,7 +146,7 @@ class MegatronSyncFailureInjector(BaseFaultInjector):
             # Simulate all_reduce failure in Megatron
             if dist.is_initialized():
                 # Create a tensor that will cause all_reduce to fail
-                tensor = torch.tensor([float('inf')], device='cuda' if torch.cuda.is_available() else 'cpu')
+                tensor = torch.tensor([float("inf")], device="cuda" if torch.cuda.is_available() else "cpu")
 
                 try:
                     # This should cause overflow in all_reduce
@@ -143,21 +157,21 @@ class MegatronSyncFailureInjector(BaseFaultInjector):
                         status=FaultStatus.COMPLETED,
                         start_time=time.time(),
                         error_message=str(e),
-                        metadata={"sync_op": sync_op, "action": "all_reduce_overflow"}
+                        metadata={"sync_op": sync_op, "action": "all_reduce_overflow"},
                     )
 
         elif sync_op == "broadcast":
             # Simulate broadcast failure
             if dist.is_initialized() and dist.get_rank() == 0:
                 # Root rank sends invalid data
-                tensor = torch.tensor([float('nan')], device='cuda' if torch.cuda.is_available() else 'cpu')
+                tensor = torch.tensor([float("nan")], device="cuda" if torch.cuda.is_available() else "cpu")
                 dist.broadcast(tensor, src=0)
 
                 return FaultResult(
                     fault_id=self.config.name,
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
-                    metadata={"sync_op": sync_op, "action": "broadcast_nan"}
+                    metadata={"sync_op": sync_op, "action": "broadcast_nan"},
                 )
 
         return FaultResult(
@@ -165,7 +179,7 @@ class MegatronSyncFailureInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message=f"Megatron sync failure not applicable for {sync_op}",
-            metadata={"sync_op": sync_op}
+            metadata={"sync_op": sync_op},
         )
 
 
@@ -187,15 +201,15 @@ class MegatronPipelineErrorInjector(BaseFaultInjector):
                 raise RuntimeError(f"Pipeline forward error in stage {virtual_pipeline or 'unknown'}")
 
             # Store and replace forward function
-            if hasattr(torch.nn.Module, 'forward'):
-                original_forward = torch.nn.Module.forward
+            if hasattr(torch.nn.Module, "forward"):
+                # original_forward = torch.nn.Module.forward  # Not used
                 torch.nn.Module.forward = corrupt_pipeline_forward
 
                 return FaultResult(
                     fault_id=self.config.name,
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
-                    metadata={"stage": stage, "virtual_pipeline": virtual_pipeline, "action": "corrupted_forward"}
+                    metadata={"stage": stage, "virtual_pipeline": virtual_pipeline, "action": "corrupted_forward"},
                 )
 
         elif stage == "backward":
@@ -204,15 +218,15 @@ class MegatronPipelineErrorInjector(BaseFaultInjector):
                 # Return None to break gradient flow
                 return None
 
-            if hasattr(torch.nn.Module, 'backward'):
-                original_backward = torch.nn.Module.backward
+            if hasattr(torch.nn.Module, "backward"):
+                # original_backward = torch.nn.Module.backward  # Not used
                 torch.nn.Module.backward = corrupt_pipeline_backward
 
                 return FaultResult(
                     fault_id=self.config.name,
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
-                    metadata={"stage": stage, "virtual_pipeline": virtual_pipeline, "action": "corrupted_backward"}
+                    metadata={"stage": stage, "virtual_pipeline": virtual_pipeline, "action": "corrupted_backward"},
                 )
 
         return FaultResult(
@@ -220,7 +234,7 @@ class MegatronPipelineErrorInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message=f"Megatron pipeline error not implemented for {stage}",
-            metadata={"stage": stage}
+            metadata={"stage": stage},
         )
 
 
@@ -241,7 +255,7 @@ class GradientSyncTimeoutInjector(BaseFaultInjector):
             dist.set_timeout(timeout_ms / 1000.0)  # Convert to seconds
 
             # Create a blocking operation that will timeout
-            tensor = torch.zeros(1000000, device='cuda' if torch.cuda.is_available() else 'cpu')
+            tensor = torch.zeros(1000000, device="cuda" if torch.cuda.is_available() else "cpu")
 
             try:
                 # This should timeout
@@ -255,7 +269,7 @@ class GradientSyncTimeoutInjector(BaseFaultInjector):
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
                     error_message=str(e),
-                    metadata={"timeout_ms": timeout_ms, "action": "gradient_sync_timeout"}
+                    metadata={"timeout_ms": timeout_ms, "action": "gradient_sync_timeout"},
                 )
 
             # Restore original timeout
@@ -266,7 +280,7 @@ class GradientSyncTimeoutInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message="Gradient sync timeout not applicable",
-            metadata={"timeout_ms": timeout_ms}
+            metadata={"timeout_ms": timeout_ms},
         )
 
 
@@ -285,7 +299,7 @@ class CudaOOMWorkerInjector(BaseFaultInjector):
             try:
                 # Try to allocate a large tensor that will cause OOM
                 elements = (memory_mb * 1024 * 1024) // 4  # 4 bytes per float32
-                tensor = torch.zeros(elements, dtype=torch.float32, device='cuda')
+                tensor = torch.zeros(elements, dtype=torch.float32, device="cuda")
 
                 # Force allocation
                 tensor.fill_(1.0)
@@ -295,7 +309,7 @@ class CudaOOMWorkerInjector(BaseFaultInjector):
                     status=FaultStatus.FAILED,
                     start_time=time.time(),
                     error_message="CUDA OOM injection failed - memory was allocated successfully",
-                    metadata={"memory_mb": memory_mb, "action": "allocation_succeeded"}
+                    metadata={"memory_mb": memory_mb, "action": "allocation_succeeded"},
                 )
             except torch.cuda.OutOfMemoryError as e:
                 return FaultResult(
@@ -303,7 +317,7 @@ class CudaOOMWorkerInjector(BaseFaultInjector):
                     status=FaultStatus.COMPLETED,
                     start_time=time.time(),
                     error_message=str(e),
-                    metadata={"memory_mb": memory_mb, "action": "cuda_oom"}
+                    metadata={"memory_mb": memory_mb, "action": "cuda_oom"},
                 )
             except Exception as e:
                 return FaultResult(
@@ -311,7 +325,7 @@ class CudaOOMWorkerInjector(BaseFaultInjector):
                     status=FaultStatus.FAILED,
                     start_time=time.time(),
                     error_message=str(e),
-                    metadata={"memory_mb": memory_mb}
+                    metadata={"memory_mb": memory_mb},
                 )
 
         return FaultResult(
@@ -319,7 +333,7 @@ class CudaOOMWorkerInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message="CUDA not available",
-            metadata={"memory_mb": memory_mb}
+            metadata={"memory_mb": memory_mb},
         )
 
 
@@ -343,7 +357,7 @@ class CudaMemoryFragmentationInjector(BaseFaultInjector):
                 elements = (fragment_size_mb * 1024 * 1024) // 4
 
                 for i in range(fragment_count):
-                    fragment = torch.zeros(elements, dtype=torch.float32, device='cuda')
+                    fragment = torch.zeros(elements, dtype=torch.float32, device="cuda")
                     fragments.append(fragment)
 
                     # Fill with pattern to ensure allocation
@@ -364,8 +378,8 @@ class CudaMemoryFragmentationInjector(BaseFaultInjector):
                     metadata={
                         "fragment_size_mb": fragment_size_mb,
                         "fragment_count": fragment_count,
-                        "action": "memory_fragmented"
-                    }
+                        "action": "memory_fragmented",
+                    },
                 )
             except torch.cuda.OutOfMemoryError as e:
                 return FaultResult(
@@ -376,8 +390,8 @@ class CudaMemoryFragmentationInjector(BaseFaultInjector):
                     metadata={
                         "fragment_size_mb": fragment_size_mb,
                         "fragment_count": fragment_count,
-                        "action": "fragmentation_oom"
-                    }
+                        "action": "fragmentation_oom",
+                    },
                 )
 
         return FaultResult(
@@ -385,10 +399,7 @@ class CudaMemoryFragmentationInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message="CUDA not available",
-            metadata={
-                "fragment_size_mb": fragment_size_mb,
-                "fragment_count": fragment_count
-            }
+            metadata={"fragment_size_mb": fragment_size_mb, "fragment_count": fragment_count},
         )
 
 
@@ -420,7 +431,7 @@ class WorkerCrashInjector(BaseFaultInjector):
             status=FaultStatus.FAILED,
             start_time=time.time(),
             error_message=f"Unknown crash method: {crash_method}",
-            metadata={"crash_method": crash_method}
+            metadata={"crash_method": crash_method},
         )
 
 
@@ -448,9 +459,5 @@ class WorkerHangInjector(BaseFaultInjector):
             status=FaultStatus.COMPLETED,
             start_time=start_time,
             end_time=time.time(),
-            metadata={
-                "hang_location": hang_location,
-                "duration": duration,
-                "action": "worker_hung"
-            }
+            metadata={"hang_location": hang_location, "duration": duration, "action": "worker_hung"},
         )

@@ -1,9 +1,24 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Configuration classes for fault injection system."""
 
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional
 
 
 class FaultLayer(Enum):
@@ -60,7 +75,6 @@ class FaultType(Enum):
     TASK_SCHEDULING_FAILURE = "task_scheduling_failure"
     RESOURCE_POOL_FAULT = "resource_pool_fault"
     GCS_FAILURE = "gcs_failure"
-    NETWORK_PARTITION = "network_partition"
     PLACEMENT_GROUP_FAULT = "placement_group_fault"
 
     # Worker layer faults
@@ -80,7 +94,6 @@ class FaultType(Enum):
     ENGINE_INIT_FAILURE = "engine_init_failure"
     ENGINE_HANG = "engine_hang"
     CHECKPOINT_CORRUPTION = "checkpoint_corruption"
-    NCCL_FAILURE = "nccl_failure"
     DEVICE_MESH_ERROR = "device_mesh_error"
     PRECISION_ERROR = "precision_error"
     DEVICE_MAP_ERROR = "device_map_error"
@@ -116,9 +129,9 @@ class FaultTargetConfig:
     """Configuration for fault targets."""
 
     mode: FaultTarget = FaultTarget.RANDOM
-    ranks: Optional[List[int]] = None
-    hosts: Optional[List[str]] = None
-    process_types: Optional[List[str]] = None
+    ranks: Optional[list[int]] = None
+    hosts: Optional[list[str]] = None
+    process_types: Optional[list[str]] = None
     count: int = 1
 
 
@@ -146,7 +159,7 @@ class BaseFaultConfig:
     trigger: FaultTriggerConfig = field(default_factory=FaultTriggerConfig)
     duration_seconds: Optional[float] = None  # How long the fault lasts
     recovery_seconds: Optional[float] = None  # Time to recover after fault
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -165,7 +178,7 @@ class NetworkFaultConfig(BaseFaultConfig):
     delay_ms: int = 100  # Network delay in milliseconds
     loss_rate: float = 0.1  # Packet loss rate (0.0-1.0)
     bandwidth_limit: Optional[int] = None  # Bandwidth limit in kbps
-    target_ports: Optional[List[int]] = None  # Target ports
+    target_ports: Optional[list[int]] = None  # Target ports
 
 
 @dataclass
@@ -203,7 +216,7 @@ class DataFaultConfig(BaseFaultConfig):
     checkpoint_path: Optional[str] = None  # Checkpoint to corrupt
     corruption_type: str = "random"  # Type of corruption
     nan_probability: float = 0.1  # Probability of NaN values
-    target_tensors: Optional[List[str]] = None  # Specific tensors to corrupt
+    target_tensors: Optional[list[str]] = None  # Specific tensors to corrupt
 
 
 @dataclass
@@ -223,7 +236,7 @@ class EngineFaultConfig(BaseFaultConfig):
     nccl_timeout_ms: int = 60000  # NCCL timeout in milliseconds
 
     # Device mesh errors
-    mesh_shape: Optional[List[int]] = None  # Device mesh shape
+    mesh_shape: Optional[list[int]] = None  # Device mesh shape
     mesh_error_type: str = "invalid_shape"  # Type of mesh error
 
     # Precision errors
@@ -278,7 +291,7 @@ class OrchestrationFaultConfig(BaseFaultConfig):
     # Ray cluster failures
     cluster_failure_type: str = ""  # Type of cluster failure (gcs, node, cluster)
     failure_duration: float = 30.0  # Duration of failure in seconds
-    affected_nodes: Optional[List[str]] = None  # List of affected node IPs
+    affected_nodes: Optional[list[str]] = None  # List of affected node IPs
 
     # Actor crashes/deaths
     actor_name: Optional[str] = None  # Name pattern of actor to crash
@@ -306,7 +319,7 @@ class OrchestrationFaultConfig(BaseFaultConfig):
 
     # Network partitions
     partition_type: str = "partial"  # Type of partition (partial, total)
-    isolated_ranks: Optional[List[int]] = None  # Ranks to isolate
+    isolated_ranks: Optional[list[int]] = None  # Ranks to isolate
     partition_duration: float = 30.0  # Duration of partition
 
     # Placement group faults
@@ -343,20 +356,20 @@ class WorkerFaultConfig(BaseFaultConfig):
 
 
 # Union type for all fault configurations
-FaultConfig = Union[
-    ProcessFaultConfig,
-    NetworkFaultConfig,
-    ResourceFaultConfig,
-    CudaFaultConfig,
-    ConfigFaultConfig,
-    DataFaultConfig,
-    EngineFaultConfig,
-    InferenceFaultConfig,
-    UIFaultConfig,
-    OrchestrationFaultConfig,
-    WorkerFaultConfig,
-    BaseFaultConfig,
-]
+FaultConfig = (
+    ProcessFaultConfig
+    | NetworkFaultConfig
+    | ResourceFaultConfig
+    | CudaFaultConfig
+    | ConfigFaultConfig
+    | DataFaultConfig
+    | EngineFaultConfig
+    | InferenceFaultConfig
+    | UIFaultConfig
+    | OrchestrationFaultConfig
+    | WorkerFaultConfig
+    | BaseFaultConfig
+)
 
 
 @dataclass
@@ -366,7 +379,7 @@ class RecoveryStrategyConfig:
     name: str
     enabled: bool = True
     priority: int = 1
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     max_attempts: int = 3
     timeout_seconds: float = 300.0
 
@@ -377,7 +390,7 @@ class RecoveryConfig:
 
     enabled: bool = False
     mode: str = "automatic"  # automatic, manual, semi_automatic
-    strategies: List[RecoveryStrategyConfig] = field(default_factory=list)
+    strategies: list[RecoveryStrategyConfig] = field(default_factory=list)
     max_recovery_attempts: int = 3
     recovery_timeout_seconds: float = 300.0
     enable_preventive_recovery: bool = True
@@ -400,8 +413,8 @@ class FaultScenarioConfig:
     name: str
     description: str = ""
     enabled: bool = True
-    faults: List[FaultConfig] = field(default_factory=list)
-    dependencies: List[FaultDependencyConfig] = field(default_factory=list)
+    faults: list[FaultConfig] = field(default_factory=list)
+    dependencies: list[FaultDependencyConfig] = field(default_factory=list)
     cascade_mode: str = "none"  # none, linear, tree, burst
     cascade_interval_seconds: float = 5.0  # Interval between cascaded faults
     max_cascade_depth: int = 3  # Maximum depth for tree cascade
@@ -415,9 +428,9 @@ class FaultScenarioTemplate:
     name: str
     description: str
     category: str  # category: system, network, resource, training, inference
-    faults: List[Dict[str, Any]] = field(default_factory=list)
-    dependencies: List[Dict[str, Any]] = field(default_factory=list)
-    cascade_config: Dict[str, Any] = field(default_factory=dict)
+    faults: list[dict[str, Any]] = field(default_factory=list)
+    dependencies: list[dict[str, Any]] = field(default_factory=list)
+    cascade_config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -425,37 +438,45 @@ class MonitoringConfig:
     """Configuration for monitoring and observability."""
 
     enabled: bool = True
-    metrics: Dict[str, Any] = field(default_factory=lambda: {
-        "enabled": True,
-        "collection_interval": 5.0,
-        "aggregation_window": 60,
-        "max_history_size": 10000,
-        "enable_gpu_monitoring": True,
-        "enable_ray_monitoring": True,
-    })
-    dashboard: Dict[str, Any] = field(default_factory=lambda: {
-        "enabled": True,
-        "host": "0.0.0.0",
-        "port": 8080,
-        "update_interval": 2.0,
-        "enable_cors": True,
-        "max_datapoints": 1000,
-    })
-    alerts: Dict[str, Any] = field(default_factory=lambda: {
-        "enabled": True,
-        "max_alerts_per_minute": 10,
-        "alert_retention_hours": 24,
-        "enable_auto_recovery": True,
-        "notification_channels": [
-            {"type": "console", "enabled": True, "min_severity": "info"},
-        ],
-        "rules": [],  # Will use default rules if empty
-    })
-    impact_analysis: Dict[str, Any] = field(default_factory=lambda: {
-        "enabled": True,
-        "historical_window_hours": 24,
-        "confidence_threshold": 0.7,
-    })
+    metrics: dict[str, Any] = field(
+        default_factory=lambda: {
+            "enabled": True,
+            "collection_interval": 5.0,
+            "aggregation_window": 60,
+            "max_history_size": 10000,
+            "enable_gpu_monitoring": True,
+            "enable_ray_monitoring": True,
+        }
+    )
+    dashboard: dict[str, Any] = field(
+        default_factory=lambda: {
+            "enabled": True,
+            "host": "0.0.0.0",
+            "port": 8080,
+            "update_interval": 2.0,
+            "enable_cors": True,
+            "max_datapoints": 1000,
+        }
+    )
+    alerts: dict[str, Any] = field(
+        default_factory=lambda: {
+            "enabled": True,
+            "max_alerts_per_minute": 10,
+            "alert_retention_hours": 24,
+            "enable_auto_recovery": True,
+            "notification_channels": [
+                {"type": "console", "enabled": True, "min_severity": "info"},
+            ],
+            "rules": [],  # Will use default rules if empty
+        }
+    )
+    impact_analysis: dict[str, Any] = field(
+        default_factory=lambda: {
+            "enabled": True,
+            "historical_window_hours": 24,
+            "confidence_threshold": 0.7,
+        }
+    )
 
 
 @dataclass
@@ -463,9 +484,9 @@ class FaultInjectionConfig:
     """Main configuration for the fault injection system."""
 
     enabled: bool = False
-    faults: List[FaultConfig] = field(default_factory=list)
-    scenarios: List[FaultScenarioConfig] = field(default_factory=list)
-    templates: List[FaultScenarioTemplate] = field(default_factory=list)
+    faults: list[FaultConfig] = field(default_factory=list)
+    scenarios: list[FaultScenarioConfig] = field(default_factory=list)
+    templates: list[FaultScenarioTemplate] = field(default_factory=list)
     global_cooldown_seconds: float = 60.0  # Cooldown between faults
     max_concurrent_faults: int = 1  # Maximum concurrent faults
     log_level: str = "INFO"
@@ -474,17 +495,17 @@ class FaultInjectionConfig:
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
 
     @classmethod
-    def from_yaml(cls, path: Union[str, Path]) -> "FaultInjectionConfig":
+    def from_yaml(cls, path: str | Path) -> "FaultInjectionConfig":
         """Load configuration from YAML file."""
         import yaml
 
-        with open(path, "r") as f:
+        with open(path) as f:
             data = yaml.safe_load(f)
 
         # TODO: Implement proper deserialization
         return cls(**data)
 
-    def to_yaml(self, path: Union[str, Path]) -> None:
+    def to_yaml(self, path: str | Path) -> None:
         """Save configuration to YAML file."""
         import yaml
 

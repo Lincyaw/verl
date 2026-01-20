@@ -1,3 +1,18 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Real-time metrics collector for fault injection system."""
 
 import logging
@@ -6,9 +21,9 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Deque
+from typing import Any, Optional
 
-from ..base import FaultLayer, FaultStatus, FaultResult
+from ..base import FaultLayer, FaultResult, FaultStatus
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +38,7 @@ class FaultMetrics:
     status: FaultStatus
     timestamp: datetime
     duration_ms: float
-    target_info: Dict[str, Any]
+    target_info: dict[str, Any]
     error_message: Optional[str] = None
     recovery_time_ms: Optional[float] = None
 
@@ -36,11 +51,11 @@ class SystemMetrics:
     cpu_percent: float
     memory_percent: float
     memory_available_mb: float
-    gpu_utilization: Optional[Dict[int, float]] = None
-    gpu_memory_used_mb: Optional[Dict[int, float]] = None
-    gpu_memory_total_mb: Optional[Dict[int, float]] = None
+    gpu_utilization: Optional[dict[int, float]] = None
+    gpu_memory_used_mb: Optional[dict[int, float]] = None
+    gpu_memory_total_mb: Optional[dict[int, float]] = None
     disk_usage_percent: float = 0.0
-    network_io_mb: Optional[Dict[str, float]] = None
+    network_io_mb: Optional[dict[str, float]] = None
     ray_cluster_nodes: int = 0
     ray_active_actors: int = 0
     ray_pending_tasks: int = 0
@@ -62,10 +77,10 @@ class AggregatedMetrics:
     active_faults: int = 0
 
     # Layer breakdown
-    faults_by_layer: Dict[FaultLayer, int] = field(default_factory=lambda: defaultdict(int))
+    faults_by_layer: dict[FaultLayer, int] = field(default_factory=lambda: defaultdict(int))
 
     # Type breakdown
-    faults_by_type: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    faults_by_type: dict[str, int] = field(default_factory=lambda: defaultdict(int))
 
     # Timing statistics
     avg_injection_duration_ms: float = 0.0
@@ -96,9 +111,9 @@ class MetricsCollector:
         self.max_history_size = max_history_size
 
         # Metrics storage
-        self._fault_metrics: Deque[FaultMetrics] = deque(maxlen=max_history_size)
-        self._system_metrics: Deque[SystemMetrics] = deque(maxlen=max_history_size)
-        self._aggregated_metrics: Deque[AggregatedMetrics] = deque(maxlen=1440)  # 24 hours
+        self._fault_metrics: deque[FaultMetrics] = deque(maxlen=max_history_size)
+        self._system_metrics: deque[SystemMetrics] = deque(maxlen=max_history_size)
+        self._aggregated_metrics: deque[AggregatedMetrics] = deque(maxlen=1440)  # 24 hours
 
         # Threading
         self._collection_thread: Optional[threading.Thread] = None
@@ -106,12 +121,13 @@ class MetricsCollector:
         self._lock = threading.Lock()
 
         # Callbacks
-        self._metric_callbacks: List[callable] = []
+        self._metric_callbacks: list[callable] = []
 
         # GPU monitoring
         self._gpu_monitoring_enabled = False
         try:
             import pynvml
+
             pynvml.nvmlInit()
             self._gpu_count = pynvml.nvmlDeviceGetCount()
             self._gpu_monitoring_enabled = True
@@ -125,6 +141,7 @@ class MetricsCollector:
         self._ray_monitoring_enabled = False
         try:
             import ray
+
             if ray.is_initialized():
                 self._ray_monitoring_enabled = True
                 logger.info("Ray monitoring enabled")
@@ -177,7 +194,7 @@ class MetricsCollector:
         """Register a callback for metric updates."""
         self._metric_callbacks.append(callback)
 
-    def get_current_metrics(self) -> Dict[str, Any]:
+    def get_current_metrics(self) -> dict[str, Any]:
         """Get current metrics snapshot."""
         with self._lock:
             # Calculate current statistics
@@ -192,10 +209,7 @@ class MetricsCollector:
 
             # Recent fault statistics (last 5 minutes)
             recent_cutoff = time.time() - 300
-            recent_faults = [
-                f for f in self._fault_metrics
-                if f.timestamp.timestamp() > recent_cutoff
-            ]
+            recent_faults = [f for f in self._fault_metrics if f.timestamp.timestamp() > recent_cutoff]
 
             successful = sum(1 for f in recent_faults if f.status == FaultStatus.COMPLETED)
             total_recent = len(recent_faults)
@@ -205,7 +219,9 @@ class MetricsCollector:
 
             return {
                 "faults_total": fault_count,
-                "faults_active": sum(1 for f in self._fault_metrics if f.status not in [FaultStatus.COMPLETED, FaultStatus.FAILED]),
+                "faults_active": sum(
+                    1 for f in self._fault_metrics if f.status not in [FaultStatus.COMPLETED, FaultStatus.FAILED]
+                ),
                 "faults_success_rate": successful / total_recent if total_recent > 0 else 0.0,
                 "system_health": system_health,
                 "recent_faults": total_recent,
@@ -219,10 +235,7 @@ class MetricsCollector:
             cutoff_time = datetime.now().timestamp() - window_seconds
 
             # Filter faults in window
-            window_faults = [
-                f for f in self._fault_metrics
-                if f.timestamp.timestamp() >= cutoff_time
-            ]
+            window_faults = [f for f in self._fault_metrics if f.timestamp.timestamp() >= cutoff_time]
 
             if not window_faults:
                 return None
@@ -261,7 +274,7 @@ class MetricsCollector:
         memory = psutil.virtual_memory()
 
         # Disk usage
-        disk_usage = psutil.disk_usage('/')
+        disk_usage = psutil.disk_usage("/")
 
         # GPU metrics
         gpu_utilization = None
@@ -271,6 +284,7 @@ class MetricsCollector:
         if self._gpu_monitoring_enabled:
             try:
                 import pynvml
+
                 gpu_utilization = {}
                 gpu_memory_used = {}
                 gpu_memory_total = {}
@@ -309,6 +323,7 @@ class MetricsCollector:
         if self._ray_monitoring_enabled:
             try:
                 import ray
+
                 ray_nodes = len(ray.nodes())
                 ray_actors = len(ray.actors())
                 # This is a simplified metric - in practice you'd use Ray metrics
@@ -352,21 +367,21 @@ class MetricsCollector:
         else:
             return "healthy"
 
-    def _get_layer_breakdown(self) -> Dict[str, int]:
+    def _get_layer_breakdown(self) -> dict[str, int]:
         """Get fault count breakdown by layer."""
         breakdown = defaultdict(int)
         for fault in self._fault_metrics:
             breakdown[fault.layer.value] += 1
         return dict(breakdown)
 
-    def _get_type_breakdown(self) -> Dict[str, int]:
+    def _get_type_breakdown(self) -> dict[str, int]:
         """Get fault count breakdown by type."""
         breakdown = defaultdict(int)
         for fault in self._fault_metrics:
             breakdown[fault.fault_type] += 1
         return dict(breakdown)
 
-    def _calculate_aggregation(self, faults: List[FaultMetrics], window_seconds: int) -> AggregatedMetrics:
+    def _calculate_aggregation(self, faults: list[FaultMetrics], window_seconds: int) -> AggregatedMetrics:
         """Calculate aggregated metrics for a list of faults."""
         if not faults:
             return AggregatedMetrics(

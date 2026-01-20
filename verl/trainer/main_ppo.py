@@ -34,11 +34,12 @@ from verl.utils.import_utils import load_extern_object
 # Fault injection imports
 try:
     from verl.fault_injection import (
-        FaultOrchestrator,
         FaultInjectionConfig,
-        initialize_ray_fault_injection,
+        FaultOrchestrator,
         create_fault_injection_hooks,
+        initialize_ray_fault_injection,
     )
+
     FAULT_INJECTION_AVAILABLE = True
 except ImportError:
     FAULT_INJECTION_AVAILABLE = False
@@ -69,7 +70,7 @@ def run_ppo(config, task_runner_class=None) -> None:
     """
     # Initialize fault injection if enabled
     fault_orchestrator = None
-    if FAULT_INJECTION_AVAILABLE and config.get('fault_injection', {}).get('enabled', False):
+    if FAULT_INJECTION_AVAILABLE and config.get("fault_injection", {}).get("enabled", False):
         try:
             # Load fault injection configuration
             fault_config = FaultInjectionConfig.from_dict(config.fault_injection)

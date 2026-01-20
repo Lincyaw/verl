@@ -1,8 +1,23 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 #!/usr/bin/env python3
 """Verify UI fault injectors are properly registered."""
 
-import sys
 import os
+import sys
 
 # Add the parent directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -10,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Now we can import directly
 from verl.fault_injection.base import FaultInjectorRegistry
 from verl.fault_injection.config import FaultType
+
 
 def main():
     print("Checking UI fault injector registrations...")
@@ -51,6 +67,7 @@ def main():
     else:
         print("❌ Some UI layer fault injectors are missing!")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

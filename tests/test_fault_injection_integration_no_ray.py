@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Test script to verify fault injection integration with verl main flow (without Ray dependency)."""
 
-import os
 import sys
 from pathlib import Path
 
 # Add verl to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
 
 def test_fault_injection_config():
     """Test fault injection configuration loading."""
@@ -14,29 +14,23 @@ def test_fault_injection_config():
 
     # Create a minimal test configuration
     test_config = {
-        'enabled': True,
-        'faults': [
+        "enabled": True,
+        "faults": [
             {
-                'layer': 'UI',
-                'fault_type': 'HYDRA_CONFIG_ERROR',
-                'target': {'type': 'ALL'},
-                'trigger': {'type': 'IMMEDIATE'},
-                'config': {
-                    'error_type': 'VALIDATION_ERROR',
-                    'error_message': 'Test fault injection'
-                }
+                "layer": "UI",
+                "fault_type": "HYDRA_CONFIG_ERROR",
+                "target": {"type": "ALL"},
+                "trigger": {"type": "IMMEDIATE"},
+                "config": {"error_type": "VALIDATION_ERROR", "error_message": "Test fault injection"},
             }
         ],
-        'recovery': {
-            'enabled': False
-        },
-        'monitoring': {
-            'enabled': False
-        }
+        "recovery": {"enabled": False},
+        "monitoring": {"enabled": False},
     }
 
     try:
         from verl.fault_injection.config import FaultInjectionConfig
+
         config = FaultInjectionConfig.from_dict(test_config)
         print(f"✓ Configuration loaded successfully: enabled={config.enabled}")
         print(f"✓ Number of faults: {len(config.faults)}")
@@ -52,15 +46,14 @@ def test_fault_injection_components():
 
     try:
         # Test base classes
-        from verl.fault_injection.base import BaseFaultInjector, FaultContext
         print("✓ Base fault injection classes imported")
 
         # Test orchestrator
-        from verl.fault_injection.orchestrator import FaultOrchestrator
         print("✓ Fault orchestrator imported")
 
         # Test configuration
-        from verl.fault_injection.config import FaultType, FaultLayer
+        from verl.fault_injection.config import FaultLayer, FaultType
+
         print(f"✓ Fault types available: {len(FaultType)}")
         print(f"✓ Fault layers available: {len(FaultLayer)}")
 
@@ -170,17 +163,18 @@ def test_hook_implementations():
 
     try:
         from verl.fault_injection.integration.hooks import FaultInjectionHooks
+
         print("✓ FaultInjectionHooks class imported")
 
         # Check that all required hooks exist
         hooks_class = FaultInjectionHooks
         required_hooks = [
-            'hook_ui_initialization',
-            'hook_ray_init',
-            'hook_worker_initialization',
-            'hook_rollout_generation',
-            'hook_actor_update',
-            'hook_critic_update',
+            "hook_ui_initialization",
+            "hook_ray_init",
+            "hook_worker_initialization",
+            "hook_rollout_generation",
+            "hook_actor_update",
+            "hook_critic_update",
         ]
 
         all_found = True

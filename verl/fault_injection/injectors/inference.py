@@ -1,11 +1,24 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Inference layer fault injectors for verl fault injection system."""
 
 import gc
-import os
 import random
 import threading
 import time
-from typing import Any, Dict, Optional
 
 import torch
 
@@ -42,7 +55,9 @@ class InferenceOOMInjector(BaseFaultInjector):
                     small_tensor = torch.empty(num_elements // 10, dtype=torch.float32, device="cuda")
                     self._allocated_tensors.append(small_tensor)
 
-                raise RuntimeError(f"vLLM KV cache allocation failed: Out of memory trying to allocate {kv_cache_size_mb}MB")
+                raise RuntimeError(
+                    f"vLLM KV cache allocation failed: Out of memory trying to allocate {kv_cache_size_mb}MB"
+                )
 
             elif backend == "sglang":
                 # Simulate SGLang memory allocation
@@ -55,7 +70,9 @@ class InferenceOOMInjector(BaseFaultInjector):
                     frag_tensor = torch.empty(frag_size, dtype=torch.float32, device="cuda")
                     self._allocated_tensors.append(frag_tensor)
 
-                raise RuntimeError(f"SGLang memory allocation failed: Out of memory trying to allocate {kv_cache_size_mb}MB")
+                raise RuntimeError(
+                    f"SGLang memory allocation failed: Out of memory trying to allocate {kv_cache_size_mb}MB"
+                )
 
             else:
                 raise ValueError(f"Unknown backend: {backend}")
@@ -65,7 +82,7 @@ class InferenceOOMInjector(BaseFaultInjector):
             return FaultResult(
                 status=FaultStatus.INJECTED,
                 message=f"CUDA OOM error injected: {str(e)}",
-                data={"backend": backend, "requested_mb": kv_cache_size_mb}
+                data={"backend": backend, "requested_mb": kv_cache_size_mb},
             )
 
     def recover(self, context: FaultContext) -> None:
@@ -286,8 +303,7 @@ class vLLMFaultInjector:
         """Inject fault in attention computation."""
         if seq_len > max_seq_len * 0.9 and random.random() < 0.1:
             raise RuntimeError(
-                f"vLLM attention fault: Sequence length {seq_len} exceeds "
-                f"maximum allowed length {max_seq_len}"
+                f"vLLM attention fault: Sequence length {seq_len} exceeds maximum allowed length {max_seq_len}"
             )
 
 
@@ -299,8 +315,7 @@ class SGLangFaultInjector:
         """Inject fault in RadixAttention cache."""
         if cache_hit_rate < 0.5 and random.random() < 0.1:
             raise RuntimeError(
-                f"SGLang RadixAttention fault: Cache hit rate {cache_hit_rate:.2f} "
-                f"is below minimum threshold 0.5"
+                f"SGLang RadixAttention fault: Cache hit rate {cache_hit_rate:.2f} is below minimum threshold 0.5"
             )
 
     @staticmethod
@@ -308,16 +323,10 @@ class SGLangFaultInjector:
         """Inject fault in memory pool allocation."""
         usage_ratio = allocated_mb / total_mb
         if usage_ratio > 0.95 and random.random() < 0.15:
-            raise RuntimeError(
-                f"SGLang memory pool fault: Memory usage {usage_ratio:.2f} "
-                f"exceeds safe threshold 0.95"
-            )
+            raise RuntimeError(f"SGLang memory pool fault: Memory usage {usage_ratio:.2f} exceeds safe threshold 0.95")
 
     @staticmethod
     def inject_tokenizer_fault(vocab_size: int, requested_id: int):
         """Inject fault in tokenizer."""
         if requested_id >= vocab_size and random.random() < 0.2:
-            raise RuntimeError(
-                f"SGLang tokenizer fault: Token ID {requested_id} exceeds "
-                f"vocabulary size {vocab_size}"
-            )
+            raise RuntimeError(f"SGLang tokenizer fault: Token ID {requested_id} exceeds vocabulary size {vocab_size}")

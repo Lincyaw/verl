@@ -1,12 +1,29 @@
+# Copyright 2026 Aoyang Fang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Integration of recovery system with fault injection orchestrator."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..base import FaultContext, FaultResult, FaultStatus
 from ..config import FaultInjectionConfig, RecoveryConfig, RecoveryStrategyConfig
-from ..orchestrator import FaultOrchestrator
-from .base import BaseRecoveryStrategy, RecoveryContext, RecoveryDecisionEngine
+
+if TYPE_CHECKING:
+    from ..orchestrator import FaultOrchestrator
+from .base import BaseRecoveryStrategy
 from .hierarchical import HierarchicalRecoveryManager, IntelligentRecoveryDecisionEngine
 from .strategies import (
     CheckpointRecoveryStrategy,
@@ -27,7 +44,7 @@ logger = logging.getLogger(__name__)
 class RecoveryOrchestratorIntegration:
     """Integrates recovery system with fault injection orchestrator."""
 
-    def __init__(self, orchestrator: FaultOrchestrator, config: RecoveryConfig):
+    def __init__(self, orchestrator: "FaultOrchestrator", config: RecoveryConfig):
         self.orchestrator = orchestrator
         self.config = config
         self.recovery_manager = self._create_recovery_manager(config)
@@ -49,7 +66,7 @@ class RecoveryOrchestratorIntegration:
             enable_preventive_recovery=config.enable_preventive_recovery,
         )
 
-    def _create_strategies(self, strategy_configs: List[RecoveryStrategyConfig]) -> List[BaseRecoveryStrategy]:
+    def _create_strategies(self, strategy_configs: list[RecoveryStrategyConfig]) -> list[BaseRecoveryStrategy]:
         """Create recovery strategies from configuration."""
         strategies = []
         strategy_map = {
@@ -123,7 +140,7 @@ class RecoveryOrchestratorIntegration:
 
         return mode_map.get(self.config.mode, RecoveryMode.AUTOMATIC)
 
-    def get_recovery_statistics(self) -> Dict[str, Any]:
+    def get_recovery_statistics(self) -> dict[str, Any]:
         """Get recovery statistics."""
         return self.recovery_manager.get_recovery_statistics()
 
@@ -131,6 +148,7 @@ class RecoveryOrchestratorIntegration:
         """Enable preventive recovery for specific layer or all layers."""
         if layer:
             from ..config import FaultLayer
+
             fault_layer = FaultLayer(layer)
             self.recovery_manager.enable_preventive_recovery_for_layer(fault_layer)
         else:
@@ -146,6 +164,8 @@ class RecoveryOrchestratorIntegration:
             self.recovery_manager = self._create_recovery_manager(config)
 
 
-def create_recovery_integration(orchestrator: FaultOrchestrator, config: FaultInjectionConfig) -> RecoveryOrchestratorIntegration:
+def create_recovery_integration(
+    orchestrator: "FaultOrchestrator", config: FaultInjectionConfig
+) -> RecoveryOrchestratorIntegration:
     """Factory function to create recovery integration."""
     return RecoveryOrchestratorIntegration(orchestrator, config.recovery)
