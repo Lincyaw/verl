@@ -566,6 +566,39 @@ algorithm:
   pf_ppo:
     reweight_method: pow
     weight_pow: 2.0
+fault_injection:
+  enabled: false
+  faults: []
+  recovery:
+    enabled: true
+    default_strategies:
+    - retry
+    - restart
+    - checkpoint
+    timeout: 300
+    max_attempts: 3
+  monitoring:
+    enabled: true
+    metrics_interval: 10
+    dashboard:
+      enabled: true
+      port: 8080
+      host: 0.0.0.0
+    alerts:
+      enabled: true
+      rules:
+      - name: high_fault_rate
+        condition: fault_rate > 0.1
+        duration: 60
+      - name: system_health_low
+        condition: system_health_score < 0.5
+        duration: 30
+      - name: resource_exhaustion
+        condition: gpu_memory_usage > 0.95
+        duration: 10
+  scenarios:
+    enabled: false
+    scenario_file: null
 custom_reward_function:
   path: null
   name: compute_score

@@ -1,4 +1,4 @@
-# Copyright 2026 Aoyang Fang
+# Copyright 2026 Individual Contributor: Aoyang Fang
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 
 """Real-time metrics collector for fault injection system."""
 
@@ -168,16 +168,27 @@ class MetricsCollector:
 
     def record_fault(self, result: FaultResult) -> None:
         """Record a fault injection event."""
+        # Extract fault type and layer from metadata if available
+        fault_type = result.metadata.get("fault_type", "unknown") if result.metadata else "unknown"
+        layer_str = result.metadata.get("layer", "ui") if result.metadata else "ui"
+        # Convert string to FaultLayer enum
+        try:
+            layer = FaultLayer(layer_str)
+        except ValueError:
+            layer = FaultLayer.UI  # Default to UI layer
+        target_info = result.metadata.get("target_info", {}) if result.metadata else {}
+        recovery_time_ms = result.metadata.get("recovery_time_ms") if result.metadata else None
+
         metrics = FaultMetrics(
             fault_id=result.fault_id,
-            fault_type=result.fault_type,
-            layer=result.layer,
+            fault_type=fault_type,
+            layer=layer,
             status=result.status,
             timestamp=datetime.fromtimestamp(result.end_time or time.time()),
             duration_ms=(result.duration or 0) * 1000,
-            target_info=result.target_info or {},
-            error_message=result.error_message,
-            recovery_time_ms=result.recovery_time_ms,
+            target_info=target_info,
+            error_message=str(result.error) if result.error else None,
+            recovery_time_ms=recovery_time_ms,
         )
 
         with self._lock:

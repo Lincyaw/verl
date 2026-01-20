@@ -1,4 +1,5 @@
-# Copyright 2026 Aoyang Fang Ltd. and/or its affiliates
+#!/usr/bin/env python3
+# Copyright 2025 Bytedance Ltd. and/or its affiliates
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,9 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
-
-#!/usr/bin/env python3
 """Comprehensive unit tests for all fault injectors."""
 
 import os
@@ -85,7 +83,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("validation failed", result.error_message)
+        self.assertIn("validation failed", str(result.error))
         self.assertEqual(result.fault_type, FaultType.HYDRA_CONFIG_ERROR)
 
     def test_ray_init_failure_injector(self):
@@ -104,7 +102,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Ray initialization failed", result.error_message)
+        self.assertIn("Ray initialization failed", str(result.error))
 
     def test_cli_arg_error_injector(self):
         """Test CLIArgErrorInjector."""
@@ -122,7 +120,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Missing required argument", result.error_message)
+        self.assertIn("Missing required argument", str(result.error))
 
     def test_env_var_error_injector(self):
         """Test EnvVarErrorInjector."""
@@ -140,7 +138,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Environment variable error", result.error_message)
+        self.assertIn("Environment variable error", str(result.error))
 
     def test_ui_freeze_injector(self):
         """Test UIFreezeInjector."""
@@ -176,7 +174,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("UI crash", result.error_message)
+        self.assertIn("UI crash", str(result.error))
 
     # Orchestration Layer Tests
     def test_ray_cluster_failure_injector(self):
@@ -195,7 +193,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Ray cluster failure", result.error_message)
+        self.assertIn("Ray cluster failure", str(result.error))
 
     def test_actor_crash_injector(self):
         """Test ActorCrashInjector."""
@@ -213,7 +211,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Actor crashed", result.error_message)
+        self.assertIn("Actor crashed", str(result.error))
 
     def test_resource_exhaustion_injector(self):
         """Test ResourceExhaustionInjector."""
@@ -232,7 +230,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Resource exhaustion", result.error_message)
+        self.assertIn("Resource exhaustion", str(result.error))
 
     # Worker Layer Tests
     def test_fsdp_sync_failure_injector(self):
@@ -252,7 +250,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("FSDP sync failure", result.error_message)
+        self.assertIn("FSDP sync failure", str(result.error))
 
     def test_cuda_oom_worker_injector(self):
         """Test CudaOOMWorkerInjector."""
@@ -269,7 +267,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("CUDA out of memory", result.error_message)
+        self.assertIn("CUDA out of memory", str(result.error))
 
     # Engine Layer Tests
     def test_engine_init_failure_injector(self):
@@ -288,7 +286,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Engine initialization failed", result.error_message)
+        self.assertIn("Engine initialization failed", str(result.error))
 
     def test_checkpoint_corruption_injector(self):
         """Test CheckpointCorruptionInjector."""
@@ -310,7 +308,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Checkpoint corrupted", result.error_message)
+        self.assertIn("Checkpoint corrupted", str(result.error))
 
         # Cleanup
         if os.path.exists(checkpoint_path):
@@ -334,7 +332,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Inference OOM", result.error_message)
+        self.assertIn("Inference OOM", str(result.error))
 
     def test_scheduler_deadlock_injector(self):
         """Test SchedulerDeadlockInjector."""
@@ -352,7 +350,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Scheduler deadlock", result.error_message)
+        self.assertIn("Scheduler deadlock", str(result.error))
 
     # Process Layer Tests
     def test_process_crash_injector(self):
@@ -371,7 +369,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Process crashed", result.error_message)
+        self.assertIn("Process crashed", str(result.error))
 
     def test_memory_leak_injector(self):
         """Test MemoryLeakInjector."""
@@ -429,7 +427,7 @@ class TestAllInjectors(unittest.TestCase):
         result = injector.inject(self.context)
 
         self.assertEqual(result.status.value, "FAILED")
-        self.assertIn("Connection refused", result.error_message)
+        self.assertIn("Connection refused", str(result.error))
 
     # Test Recovery Methods
     def test_injector_recovery(self):

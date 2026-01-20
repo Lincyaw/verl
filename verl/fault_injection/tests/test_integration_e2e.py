@@ -1,4 +1,4 @@
-# Copyright 2026 Aoyang Fang
+# Copyright 2026 Individual Contributor: Aoyang Fang
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 
 #!/usr/bin/env python3
 """End-to-end integration tests for fault injection system."""
@@ -95,7 +95,7 @@ class TestEndToEndScenarios(unittest.TestCase):
 
         # Verify result
         self.assertEqual(result.status, FaultStatus.FAILED)
-        self.assertIn("validation failed", result.error_message)
+        self.assertIn("validation failed", str(result.error))
 
     def test_multiple_faults_same_layer(self):
         """Test multiple faults in the same layer."""

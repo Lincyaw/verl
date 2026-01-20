@@ -37,7 +37,7 @@ defaults:
   - algorithm@algorithm.rollout_correction: rollout_correction
 
   # Fault injection config (optional)
-  - fault_injection@fault_injection: optional/fault_injection
+  - fault_injection@fault_injection: fault_injection
 
   # load the reference default config, then apply the fields in the current yaml
   # self config override anything above

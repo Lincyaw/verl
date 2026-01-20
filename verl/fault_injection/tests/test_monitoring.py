@@ -1,4 +1,4 @@
-# Copyright 2026 Aoyang Fang
+# Copyright 2026 Individual Contributor: Aoyang Fang
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 
 """Unit tests for monitoring and observability components."""
 
@@ -74,14 +74,15 @@ class TestMetricsCollector(unittest.TestCase):
         """Test recording fault metrics."""
         fault_result = FaultResult(
             fault_id="test_fault_1",
-            fault_type="test_type",
-            layer=FaultLayer.UI,
             status=FaultStatus.COMPLETED,
             start_time=time.time() - 1,
             end_time=time.time(),
-            target_info={"target": "test"},
-            error_message=None,
-            recovery_time_ms=100,
+            metadata={
+                "fault_type": "test_type",
+                "layer": "ui",
+                "target_info": {"target": "test"},
+                "recovery_time_ms": 100,
+            },
         )
 
         self.collector.record_fault(fault_result)
@@ -107,11 +108,13 @@ class TestMetricsCollector(unittest.TestCase):
         for i in range(5):
             fault_result = FaultResult(
                 fault_id=f"test_fault_{i}",
-                fault_type="test_type",
-                layer=FaultLayer.UI,
                 status=FaultStatus.COMPLETED,
                 start_time=time.time() - 1,
                 end_time=time.time(),
+                metadata={
+                    "fault_type": "test_type",
+                    "layer": FaultLayer.UI,
+                },
             )
             self.collector.record_fault(fault_result)
 
@@ -127,12 +130,14 @@ class TestMetricsCollector(unittest.TestCase):
         for i in range(3):
             fault_result = FaultResult(
                 fault_id=f"test_fault_{i}",
-                fault_type="test_type",
-                layer=FaultLayer.UI,
                 status=FaultStatus.COMPLETED,
                 start_time=time.time() - 1,
                 end_time=time.time(),
-                duration=1.0,
+                metadata={
+                    "fault_type": "test_type",
+                    "layer": FaultLayer.UI,
+                    "duration": 1.0,
+                },
             )
             self.collector.record_fault(fault_result)
 
@@ -170,11 +175,13 @@ class TestMetricsCollector(unittest.TestCase):
 
         fault_result = FaultResult(
             fault_id="test_fault",
-            fault_type="test_type",
-            layer=FaultLayer.UI,
             status=FaultStatus.COMPLETED,
             start_time=time.time() - 1,
             end_time=time.time(),
+            metadata={
+                "fault_type": "test_type",
+                "layer": FaultLayer.UI,
+            },
         )
         self.collector.record_fault(fault_result)
 
@@ -368,21 +375,22 @@ class TestFaultImpactAnalyzer(unittest.TestCase):
         """Test fault impact analysis."""
         fault_result = FaultResult(
             fault_id="test_fault_1",
-            fault_type="ray_cluster_failure",
-            layer=FaultLayer.ORCHESTRATION,
             status=FaultStatus.COMPLETED,
             start_time=time.time() - 2,
             end_time=time.time(),
-            duration=2.0,
-            target_info={"node": "test-node"},
-            error_message="Simulated failure",
-            recovery_time_ms=500,
+            metadata={
+                "fault_type": "ray_cluster_failure",
+                "layer": FaultLayer.ORCHESTRATION,
+                "target_info": {"node": "test-node"},
+                "error_message": "Simulated failure",
+                "recovery_time_ms": 500,
+            },
         )
 
         analysis = self.analyzer.analyze_fault_impact(fault_result)
 
         assert analysis.fault_id == "test_fault_1"
-        assert analysis.fault_type == "ray_cluster_failure"
+        assert analysis.fault_type == "ray_cluster_failure"  # This will fail until analyzer is fixed
         assert len(analysis.affected_services) > 0
         assert analysis.cascade_risk in ["low", "medium", "high", "critical"]
         assert len(analysis.recommendations) > 0
@@ -392,11 +400,13 @@ class TestFaultImpactAnalyzer(unittest.TestCase):
         """Test getting affected components for a fault."""
         fault_result = FaultResult(
             fault_id="test_fault",
-            fault_type="hydra_config_error",
-            layer=FaultLayer.UI,
             status=FaultStatus.COMPLETED,
             start_time=time.time(),
             end_time=time.time(),
+            metadata={
+                "fault_type": "hydra_config_error",
+                "layer": FaultLayer.UI,
+            },
         )
 
         affected = self.analyzer._get_affected_components(fault_result)
@@ -410,11 +420,13 @@ class TestFaultImpactAnalyzer(unittest.TestCase):
         """Test cascade probability calculation."""
         fault_result = FaultResult(
             fault_id="test_fault",
-            fault_type="ray_cluster_failure",
-            layer=FaultLayer.ORCHESTRATION,
             status=FaultStatus.COMPLETED,
             start_time=time.time(),
             end_time=time.time(),
+            metadata={
+                "fault_type": "ray_cluster_failure",
+                "layer": FaultLayer.ORCHESTRATION,
+            },
         )
 
         affected = {"ray_cluster", "gcs", "actor_system"}
@@ -428,11 +440,13 @@ class TestFaultImpactAnalyzer(unittest.TestCase):
         """Test system degradation calculation."""
         fault_result = FaultResult(
             fault_id="test_fault",
-            fault_type="engine_init_failure",
-            layer=FaultLayer.ENGINE,
             status=FaultStatus.FAILED,
             start_time=time.time(),
             end_time=time.time(),
+            metadata={
+                "fault_type": "engine_init_failure",
+                "layer": FaultLayer.ENGINE,
+            },
         )
 
         affected = {"training_engine", "checkpoint_system"}
@@ -446,11 +460,13 @@ class TestFaultImpactAnalyzer(unittest.TestCase):
         """Test recommendation generation."""
         fault_result = FaultResult(
             fault_id="test_fault",
-            fault_type="ray_cluster_failure",
-            layer=FaultLayer.ORCHESTRATION,
             status=FaultStatus.COMPLETED,
             start_time=time.time(),
             end_time=time.time(),
+            metadata={
+                "fault_type": "ray_cluster_failure",
+                "layer": FaultLayer.ORCHESTRATION,
+            },
         )
 
         # Create impact metrics with high cascade probability
@@ -472,11 +488,13 @@ class TestFaultImpactAnalyzer(unittest.TestCase):
         for i in range(5):
             fault_result = FaultResult(
                 fault_id=f"test_fault_{i}",
-                fault_type="test_type",
-                layer=FaultLayer.UI,
                 status=FaultStatus.COMPLETED,
                 start_time=time.time() - i,
                 end_time=time.time(),
+                metadata={
+                    "fault_type": "test_type",
+                    "layer": FaultLayer.UI,
+                },
             )
             self.analyzer.add_historical_fault(fault_result)
 
@@ -539,11 +557,13 @@ class TestDashboardServer(unittest.TestCase):
         for i in range(3):
             fault_result = FaultResult(
                 fault_id=f"test_fault_{i}",
-                fault_type="test_type",
-                layer=FaultLayer.UI,
                 status=FaultStatus.COMPLETED,
                 start_time=time.time() - 1,
                 end_time=time.time(),
+                metadata={
+                    "fault_type": "test_type",
+                    "layer": FaultLayer.UI,
+                },
             )
             self.metrics_collector.record_fault(fault_result)
 
@@ -597,12 +617,14 @@ class TestIntegration(unittest.TestCase):
         for i in range(3):
             fault_result = FaultResult(
                 fault_id=f"integration_test_fault_{i}",
-                fault_type="ray_cluster_failure",
-                layer=FaultLayer.ORCHESTRATION,
                 status=FaultStatus.COMPLETED,
                 start_time=time.time() - 1,
                 end_time=time.time(),
-                duration=1.0,
+                metadata={
+                    "fault_type": "ray_cluster_failure",
+                    "layer": FaultLayer.ORCHESTRATION,
+                    "duration": 1.0,
+                },
             )
             fault_results.append(fault_result)
 

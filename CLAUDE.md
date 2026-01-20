@@ -8,6 +8,10 @@ verl is a flexible, efficient, and production-ready Reinforcement Learning (RL) 
 
 ## Common Development Commands
 
+
+Use `uv` to manage virtual environments, e.g., `uv venv .venv` to create a new venv.
+
+
 ### Testing
 ```bash
 # Run CPU unit tests

@@ -1,4 +1,4 @@
-# Copyright 2026 Aoyang Fang
+# Copyright 2026 Individual Contributor: Aoyang Fang
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 
 """Integration hooks for fault injection in verl training."""
 
@@ -279,6 +279,81 @@ class FaultInjectionHooks:
             except Exception as e:
                 # Post-injection on error
                 self._try_inject_faults(FaultLayer.WORKER, f"{hook_name}_post", {"success": False, "error": str(e)})
+                raise
+
+        return wrapper
+
+    def hook_rollout_generation(self, func: Callable) -> Callable:
+        """Hook for rollout generation."""
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            hook_name = "rollout_generation"
+            step = self._increment_counter(hook_name)
+
+            # Pre-injection
+            self._try_inject_faults(FaultLayer.INFERENCE, f"{hook_name}_pre", {"step": step})
+
+            try:
+                result = func(*args, **kwargs)
+                # Post-injection
+                self._try_inject_faults(FaultLayer.INFERENCE, f"{hook_name}_post", {"step": step, "success": True})
+                return result
+            except Exception as e:
+                # Post-injection on error
+                self._try_inject_faults(
+                    FaultLayer.INFERENCE, f"{hook_name}_post", {"step": step, "success": False, "error": str(e)}
+                )
+                raise
+
+        return wrapper
+
+    def hook_critic_update(self, func: Callable) -> Callable:
+        """Hook for critic update."""
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            hook_name = "critic_update"
+            step = self._increment_counter(hook_name)
+
+            # Pre-injection
+            self._try_inject_faults(FaultLayer.WORKER, f"{hook_name}_pre", {"step": step})
+
+            try:
+                result = func(*args, **kwargs)
+                # Post-injection
+                self._try_inject_faults(FaultLayer.WORKER, f"{hook_name}_post", {"step": step, "success": True})
+                return result
+            except Exception as e:
+                # Post-injection on error
+                self._try_inject_faults(
+                    FaultLayer.WORKER, f"{hook_name}_post", {"step": step, "success": False, "error": str(e)}
+                )
+                raise
+
+        return wrapper
+
+    def hook_actor_update(self, func: Callable) -> Callable:
+        """Hook for actor update."""
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            hook_name = "actor_update"
+            step = self._increment_counter(hook_name)
+
+            # Pre-injection
+            self._try_inject_faults(FaultLayer.WORKER, f"{hook_name}_pre", {"step": step})
+
+            try:
+                result = func(*args, **kwargs)
+                # Post-injection
+                self._try_inject_faults(FaultLayer.WORKER, f"{hook_name}_post", {"step": step, "success": True})
+                return result
+            except Exception as e:
+                # Post-injection on error
+                self._try_inject_faults(
+                    FaultLayer.WORKER, f"{hook_name}_post", {"step": step, "success": False, "error": str(e)}
+                )
                 raise
 
         return wrapper

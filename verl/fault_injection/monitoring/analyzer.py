@@ -1,4 +1,4 @@
-# Copyright 2026 Aoyang Fang
+# Copyright 2026 Individual Contributor: Aoyang Fang
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 
 """Fault impact analysis for the fault injection system."""
 
@@ -196,7 +196,7 @@ class FaultImpactAnalyzer:
             analysis_id=f"analysis_{fault_result.fault_id}_{int(time.time())}",
             timestamp=datetime.now(),
             fault_id=fault_result.fault_id,
-            fault_type=fault_result.fault_type,
+            fault_type=fault_result.metadata.get("fault_type", "unknown"),
             impact_metrics=impact_metrics,
             affected_services=list(affected_components),
             cascade_risk=cascade_risk,
@@ -209,8 +209,8 @@ class FaultImpactAnalyzer:
         affected = set()
 
         # Direct impact based on fault type and layer
-        layer = fault_result.layer
-        fault_type = fault_result.fault_type
+        layer = fault_result.metadata.get("layer")
+        fault_type = fault_result.metadata.get("fault_type")
 
         # Map fault types to components
         component_map = {
@@ -318,7 +318,7 @@ class FaultImpactAnalyzer:
             FaultLayer.ENGINE: 0.7,
             FaultLayer.INFERENCE: 0.3,
         }
-        layer_multiplier = layer_multipliers.get(fault_result.layer, 0.5)
+        layer_multiplier = layer_multipliers.get(fault_result.metadata.get("layer"), 0.5)
 
         # Increase based on criticality of affected components
         criticality_score = 0
