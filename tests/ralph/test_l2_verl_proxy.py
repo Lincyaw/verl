@@ -1057,3 +1057,653 @@ class TestCheckpointSaveProxyIntegration:
             assert result == result_data
             original.assert_called_once()
 
+
+# =============================================================================
+# CheckpointLoadProxy Tests
+# =============================================================================
+
+
+class TestCheckpointLoadProxyRegistration:
+    """Tests for proxy registration."""
+
+    def test_registered_with_checkpoint_manager_target(self):
+        """CheckpointLoadProxy is registered for 'FSDPCheckpointManager.load_checkpoint' target."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        assert ProxyRegistry.is_registered("FSDPCheckpointManager.load_checkpoint")
+        assert ProxyRegistry.get_proxy("FSDPCheckpointManager.load_checkpoint") is CheckpointLoadProxy
+
+    def test_supported_strategies(self):
+        """CheckpointLoadProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("FSDPCheckpointManager.load_checkpoint")
+        expected = {
+            StrategyType.RAISE_EXCEPTION,
+            StrategyType.FILE_NOT_FOUND,
+            StrategyType.CORRUPT_STATE_DICT,
+            StrategyType.PARTIAL_LOAD,
+        }
+        assert strategies == expected
+
+
+class TestCheckpointLoadProxyBasics:
+    """Tests for basic proxy functionality."""
+
+    def test_get_layer_returns_l2(self):
+        """_get_layer returns 'L2'."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        proxy = CheckpointLoadProxy(lambda x: x)
+        assert proxy._get_layer() == "L2"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {"model.weight": torch.ones(5)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        result = proxy("/path/to/checkpoint")
+        original.assert_called_once_with("/path/to/checkpoint")
+        assert result == state_dict
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {"model.weight": torch.ones(5)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.FILE_NOT_FOUND,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        result = proxy("/path/to/checkpoint")
+        original.assert_called_once()
+        assert result == state_dict
+
+    def test_unsupported_strategy_raises_error(self):
+        """Setting an unsupported strategy raises ValueError."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        proxy = CheckpointLoadProxy(lambda x: x)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,  # Not supported by CheckpointLoadProxy
+            trigger=trigger,
+        )
+        with pytest.raises(ValueError) as exc_info:
+            proxy.set_config(config)
+        assert "not supported" in str(exc_info.value)
+
+
+class TestCheckpointLoadRaiseExceptionStrategy:
+    """Tests for RAISE_EXCEPTION strategy."""
+
+    def test_raise_exception_ioerror(self):
+        """RAISE_EXCEPTION strategy raises IOError."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "IOError", "message": "Disk read failure"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(IOError) as exc_info:
+            proxy("/path/to/checkpoint")
+        assert "Disk read failure" in str(exc_info.value)
+        original.assert_not_called()
+
+    def test_raise_exception_runtime_error(self):
+        """RAISE_EXCEPTION strategy raises RuntimeError."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "RuntimeError", "message": "Checkpoint corrupted"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(RuntimeError) as exc_info:
+            proxy("/path/to/checkpoint")
+        assert "Checkpoint corrupted" in str(exc_info.value)
+
+    def test_raise_exception_default_message(self):
+        """RAISE_EXCEPTION uses default message with checkpoint context."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "OSError"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(OSError) as exc_info:
+            proxy("/checkpoints/step_100")
+        assert "checkpoint load" in str(exc_info.value).lower()
+        assert "/checkpoints/step_100" in str(exc_info.value)
+
+    def test_raise_exception_missing_exc_type(self):
+        """RAISE_EXCEPTION raises ValueError if exc_type not specified."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={},  # Missing exc_type
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy("/path/to/checkpoint")
+        assert "exc_type" in str(exc_info.value)
+
+
+class TestCheckpointLoadFileNotFoundStrategy:
+    """Tests for FILE_NOT_FOUND strategy."""
+
+    def test_file_not_found_raises_error(self):
+        """FILE_NOT_FOUND strategy raises FileNotFoundError."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.FILE_NOT_FOUND,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            proxy("/checkpoints/step_100")
+        assert "/checkpoints/step_100" in str(exc_info.value)
+        original.assert_not_called()
+
+    def test_file_not_found_custom_message(self):
+        """FILE_NOT_FOUND uses custom message when provided."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.FILE_NOT_FOUND,
+            trigger=trigger,
+            parameters={"message": "Checkpoint was deleted"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            proxy("/path/to/checkpoint")
+        assert "Checkpoint was deleted" in str(exc_info.value)
+
+    def test_file_not_found_default_message(self):
+        """FILE_NOT_FOUND includes path in default message."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.FILE_NOT_FOUND,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            proxy("/data/model/checkpoint_500.pt")
+        assert "not found" in str(exc_info.value).lower()
+
+
+class TestCheckpointLoadCorruptStateDictStrategy:
+    """Tests for CORRUPT_STATE_DICT strategy."""
+
+    def test_corrupt_state_dict_adds_noise(self):
+        """CORRUPT_STATE_DICT adds noise to tensor values."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original_tensor = torch.ones(10, 10)
+        state_dict = {"model.weight": original_tensor.clone()}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.CORRUPT_STATE_DICT,
+            trigger=trigger,
+            parameters={"noise_scale": 0.1},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+        original.assert_called_once()
+
+        # Result should be different from original
+        assert not torch.allclose(result["model.weight"], original_tensor)
+        # But shape should be preserved
+        assert result["model.weight"].shape == original_tensor.shape
+
+    def test_corrupt_state_dict_default_noise_scale(self):
+        """CORRUPT_STATE_DICT uses default noise scale of 0.01."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        original_tensor = torch.zeros(5, 5)
+        state_dict = {"layer.bias": original_tensor.clone()}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.CORRUPT_STATE_DICT,
+            trigger=trigger,
+            # No noise_scale specified, should use default 0.01
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        # With small noise scale on zeros, result should be close to zero but not exactly
+        assert not torch.allclose(result["layer.bias"], original_tensor, atol=0)
+        # But should be small values (around 0.01 std)
+        assert torch.abs(result["layer.bias"]).max() < 0.1
+
+    def test_corrupt_state_dict_multiple_tensors(self):
+        """CORRUPT_STATE_DICT corrupts all tensors in state dict."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {
+            "encoder.weight": torch.ones(5, 5),
+            "encoder.bias": torch.zeros(5),
+            "decoder.weight": torch.ones(10, 5),
+        }
+        original_values = {k: v.clone() for k, v in state_dict.items()}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.CORRUPT_STATE_DICT,
+            trigger=trigger,
+            parameters={"noise_scale": 0.5},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        # All tensors should be corrupted
+        for key in original_values:
+            assert not torch.allclose(result[key], original_values[key])
+            assert result[key].shape == original_values[key].shape
+
+    def test_corrupt_state_dict_nested_structure(self):
+        """CORRUPT_STATE_DICT handles nested state dict structures."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {
+            "model": {
+                "layer1": {"weight": torch.ones(3, 3), "bias": torch.zeros(3)},
+                "layer2": {"weight": torch.ones(5, 3)},
+            },
+            "optimizer": {"step": 100},  # Non-tensor value
+        }
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.CORRUPT_STATE_DICT,
+            trigger=trigger,
+            parameters={"noise_scale": 0.2},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        # Nested tensors should be corrupted
+        assert not torch.allclose(result["model"]["layer1"]["weight"], torch.ones(3, 3))
+        assert not torch.allclose(result["model"]["layer1"]["bias"], torch.zeros(3))
+        assert not torch.allclose(result["model"]["layer2"]["weight"], torch.ones(5, 3))
+        # Non-tensor values should be preserved
+        assert result["optimizer"]["step"] == 100
+
+    def test_corrupt_state_dict_preserves_dtype(self):
+        """CORRUPT_STATE_DICT preserves tensor dtypes."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {
+            "float32": torch.ones(5, dtype=torch.float32),
+            "float64": torch.ones(5, dtype=torch.float64),
+        }
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.CORRUPT_STATE_DICT,
+            trigger=trigger,
+            parameters={"noise_scale": 0.1},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        assert result["float32"].dtype == torch.float32
+        assert result["float64"].dtype == torch.float64
+
+
+class TestCheckpointLoadPartialLoadStrategy:
+    """Tests for PARTIAL_LOAD strategy."""
+
+    def test_partial_load_drops_keys(self):
+        """PARTIAL_LOAD drops specific keys from state dict."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {
+            "layer1.weight": torch.ones(5),
+            "layer1.bias": torch.ones(5),
+            "layer2.weight": torch.ones(5),
+            "layer2.bias": torch.ones(5),
+        }
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.PARTIAL_LOAD,
+            trigger=trigger,
+            parameters={"drop_keys": ["layer1.bias", "layer2.bias"]},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        assert "layer1.weight" in result
+        assert "layer2.weight" in result
+        assert "layer1.bias" not in result
+        assert "layer2.bias" not in result
+
+    def test_partial_load_drop_ratio(self):
+        """PARTIAL_LOAD drops random ratio of keys."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {f"layer{i}.weight": torch.ones(5) for i in range(10)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.PARTIAL_LOAD,
+            trigger=trigger,
+            parameters={"drop_ratio": 0.3},  # Drop 30%
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        # Should have fewer keys than original
+        assert len(result) < len(state_dict)
+        # Should have dropped at least 1 key (30% of 10 = 3)
+        assert len(result) <= 9
+
+    def test_partial_load_default_drop_ratio(self):
+        """PARTIAL_LOAD uses default drop_ratio of 0.1."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {f"param{i}": torch.ones(5) for i in range(20)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.PARTIAL_LOAD,
+            trigger=trigger,
+            # No drop_ratio specified, should use default 0.1
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        # With 20 keys and 10% drop ratio, should drop at least 1-2 keys
+        assert len(result) < len(state_dict)
+
+    def test_partial_load_preserves_values(self):
+        """PARTIAL_LOAD preserves values for non-dropped keys."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {
+            "keep_this": torch.tensor([1.0, 2.0, 3.0]),
+            "drop_this": torch.tensor([4.0, 5.0, 6.0]),
+        }
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.PARTIAL_LOAD,
+            trigger=trigger,
+            parameters={"drop_keys": ["drop_this"]},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        assert "keep_this" in result
+        assert torch.allclose(result["keep_this"], torch.tensor([1.0, 2.0, 3.0]))
+
+    def test_partial_load_nested_structure(self):
+        """PARTIAL_LOAD handles nested state dict structures."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {
+            "model": {
+                "encoder": {"weight": torch.ones(5), "bias": torch.ones(5)},
+                "decoder": {"weight": torch.ones(5)},
+            }
+        }
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.PARTIAL_LOAD,
+            trigger=trigger,
+            parameters={"drop_keys": ["bias"]},  # Drop all bias keys at any level
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        # Nested bias should be dropped
+        assert "weight" in result["model"]["encoder"]
+        assert "bias" not in result["model"]["encoder"]
+        assert "weight" in result["model"]["decoder"]
+
+
+class TestCheckpointLoadProxyIntegration:
+    """Integration tests for CheckpointLoadProxy."""
+
+    def test_strategy_only_triggers_at_configured_step(self):
+        """Strategies only trigger at configured step."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {"weight": torch.ones(5)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=5)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.FILE_NOT_FOUND,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        # Steps 0-4 should call original
+        for step in range(5):
+            proxy.set_step(step)
+            result = proxy("/path/to/checkpoint")
+            assert result == state_dict
+
+        # Step 5 should trigger
+        proxy.set_step(5)
+        with pytest.raises(FileNotFoundError):
+            proxy("/path/to/checkpoint")
+
+    def test_periodic_trigger(self):
+        """Periodic trigger fires at correct intervals."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {"weight": torch.ones(5)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.PERIODIC, every_n_steps=3)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.FILE_NOT_FOUND,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        exception_steps = []
+        for step in range(10):
+            proxy.set_step(step)
+            try:
+                proxy("/path/to/checkpoint")
+            except FileNotFoundError:
+                exception_steps.append(step)
+
+        # Steps 0, 3, 6, 9 should trigger (step % 3 == 0)
+        assert exception_steps == [0, 3, 6, 9]
+
+    def test_collector_records_injection(self):
+        """Collector records fault injection when provided."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-load-001"
+        original = MagicMock(return_value={})
+        proxy = CheckpointLoadProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-recording",
+            strategy=StrategyType.FILE_NOT_FOUND,
+            trigger=trigger,
+            severity="high",
+            expected_behavior="Should fail checkpoint load",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(FileNotFoundError):
+            proxy("/path/to/checkpoint")
+
+        # Check injection was recorded
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args[1]
+        assert call_kwargs["fault_type"] == "file_not_found"
+        assert call_kwargs["target_layer"] == "L2"
+        assert call_kwargs["severity"] == "high"
+        assert call_kwargs["expected_behavior"] == "Should fail checkpoint load"
+
+        # Check outcome was recorded
+        collector.record_fault_outcome.assert_called_once()
+
+    def test_corrupt_then_return_success(self):
+        """CORRUPT_STATE_DICT corrupts then returns successfully."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {"model.weight": torch.ones(10)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-corrupt-success",
+            strategy=StrategyType.CORRUPT_STATE_DICT,
+            trigger=trigger,
+            parameters={"noise_scale": 0.1},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("/path/to/checkpoint")
+
+        # Result should be returned (not an exception)
+        assert result is not None
+        assert "model.weight" in result
+        original.assert_called_once()
+
+    def test_passes_additional_kwargs(self):
+        """Proxy passes additional kwargs to original function."""
+        from ralph.proxies.l2_verl import CheckpointLoadProxy
+
+        state_dict = {"weight": torch.ones(5)}
+        original = MagicMock(return_value=state_dict)
+        proxy = CheckpointLoadProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.CORRUPT_STATE_DICT,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(
+            "/path/to/checkpoint",
+            map_location="cpu",
+            strict=False,
+            extra_param="value",
+        )
+
+        original.assert_called_once_with(
+            "/path/to/checkpoint",
+            map_location="cpu",
+            strict=False,
+            extra_param="value",
+        )
+

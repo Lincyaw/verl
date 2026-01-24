@@ -761,3 +761,36 @@
 - This unblocks: No direct blockers (this was a P1 Worker proxy)
 - Next priorities: 10.1-gpu-memory-injector (L3), 10.2-checkpoint-load-proxy (L2), 10.3-update-actor-proxy (L2), 15.1-unit-tests
 
+
+[2026-01-24] 10.2-checkpoint-load-proxy: COMPLETED
+- Added CheckpointLoadProxy class to ralph/proxies/l2_verl.py
+- Inherits from BaseProxy, TensorCorruptionMixin, ExceptionMixin
+- Set SUPPORTED_STRATEGIES = {RAISE_EXCEPTION, FILE_NOT_FOUND, CORRUPT_STATE_DICT, PARTIAL_LOAD}
+- Implemented _get_layer() returning 'L2'
+- Implemented strategy methods:
+  - _strategy_raise_exception: Raises configurable exception with checkpoint context
+  - _strategy_file_not_found: Raises FileNotFoundError simulating missing checkpoint
+  - _strategy_corrupt_state_dict: Adds Gaussian noise to loaded tensor parameters
+  - _strategy_partial_load: Removes random or specified keys from loaded state dict
+- Config parameters:
+  - RAISE_EXCEPTION: exc_type (str, required), message (str, optional)
+  - FILE_NOT_FOUND: message (str, optional)
+  - CORRUPT_STATE_DICT: noise_scale (float, default 0.01)
+  - PARTIAL_LOAD: drop_ratio (float, default 0.1), drop_keys (list, optional)
+- Helper methods:
+  - _corrupt_state_dict_tensors: Recursively corrupts tensors in nested structures
+  - _apply_partial_load: Recursively removes keys from nested structures
+- Decorated with @ProxyRegistry.register('FSDPCheckpointManager.load_checkpoint')
+- Updated ralph/proxies/__init__.py to export CheckpointLoadProxy
+- Created 30+ comprehensive unit tests in tests/ralph/test_l2_verl_proxy.py:
+  - TestCheckpointLoadProxyRegistration: Registration and supported strategies
+  - TestCheckpointLoadProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestCheckpointLoadRaiseExceptionStrategy: IOError, RuntimeError, default message, missing exc_type
+  - TestCheckpointLoadFileNotFoundStrategy: Raises error, custom message, default message
+  - TestCheckpointLoadCorruptStateDictStrategy: Adds noise, default scale, multiple tensors, nested, dtype preservation
+  - TestCheckpointLoadPartialLoadStrategy: Drop keys, drop ratio, default ratio, preserves values, nested
+  - TestCheckpointLoadProxyIntegration: Step-based trigger, periodic trigger, collector recording, kwargs passing
+- All syntax verified via py_compile
+- This unblocks: No direct blockers
+- Next priorities: 10.1-gpu-memory-injector (L3), 10.3-update-actor-proxy (L2), 15.1-unit-tests
+

@@ -231,3 +231,240 @@ class CheckpointSaveProxy(BaseProxy, DelayMixin, ExceptionMixin):
         message = self._config.parameters.get("message", default_message)
 
         self._raise_exception(exc_type, message)
+
+
+@ProxyRegistry.register("FSDPCheckpointManager.load_checkpoint")
+class CheckpointLoadProxy(BaseProxy, TensorCorruptionMixin, ExceptionMixin):
+    """
+    Proxy for FSDPCheckpointManager.load_checkpoint() operations.
+
+    Supports fault injection at the verl checkpoint loading level (L2).
+
+    Supported strategies:
+    - RAISE_EXCEPTION: Raises configurable exception instead of loading
+    - FILE_NOT_FOUND: Raises FileNotFoundError simulating missing checkpoint
+    - CORRUPT_STATE_DICT: Adds noise to loaded parameters
+    - PARTIAL_LOAD: Removes some keys from loaded state dict
+
+    Config parameters:
+    - RAISE_EXCEPTION: exc_type (str, required), message (str, optional)
+    - FILE_NOT_FOUND: message (str, optional)
+    - CORRUPT_STATE_DICT: noise_scale (float, default 0.01)
+    - PARTIAL_LOAD: drop_ratio (float, default 0.1), drop_keys (list, optional)
+
+    Expected input/output:
+    - Input: checkpoint_path (str), model, optimizer (optional), etc.
+    - Output: Typically returns dict with state_dict or loaded model state
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.RAISE_EXCEPTION,
+        StrategyType.FILE_NOT_FOUND,
+        StrategyType.CORRUPT_STATE_DICT,
+        StrategyType.PARTIAL_LOAD,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "L2"
+
+    def _strategy_raise_exception(
+        self,
+        checkpoint_path: Optional[str] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Raise an exception instead of loading checkpoint.
+
+        This strategy is a terminal operation - the original load_checkpoint
+        is never called when this strategy triggers.
+
+        Args:
+            checkpoint_path: Path to the checkpoint file/directory
+            *args: Additional positional arguments (ignored)
+            **kwargs: Additional keyword arguments (ignored)
+
+        Raises:
+            The exception type specified in config with checkpoint-specific context.
+
+        Config parameters:
+            exc_type (str): The exception type name (required).
+            message (str): Custom error message (optional).
+        """
+        exc_type = self._config.parameters.get("exc_type")
+        if exc_type is None:
+            raise ValueError("exc_type must be specified in config parameters")
+
+        default_message = (
+            f"Fault injection: {exc_type} during checkpoint load "
+            f"(checkpoint_path={checkpoint_path})"
+        )
+        message = self._config.parameters.get("message", default_message)
+
+        self._raise_exception(exc_type, message)
+
+    def _strategy_file_not_found(
+        self,
+        checkpoint_path: Optional[str] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Raise FileNotFoundError simulating a missing checkpoint.
+
+        This strategy simulates the scenario where a checkpoint file
+        is expected but does not exist, which can happen due to storage
+        failures, incorrect paths, or incomplete writes.
+
+        Args:
+            checkpoint_path: Path to the checkpoint file/directory
+            *args: Additional positional arguments (ignored)
+            **kwargs: Additional keyword arguments (ignored)
+
+        Raises:
+            FileNotFoundError: Always raised with checkpoint path context.
+
+        Config parameters:
+            message (str): Custom error message (optional).
+        """
+        default_message = f"Checkpoint not found: {checkpoint_path}"
+        message = self._config.parameters.get("message", default_message)
+
+        raise FileNotFoundError(message)
+
+    def _strategy_corrupt_state_dict(
+        self,
+        checkpoint_path: Optional[str] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Load checkpoint but add noise to all tensor parameters.
+
+        This strategy simulates corrupted checkpoint files or storage
+        bit flips by adding Gaussian noise to all tensor values in
+        the loaded state dict.
+
+        Args:
+            checkpoint_path: Path to the checkpoint file/directory
+            *args: Additional positional arguments for original
+            **kwargs: Additional keyword arguments for original
+
+        Returns:
+            State dict with all tensor values corrupted by noise.
+
+        Config parameters:
+            noise_scale (float): Standard deviation of Gaussian noise (default 0.01).
+        """
+        # Call original to get results
+        result = self._original(checkpoint_path, *args, **kwargs)
+
+        # Get noise scale from config (default lower than typical to be subtle)
+        noise_scale = self._config.parameters.get("noise_scale", 0.01)
+
+        # Corrupt all tensors in the result
+        return self._corrupt_state_dict_tensors(result, noise_scale)
+
+    def _corrupt_state_dict_tensors(self, obj: Any, noise_scale: float) -> Any:
+        """
+        Recursively corrupt tensor values in a state dict.
+
+        Args:
+            obj: Object to corrupt (dict, list, tuple, or tensor)
+            noise_scale: Standard deviation of Gaussian noise
+
+        Returns:
+            Object with all tensors corrupted
+        """
+        if isinstance(obj, torch.Tensor):
+            return self._corrupt_tensor(obj, noise_scale)
+        elif isinstance(obj, dict):
+            return {k: self._corrupt_state_dict_tensors(v, noise_scale) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._corrupt_state_dict_tensors(item, noise_scale) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self._corrupt_state_dict_tensors(item, noise_scale) for item in obj)
+        else:
+            return obj
+
+    def _strategy_partial_load(
+        self,
+        checkpoint_path: Optional[str] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Load checkpoint but remove some keys from the state dict.
+
+        This strategy simulates incomplete checkpoint files or version
+        mismatches where some expected keys are missing from the state dict.
+
+        Args:
+            checkpoint_path: Path to the checkpoint file/directory
+            *args: Additional positional arguments for original
+            **kwargs: Additional keyword arguments for original
+
+        Returns:
+            State dict with some keys removed.
+
+        Config parameters:
+            drop_ratio (float): Fraction of keys to drop randomly (default 0.1).
+            drop_keys (list): Specific key names to drop (optional).
+                If provided, drop_ratio is ignored.
+        """
+        import random
+
+        # Call original to get results
+        result = self._original(checkpoint_path, *args, **kwargs)
+
+        # Get config parameters
+        drop_keys = self._config.parameters.get("drop_keys")
+        drop_ratio = self._config.parameters.get("drop_ratio", 0.1)
+
+        # Apply partial load to the result
+        return self._apply_partial_load(result, drop_keys, drop_ratio)
+
+    def _apply_partial_load(
+        self,
+        obj: Any,
+        drop_keys: Optional[list],
+        drop_ratio: float,
+    ) -> Any:
+        """
+        Remove keys from a state dict structure.
+
+        Args:
+            obj: Object to process (dict, list, tuple, or other)
+            drop_keys: Specific keys to drop (if None, use drop_ratio)
+            drop_ratio: Fraction of keys to drop randomly
+
+        Returns:
+            Object with specified keys removed
+        """
+        import random
+
+        if isinstance(obj, dict):
+            if drop_keys is not None:
+                # Drop specific keys
+                return {
+                    k: self._apply_partial_load(v, drop_keys, drop_ratio)
+                    for k, v in obj.items()
+                    if k not in drop_keys
+                }
+            else:
+                # Drop random fraction of keys
+                keys = list(obj.keys())
+                num_to_drop = max(1, int(len(keys) * drop_ratio))
+                keys_to_drop = set(random.sample(keys, min(num_to_drop, len(keys))))
+                return {
+                    k: self._apply_partial_load(v, drop_keys, drop_ratio)
+                    for k, v in obj.items()
+                    if k not in keys_to_drop
+                }
+        elif isinstance(obj, list):
+            return [self._apply_partial_load(item, drop_keys, drop_ratio) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self._apply_partial_load(item, drop_keys, drop_ratio) for item in obj)
+        else:
+            return obj

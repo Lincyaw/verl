@@ -36,8 +36,13 @@ except ImportError:
 
 # L2 verl proxies - imported conditionally to handle missing torch
 try:
-    from ralph.proxies.l2_verl import CheckpointSaveProxy, RewardManagerProxy
+    from ralph.proxies.l2_verl import (
+        CheckpointLoadProxy,
+        CheckpointSaveProxy,
+        RewardManagerProxy,
+    )
 except ImportError:
+    CheckpointLoadProxy = None
     CheckpointSaveProxy = None
     RewardManagerProxy = None
 
@@ -74,6 +79,7 @@ __all__ = [
     "BarrierProxy",
     "RewardManagerProxy",
     "CheckpointSaveProxy",
+    "CheckpointLoadProxy",
     "GAEProxy",
     "KLPenaltyProxy",
     "GenerateProxy",

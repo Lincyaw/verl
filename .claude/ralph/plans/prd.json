@@ -550,7 +550,7 @@
       "Decorate with @ProxyRegistry.register('FSDPCheckpointManager.load_checkpoint')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "4.4-checkpoint-save-proxy"
     ]
