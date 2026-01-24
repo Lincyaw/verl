@@ -448,3 +448,31 @@
 - Verification passed: `python -m ralph.cli.main --help` prints usage and exits 0
 - This unblocks: User can now use Ralph CLI to validate configs and inspect targets
 - Next priorities: 7.1-sample-configs (create sample YAML configurations), 15.1-unit-tests (comprehensive unit tests)
+
+[2026-01-24] 7.1-sample-configs: COMPLETED
+- Created configs/ralph/ directory for YAML configurations
+- Created configs/ralph/default.yaml with 8 scenarios covering all P0 injection points:
+  - ray.get: delay, partial_failure
+  - torch.distributed.all_reduce: corrupt_tensor, inject_nan
+  - RewardManager.__call__: reward_flip, constant_reward
+  - FSDPCheckpointManager.save_checkpoint: delay, raise_exception
+  - Mix of enabled/disabled scenarios for demonstration
+  - Various trigger types: one_shot, probabilistic, step_based, periodic
+- Created configs/ralph/nccl_timeout_test.yaml with 8 scenarios:
+  - Short and long delays testing timeout detection
+  - Deadlock scenarios on different ranks (disabled by default for safety)
+  - Network jitter simulation with probabilistic delays
+  - NaN/Inf injection scenarios (disabled by default)
+  - Tensor corruption simulating memory bit flips
+- Created configs/ralph/checkpoint_resilience.yaml with 9 scenarios:
+  - Slow checkpoint saves simulating storage latency
+  - Network timeout scenarios
+  - Various exception types: IOError, PermissionError, OSError, RuntimeError, TimeoutError, FileNotFoundError
+  - Probabilistic delays for variable storage performance
+- Verification passed: All 3 configs pass `--validate` CLI check
+- Verification passed: All configs load successfully via load_yaml_config()
+  - default.yaml: 8 scenarios (5 enabled)
+  - nccl_timeout_test.yaml: 8 scenarios (4 enabled)
+  - checkpoint_resilience.yaml: 9 scenarios (4 enabled)
+- This unblocks: 15.2-integration-tests (which requires sample configs)
+- Next priorities: 8.1-ray-put-proxy, 8.2-execute-all-proxy, 9.1-gae-proxy, 15.1-unit-tests

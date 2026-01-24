@@ -1,0 +1,145 @@
+# Ralph NCCL Timeout Test Configuration
+# Tests all_reduce delay and deadlock scenarios to simulate NCCL timeouts
+#
+# This configuration focuses on torch.distributed.all_reduce operations
+# to test system resilience to NCCL collective communication failures.
+
+version: "1.0"
+
+experiment:
+  name: "nccl_timeout_resilience"
+  description: "Test system resilience to NCCL timeout scenarios"
+  seed: 123
+
+global:
+  enabled: true
+  log_level: "DEBUG"
+  output_dir: "/tmp/ralph_nccl_test"
+
+data_collection:
+  stream_a:
+    enabled: true
+    output:
+      path: "${global.output_dir}/nccl_telemetry.jsonl"
+      format: "jsonl"
+  stream_b:
+    enabled: true
+    output:
+      path: "${global.output_dir}/nccl_labels.jsonl"
+      format: "jsonl"
+
+scenarios:
+  # Scenario 1: Short delays to test timeout detection
+  - id: "nccl-short-delay"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "delay"
+    enabled: true
+    severity: "low"
+    trigger:
+      type: "periodic"
+      every_n_steps: 100
+    parameters:
+      delay_seconds: 2.0
+    expected_behavior: "All-reduce delayed by 2 seconds every 100 steps, should not trigger timeout"
+
+  # Scenario 2: Long delays approaching timeout threshold
+  - id: "nccl-timeout-boundary"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "delay"
+    enabled: true
+    severity: "medium"
+    trigger:
+      type: "one_shot"
+      at_step: 500
+    parameters:
+      delay_seconds: 25.0
+    expected_behavior: "All-reduce delayed by 25 seconds at step 500, may trigger timeout depending on NCCL_TIMEOUT setting"
+
+  # Scenario 3: Deadlock on rank 0 (requires multi-GPU setup)
+  - id: "nccl-deadlock-rank0"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "deadlock"
+    enabled: false
+    severity: "critical"
+    trigger:
+      type: "one_shot"
+      at_step: 1000
+    parameters:
+      deadlock_rank: 0
+    expected_behavior: "Rank 0 hangs indefinitely at step 1000, causing NCCL timeout on all ranks"
+
+  # Scenario 4: Deadlock on non-zero rank
+  - id: "nccl-deadlock-rank1"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "deadlock"
+    enabled: false
+    severity: "critical"
+    trigger:
+      type: "one_shot"
+      at_step: 1500
+    parameters:
+      deadlock_rank: 1
+    expected_behavior: "Rank 1 hangs indefinitely at step 1500, other ranks timeout waiting"
+
+  # Scenario 5: Probabilistic delays simulating network jitter
+  - id: "nccl-network-jitter"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "delay"
+    enabled: true
+    severity: "low"
+    trigger:
+      type: "probabilistic"
+      probability: 0.05
+    parameters:
+      delay_seconds: 1.0
+    expected_behavior: "5% of all-reduce calls delayed by 1 second, simulating network jitter"
+
+  # Scenario 6: NaN injection causing gradient explosion
+  - id: "nccl-nan-gradients"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "inject_nan"
+    enabled: false
+    severity: "high"
+    trigger:
+      type: "step_based"
+      start_step: 200
+      end_step: 210
+    parameters:
+      nan_ratio: 0.0001
+    expected_behavior: "0.01% of tensor elements set to NaN during steps 200-210, may cause training divergence"
+
+  # Scenario 7: Inf injection causing overflow
+  - id: "nccl-inf-overflow"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "inject_inf"
+    enabled: false
+    severity: "high"
+    trigger:
+      type: "one_shot"
+      at_step: 300
+    parameters:
+      inf_ratio: 0.001
+      positive: true
+    expected_behavior: "0.1% of tensor elements set to +Inf at step 300, simulating numerical overflow"
+
+  # Scenario 8: Tensor corruption simulating bit flips
+  - id: "nccl-bit-flips"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "corrupt_tensor"
+    enabled: true
+    severity: "medium"
+    trigger:
+      type: "step_based"
+      start_step: 800
+      end_step: 900
+    parameters:
+      noise_scale: 0.1
+    expected_behavior: "Tensors corrupted with noise scale 0.1 during steps 800-900, simulating memory corruption"

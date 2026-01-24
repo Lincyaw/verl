@@ -1,0 +1,163 @@
+# Ralph Checkpoint Resilience Configuration
+# Tests checkpoint save failure scenarios to verify system resilience
+#
+# This configuration focuses on FSDPCheckpointManager.save_checkpoint operations
+# to test how the system handles checkpoint failures, delays, and recovery.
+
+version: "1.0"
+
+experiment:
+  name: "checkpoint_resilience"
+  description: "Test system resilience to checkpoint save failures"
+  seed: 456
+
+global:
+  enabled: true
+  log_level: "DEBUG"
+  output_dir: "/tmp/ralph_checkpoint_test"
+
+data_collection:
+  stream_a:
+    enabled: true
+    output:
+      path: "${global.output_dir}/checkpoint_telemetry.jsonl"
+      format: "jsonl"
+  stream_b:
+    enabled: true
+    output:
+      path: "${global.output_dir}/checkpoint_labels.jsonl"
+      format: "jsonl"
+
+scenarios:
+  # Scenario 1: Slow checkpoint saves (storage latency)
+  - id: "checkpoint-slow-save"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "delay"
+    enabled: true
+    severity: "low"
+    trigger:
+      type: "periodic"
+      every_n_steps: 1000
+    parameters:
+      delay_seconds: 15.0
+    expected_behavior: "Checkpoint save delayed by 15 seconds every 1000 steps, simulating slow storage"
+
+  # Scenario 2: Very slow checkpoint (network storage timeout)
+  - id: "checkpoint-network-timeout"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "delay"
+    enabled: true
+    severity: "medium"
+    trigger:
+      type: "one_shot"
+      at_step: 5000
+    parameters:
+      delay_seconds: 60.0
+    expected_behavior: "Checkpoint save delayed by 60 seconds at step 5000, simulating network storage timeout"
+
+  # Scenario 3: IOError - Disk full
+  - id: "checkpoint-disk-full"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "raise_exception"
+    enabled: true
+    severity: "critical"
+    trigger:
+      type: "one_shot"
+      at_step: 10000
+    parameters:
+      exc_type: "IOError"
+      message: "[Errno 28] No space left on device: '/checkpoints/model_step_10000'"
+    expected_behavior: "IOError raised at step 10000 simulating disk full, system should retry or alert"
+
+  # Scenario 4: PermissionError - Write denied
+  - id: "checkpoint-permission-denied"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "raise_exception"
+    enabled: false
+    severity: "critical"
+    trigger:
+      type: "one_shot"
+      at_step: 15000
+    parameters:
+      exc_type: "PermissionError"
+      message: "[Errno 13] Permission denied: '/checkpoints/model_step_15000'"
+    expected_behavior: "PermissionError raised at step 15000, system should handle gracefully"
+
+  # Scenario 5: OSError - Storage unavailable
+  - id: "checkpoint-storage-unavailable"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "raise_exception"
+    enabled: false
+    severity: "critical"
+    trigger:
+      type: "probabilistic"
+      probability: 0.01
+    parameters:
+      exc_type: "OSError"
+      message: "NFS server not responding"
+    expected_behavior: "OSError raised with 1% probability simulating intermittent storage failures"
+
+  # Scenario 6: RuntimeError - Serialization failure
+  - id: "checkpoint-serialization-error"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "raise_exception"
+    enabled: false
+    severity: "high"
+    trigger:
+      type: "step_based"
+      start_step: 20000
+      end_step: 20010
+    parameters:
+      exc_type: "RuntimeError"
+      message: "Failed to serialize model state dict: tensor too large"
+    expected_behavior: "RuntimeError during steps 20000-20010 simulating serialization issues"
+
+  # Scenario 7: Probabilistic delays (variable storage performance)
+  - id: "checkpoint-variable-latency"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "delay"
+    enabled: true
+    severity: "low"
+    trigger:
+      type: "probabilistic"
+      probability: 0.3
+    parameters:
+      delay_seconds: 5.0
+    expected_behavior: "30% of checkpoint saves delayed by 5 seconds, simulating variable storage latency"
+
+  # Scenario 8: TimeoutError - Network timeout
+  - id: "checkpoint-timeout"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "raise_exception"
+    enabled: false
+    severity: "critical"
+    trigger:
+      type: "one_shot"
+      at_step: 25000
+    parameters:
+      exc_type: "TimeoutError"
+      message: "Checkpoint upload timed out after 300 seconds"
+    expected_behavior: "TimeoutError at step 25000 simulating upload timeout to remote storage"
+
+  # Scenario 9: FileNotFoundError - Missing checkpoint directory
+  - id: "checkpoint-missing-dir"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "raise_exception"
+    enabled: false
+    severity: "medium"
+    trigger:
+      type: "one_shot"
+      at_step: 30000
+    parameters:
+      exc_type: "FileNotFoundError"
+      message: "[Errno 2] No such file or directory: '/checkpoints/'"
+    expected_behavior: "FileNotFoundError at step 30000, system should auto-create directories or alert"

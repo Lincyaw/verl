@@ -1,0 +1,147 @@
+# Ralph Default Configuration
+# One scenario per P0 injection point for comprehensive fault injection testing
+#
+# P0 Targets:
+# - ray.get (L0): Ray object store operations
+# - torch.distributed.all_reduce (L1): NCCL collective communications
+# - RewardManager.__call__ (L2): verl reward computation
+# - FSDPCheckpointManager.save_checkpoint (L2): verl checkpoint saving
+
+version: "1.0"
+
+experiment:
+  name: "default_fault_injection"
+  description: "Default configuration testing all P0 injection points"
+  seed: 42
+
+global:
+  enabled: true
+  log_level: "INFO"
+  output_dir: "/tmp/ralph_output"
+
+data_collection:
+  stream_a:
+    enabled: true
+    output:
+      path: "${global.output_dir}/telemetry.jsonl"
+      format: "jsonl"
+  stream_b:
+    enabled: true
+    output:
+      path: "${global.output_dir}/labels.jsonl"
+      format: "jsonl"
+
+scenarios:
+  # L0 Ray: ray.get delay
+  - id: "ray-get-delay"
+    layer: "L0"
+    target: "ray.get"
+    fault_type: "delay"
+    enabled: true
+    severity: "medium"
+    trigger:
+      type: "one_shot"
+      at_step: 100
+    parameters:
+      delay_seconds: 5.0
+    expected_behavior: "ray.get call delayed by 5 seconds at step 100"
+
+  # L0 Ray: ray.get partial failure
+  - id: "ray-get-partial-failure"
+    layer: "L0"
+    target: "ray.get"
+    fault_type: "partial_failure"
+    enabled: true
+    severity: "high"
+    trigger:
+      type: "probabilistic"
+      probability: 0.1
+    parameters:
+      fail_ratio: 0.3
+    expected_behavior: "30% of ray.get results set to None with 10% probability per step"
+
+  # L1 Distributed: all_reduce tensor corruption
+  - id: "all-reduce-corrupt"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "corrupt_tensor"
+    enabled: true
+    severity: "medium"
+    trigger:
+      type: "step_based"
+      start_step: 50
+      end_step: 150
+    parameters:
+      noise_scale: 0.01
+    expected_behavior: "All-reduce tensors corrupted with noise scale 0.01 during steps 50-150"
+
+  # L1 Distributed: all_reduce NaN injection
+  - id: "all-reduce-nan"
+    layer: "L1"
+    target: "torch.distributed.all_reduce"
+    fault_type: "inject_nan"
+    enabled: false
+    severity: "critical"
+    trigger:
+      type: "one_shot"
+      at_step: 200
+    parameters:
+      nan_ratio: 0.001
+    expected_behavior: "0.1% of all-reduce tensor elements set to NaN at step 200"
+
+  # L2 verl: RewardManager reward flip
+  - id: "reward-flip"
+    layer: "L2"
+    target: "RewardManager.__call__"
+    fault_type: "reward_flip"
+    enabled: true
+    severity: "high"
+    trigger:
+      type: "periodic"
+      every_n_steps: 500
+    parameters: {}
+    expected_behavior: "All reward values negated every 500 steps"
+
+  # L2 verl: RewardManager constant reward
+  - id: "constant-reward"
+    layer: "L2"
+    target: "RewardManager.__call__"
+    fault_type: "constant_reward"
+    enabled: false
+    severity: "high"
+    trigger:
+      type: "step_based"
+      start_step: 1000
+      end_step: 1100
+    parameters:
+      constant_value: 0.0
+    expected_behavior: "All rewards set to 0.0 during steps 1000-1100"
+
+  # L2 verl: Checkpoint save delay
+  - id: "checkpoint-delay"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "delay"
+    enabled: true
+    severity: "low"
+    trigger:
+      type: "probabilistic"
+      probability: 0.2
+    parameters:
+      delay_seconds: 10.0
+    expected_behavior: "Checkpoint save delayed by 10 seconds with 20% probability"
+
+  # L2 verl: Checkpoint save exception
+  - id: "checkpoint-ioerror"
+    layer: "L2"
+    target: "FSDPCheckpointManager.save_checkpoint"
+    fault_type: "raise_exception"
+    enabled: false
+    severity: "critical"
+    trigger:
+      type: "one_shot"
+      at_step: 500
+    parameters:
+      exc_type: "IOError"
+      message: "Simulated disk full error during checkpoint save"
+    expected_behavior: "IOError raised at step 500 simulating disk full condition"

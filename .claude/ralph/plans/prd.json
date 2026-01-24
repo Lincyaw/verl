@@ -360,7 +360,7 @@
       "Each config must pass validation with --validate",
       "Verify: All configs load successfully via load_yaml_config"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "5.2-yaml-config-loader"
     ]
