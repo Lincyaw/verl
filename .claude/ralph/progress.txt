@@ -1256,3 +1256,55 @@
 - Verification passed: ProxyRegistry.is_registered('ToolParser.parse') returns True
 - This completes the Agent P2 series (CallToolProxy and ToolParserProxy)
 - Next priorities: 13.1-megatron-optimizer-proxy, 13.3-optimizer-step-proxy, 14.1-log-parser
+
+[2026-01-24] 13.3-optimizer-step-proxy: COMPLETED
+- Created ralph/proxies/optimizer.py with OptimizerStepProxy class
+- Inherits from BaseProxy, DelayMixin, SkipMixin, TensorCorruptionMixin
+- Set SUPPORTED_STRATEGIES = {SKIP, REPEAT, CORRUPTED_MOMENTUM, RESET_STATE}
+- Implemented _get_layer() returning 'Optimizer'
+- Implemented strategy methods:
+  - _strategy_skip: Inherited from SkipMixin - skips optimizer step entirely
+  - _strategy_repeat: Inherited from SkipMixin - repeats step N times
+  - _strategy_corrupted_momentum: Adds Gaussian noise to momentum buffers
+    - Handles: momentum_buffer (SGD), exp_avg/exp_avg_sq (Adam), square_avg (RMSprop), etc.
+  - _strategy_reset_state: Clears all optimizer state (momentum, variance, etc.)
+- Helper methods:
+  - _get_optimizer_from_context: Gets optimizer from bound method or _optimizer attribute
+  - _corrupt_optimizer_state: Recursively corrupts momentum-related tensors
+  - _reset_optimizer_state: Clears optimizer state dictionary
+- Decorated with @ProxyRegistry.register('optimizer.step')
+- Updated ralph/proxies/__init__.py to export OptimizerStepProxy
+- Created tests/ralph/test_optimizer_proxy.py with 40+ comprehensive unit tests
+- All file syntax verified via py_compile
+- Verification passed: Registration and strategy declarations correct
+- This unblocks: 13.4-lr-scheduler-proxy
+- Completed together with 13.4-lr-scheduler-proxy in same file
+
+[2026-01-24] 13.4-lr-scheduler-proxy: COMPLETED
+- Added LRSchedulerProxy class to ralph/proxies/optimizer.py
+- Inherits from BaseProxy, DelayMixin, SkipMixin
+- Set SUPPORTED_STRATEGIES = {SKIP, WRONG_LR, LR_SPIKE, LR_ZERO}
+- Implemented _get_layer() returning 'Optimizer'
+- Implemented strategy methods:
+  - _strategy_skip: Inherited from SkipMixin - skips scheduler step (LR won't update)
+  - _strategy_wrong_lr: Scales LR by configurable factor (default 10.0x)
+  - _strategy_lr_spike: Sets LR to absolute high value (default 1.0)
+  - _strategy_lr_zero: Sets LR to zero (freezes learning)
+- Helper methods:
+  - _get_scheduler_from_context: Gets scheduler from bound method or _scheduler attribute
+  - _scale_learning_rate: Multiplies LR in all param groups by factor
+  - _set_learning_rate: Sets absolute LR in all param groups
+- Decorated with @ProxyRegistry.register('lr_scheduler.step')
+- Updated ralph/proxies/__init__.py to export LRSchedulerProxy
+- Created comprehensive unit tests in tests/ralph/test_optimizer_proxy.py:
+  - TestLRSchedulerProxyRegistration: Registration and supported strategies
+  - TestLRSchedulerProxyBasics: _get_layer, no config, unsupported strategy
+  - TestLRSchedulerSkipStrategy: Does not call original, returns None
+  - TestWrongLRStrategy: Scales LR, default factor 10.0
+  - TestLRSpikeStrategy: Sets absolute value, default 1.0
+  - TestLRZeroStrategy: Sets LR to zero, calls original first
+  - TestLRSchedulerProxyIntegration: Step-based trigger, collector recording
+- All tests syntax verified via py_compile
+- Verification passed: Registration and strategy declarations correct
+- Completed together with 13.3-optimizer-step-proxy in same file
+- Next priorities: 13.1-megatron-optimizer-proxy, 13.2-parallelism-proxy, 14.1-log-parser

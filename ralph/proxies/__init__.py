@@ -89,6 +89,13 @@ except ImportError:
     CallToolProxy = None
     ToolParserProxy = None
 
+# Optimizer proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.optimizer import LRSchedulerProxy, OptimizerStepProxy
+except ImportError:
+    OptimizerStepProxy = None
+    LRSchedulerProxy = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -116,4 +123,6 @@ __all__ = [
     "DataProtoChunkProxy",
     "CallToolProxy",
     "ToolParserProxy",
+    "OptimizerStepProxy",
+    "LRSchedulerProxy",
 ]
