@@ -300,7 +300,7 @@
       "Implement __enter__ and __exit__ for context manager pattern",
       "Verify: Engine can install/uninstall proxies without errors; original functions work after uninstall"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "1.1-config-classes",
       "1.2-registry",

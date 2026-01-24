@@ -341,3 +341,38 @@
 - Verification passed: `from ralph.proxies import CheckpointSaveProxy` works correctly
 - This unblocks: 5.1-injection-engine (all P0 proxies now complete), 10.2-checkpoint-load-proxy
 - Next priorities: 5.1-injection-engine (critical path), 5.2-yaml-config-loader (unblocked), 0.2-dependencies (quick)
+
+[2026-01-24] 5.1-injection-engine: COMPLETED
+- Created ralph/core/engine.py with InjectionEngine class
+- Implemented all required methods:
+  - __init__(collector, seed): Stores collector reference, empty proxy dict, initializes scheduler and RNG
+  - add_config(target, config): Adds FaultConfig with validation (target registered, strategy supported)
+  - remove_config(target): Removes config (raises if installed)
+  - get_config(target): Returns config or None
+  - list_targets(): Returns sorted list of configured targets
+  - load_config(yaml_path): Parses YAML and creates FaultConfig objects with variable substitution
+  - install_proxies(): Monkey-patches target functions with proxy instances
+  - uninstall_proxies(): Restores all original functions
+  - update_step(step): Updates current step on all proxies via scheduler
+  - get_step(): Returns current training step
+  - is_installed(): Returns installation status
+  - get_active_faults(): Returns list of faults that would trigger at current step
+  - get_proxy(target): Returns proxy instance or None
+  - get_collector(): Returns collector instance
+  - set_seed(seed): Sets RNG seed for reproducible probabilistic triggering
+  - __enter__, __exit__: Context manager for automatic cleanup
+  - __repr__: String representation showing state
+- Key features:
+  - Full monkey-patching support with target resolution (handles module.function patterns)
+  - Integration with ProxyRegistry for proxy class lookup
+  - Integration with TriggerScheduler for trigger coordination
+  - Integration with DualStreamCollector for fault recording
+  - YAML config loading with ${global.var} variable substitution
+  - Proper cleanup and restoration of original functions
+  - Thread-safe RNG propagation to all proxies
+- Updated ralph/core/__init__.py to export InjectionEngine
+- Created tests/ralph/test_injection_engine.py with comprehensive unit tests (45+ test cases)
+- Verification passed: All 8 manual tests pass
+- This unblocks: 6.1-cli-main, 15.1-unit-tests
+- Next priorities: 5.2-yaml-config-loader (for complete YAML support), 6.1-cli-main (CLI entry point)
+
