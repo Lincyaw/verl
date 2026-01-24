@@ -41,6 +41,12 @@ except ImportError:
     CheckpointSaveProxy = None
     RewardManagerProxy = None
 
+# Algorithm proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.algorithm import GAEProxy
+except ImportError:
+    GAEProxy = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -55,4 +61,5 @@ __all__ = [
     "BarrierProxy",
     "RewardManagerProxy",
     "CheckpointSaveProxy",
+    "GAEProxy",
 ]

@@ -620,3 +620,50 @@
 - Total test count in l1_distributed_proxy.py: ~81 tests (27 AllReduceProxy + 27 AllGatherProxy + 27 BarrierProxy)
 - This unblocks: No direct blockers (all L1 distributed proxies now complete)
 - Next priorities: 9.1-gae-proxy (Algorithm P1), 9.2-kl-penalty-proxy, 9.3-generate-proxy, 15.1-unit-tests
+
+[2026-01-24] 9.1-gae-proxy: COMPLETED
+- Created ralph/proxies/algorithm.py with GAEProxy class
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationMixin
+- Set SUPPORTED_STRATEGIES = {WRONG_ADVANTAGE, ZERO_ADVANTAGE, INVERTED_ADVANTAGE, SCALED_ADVANTAGE, DELAYED_ADVANTAGE}
+- Implemented _get_layer() returning 'Algorithm'
+- Implemented strategy methods:
+  - _strategy_wrong_advantage: Replaces advantages with random Gaussian noise
+    - Configurable noise_scale (default 1.0)
+    - Uses helper _apply_wrong_advantage for recursive tensor replacement
+    - Recognizes 'advantages', 'advantage', 'adv', 'gae', 'gae_advantages' keys
+    - Also corrupts 'returns', 'return', 'value_targets' keys
+  - _strategy_zero_advantage: Replaces all advantages with zeros
+    - Uses helper _apply_zero_advantage for recursive tensor zeroing
+    - Preserves shape and dtype of original tensors
+  - _strategy_inverted_advantage: Negates all advantage values
+    - Uses helper _apply_inverted_advantage for recursive negation
+    - Simulates sign-flipped advantage estimates
+  - _strategy_scaled_advantage: Multiplies advantages by scale factor
+    - Configurable scale_factor (default 0.0)
+    - Uses helper _apply_scaled_advantage for recursive scaling
+    - Supports negative scale factors for inversion
+  - _strategy_delayed_advantage: Adds delay before computation
+    - Uses DelayMixin's _apply_delay method
+    - Configurable delay_seconds (default 10.0)
+    - Returns original result unchanged after delay
+- Config parameters per strategy:
+  - WRONG_ADVANTAGE: noise_scale (float, default 1.0)
+  - ZERO_ADVANTAGE: (no parameters)
+  - INVERTED_ADVANTAGE: (no parameters)
+  - SCALED_ADVANTAGE: scale_factor (float, default 0.0)
+  - DELAYED_ADVANTAGE: delay_seconds (float, default 10.0)
+- Decorated with @ProxyRegistry.register('compute_gae_advantage_return')
+- Updated ralph/proxies/__init__.py to export GAEProxy with conditional import
+- Created tests/ralph/test_algorithm_proxy.py with 30+ comprehensive unit tests:
+  - TestGAEProxyRegistration: Registration and supported strategies verification
+  - TestGAEProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestWrongAdvantageStrategy: Replaces with noise, default scale, with returns, preserves other keys
+  - TestZeroAdvantageStrategy: Returns zeros, with returns, preserves shape, preserves dtype
+  - TestInvertedAdvantageStrategy: Negates values, with returns, preserves shape
+  - TestScaledAdvantageStrategy: Zero/positive/negative/fractional scale, default is zero, with returns
+  - TestDelayedAdvantageStrategy: Config usage, default delay, returns original result
+  - TestGAEProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, tuple/list output, args passing
+- All file syntax verified correct
+- This unblocks: 9.2-kl-penalty-proxy, 11.3-grpo-proxy
+- Next priorities: 9.2-kl-penalty-proxy (Algorithm), 9.3-generate-proxy (Inference), 9.4-compute-values-proxy (Worker), 15.1-unit-tests
+
