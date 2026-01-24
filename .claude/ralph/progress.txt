@@ -794,3 +794,48 @@
 - This unblocks: No direct blockers
 - Next priorities: 10.1-gpu-memory-injector (L3), 10.3-update-actor-proxy (L2), 15.1-unit-tests
 
+
+[2026-01-24] 10.3-update-actor-proxy: COMPLETED
+- Added UpdateActorProxy class to ralph/proxies/l2_verl.py
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin, SkipMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, NAN_INPUT, EXPLODING_GRADIENTS, VANISHING_GRADIENTS, SKIP_UPDATE, DOUBLE_UPDATE}
+- Implemented _get_layer() returning 'L2'
+- Implemented strategy methods:
+  - _strategy_nan_input: Injects NaN values into input batch before update
+    - Configurable nan_ratio (default 0.1)
+    - Uses helper _inject_nan_into_batch for recursive NaN injection
+  - _strategy_exploding_gradients: Scales input tensors by large factor (default 1e6)
+    - Uses helper _scale_batch_tensors for recursive scaling
+    - Simulates gradient explosion during backward pass
+  - _strategy_vanishing_gradients: Scales input tensors by tiny factor (default 1e-8)
+    - Uses helper _scale_batch_tensors for recursive scaling
+    - Simulates gradient vanishing during backward pass
+  - _strategy_skip_update: Skips update entirely, returns default value
+    - Uses SkipMixin._skip_operation method
+    - Configurable default_return (default None)
+  - _strategy_double_update: Calls original twice with same batch
+    - Returns result from second call
+    - Simulates duplicate update bugs
+  - DELAY: Inherited from DelayMixin, works out of the box
+- Config parameters:
+  - DELAY: delay_seconds (float, default 10.0)
+  - NAN_INPUT: nan_ratio (float, default 0.1)
+  - EXPLODING_GRADIENTS: scale (float, default 1e6)
+  - VANISHING_GRADIENTS: scale (float, default 1e-8)
+  - SKIP_UPDATE: default_return (Any, default None)
+  - DOUBLE_UPDATE: (no parameters)
+- Decorated with @ProxyRegistry.register('RayPPOTrainer._update_actor')
+- Updated ralph/proxies/__init__.py to export UpdateActorProxy
+- Created 30+ comprehensive unit tests in tests/ralph/test_l2_verl_proxy.py:
+  - TestUpdateActorProxyRegistration: Registration and supported strategies verification
+  - TestUpdateActorProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestUpdateActorDelayStrategy: Config usage, default delay
+  - TestNanInputStrategy: NaN injection, default ratio, multiple tensors, non-tensors preserved
+  - TestExplodingGradientsStrategy: Default scale (1e6), custom scale, multiple tensors
+  - TestVanishingGradientsStrategy: Default scale (1e-8), custom scale, shape preservation
+  - TestSkipUpdateStrategy: Does not call original, default return, custom return
+  - TestDoubleUpdateStrategy: Calls twice, same args, returns second result
+  - TestUpdateActorProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, nested structures, kwargs passing
+- All syntax verified via py_compile
+- This unblocks: No direct blockers
+- Next priorities: 10.1-gpu-memory-injector (L3), 15.1-unit-tests (comprehensive tests), 15.2-integration-tests

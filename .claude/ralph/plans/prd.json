@@ -569,7 +569,7 @@
       "Decorate with @ProxyRegistry.register('RayPPOTrainer._update_actor')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "4.3-reward-manager-proxy"
     ]

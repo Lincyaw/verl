@@ -10,6 +10,20 @@ Tests cover RewardManagerProxy with all 4 supported strategies:
 Tests cover CheckpointSaveProxy with 2 supported strategies:
 - DELAY: Adds delay before calling original save_checkpoint
 - RAISE_EXCEPTION: Raises configurable exception instead of saving
+
+Tests cover CheckpointLoadProxy with 4 supported strategies:
+- RAISE_EXCEPTION: Raises configurable exception instead of loading
+- FILE_NOT_FOUND: Raises FileNotFoundError simulating missing checkpoint
+- CORRUPT_STATE_DICT: Adds noise to loaded parameters
+- PARTIAL_LOAD: Removes some keys from loaded state dict
+
+Tests cover UpdateActorProxy with 6 supported strategies:
+- DELAY: Adds delay before calling original _update_actor
+- NAN_INPUT: Injects NaN values into input batch
+- EXPLODING_GRADIENTS: Scales input by 1e6 to simulate gradient explosion
+- VANISHING_GRADIENTS: Scales input by 1e-8 to simulate gradient vanishing
+- SKIP_UPDATE: Skips the update entirely
+- DOUBLE_UPDATE: Calls the update twice with the same batch
 """
 
 from unittest.mock import MagicMock, patch
@@ -19,7 +33,12 @@ import torch
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.registry import ProxyRegistry
-from ralph.proxies.l2_verl import CheckpointSaveProxy, RewardManagerProxy
+from ralph.proxies.l2_verl import (
+    CheckpointLoadProxy,
+    CheckpointSaveProxy,
+    RewardManagerProxy,
+    UpdateActorProxy,
+)
 
 
 class TestRewardManagerProxyRegistration:
@@ -1707,3 +1726,680 @@ class TestCheckpointLoadProxyIntegration:
             extra_param="value",
         )
 
+
+# =============================================================================
+# UpdateActorProxy Tests
+# =============================================================================
+
+
+class TestUpdateActorProxyRegistration:
+    """Tests for proxy registration."""
+
+    def test_registered_with_update_actor_target(self):
+        """UpdateActorProxy is registered for 'RayPPOTrainer._update_actor' target."""
+        assert ProxyRegistry.is_registered("RayPPOTrainer._update_actor")
+        assert ProxyRegistry.get_proxy("RayPPOTrainer._update_actor") is UpdateActorProxy
+
+    def test_supported_strategies(self):
+        """UpdateActorProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("RayPPOTrainer._update_actor")
+        expected = {
+            StrategyType.DELAY,
+            StrategyType.NAN_INPUT,
+            StrategyType.EXPLODING_GRADIENTS,
+            StrategyType.VANISHING_GRADIENTS,
+            StrategyType.SKIP_UPDATE,
+            StrategyType.DOUBLE_UPDATE,
+        }
+        assert strategies == expected
+
+
+class TestUpdateActorProxyBasics:
+    """Tests for basic proxy functionality."""
+
+    def test_get_layer_returns_l2(self):
+        """_get_layer returns 'L2'."""
+        proxy = UpdateActorProxy(lambda x: x)
+        assert proxy._get_layer() == "L2"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        original = MagicMock(return_value={"loss": 0.5, "grad_norm": 1.0})
+        proxy = UpdateActorProxy(original)
+        batch = {"input_ids": torch.ones(2, 10)}
+        result = proxy(batch)
+        original.assert_called_once_with(batch)
+        assert result == {"loss": 0.5, "grad_norm": 1.0}
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        batch = {"input_ids": torch.ones(2, 10)}
+        result = proxy(batch)
+        original.assert_called_once()
+        assert result == {"loss": 0.5}
+
+    def test_unsupported_strategy_raises_error(self):
+        """Setting an unsupported strategy raises ValueError."""
+        proxy = UpdateActorProxy(lambda x: x)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.REWARD_FLIP,  # Not supported by UpdateActorProxy
+            trigger=trigger,
+        )
+        with pytest.raises(ValueError) as exc_info:
+            proxy.set_config(config)
+        assert "not supported" in str(exc_info.value)
+
+
+class TestUpdateActorDelayStrategy:
+    """Tests for DELAY strategy."""
+
+    def test_delay_strategy_with_config(self):
+        """DELAY strategy applies configured delay."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            result = proxy({"input_ids": torch.ones(2, 10)})
+            mock_sleep.assert_called_once_with(0.01)
+            assert result == {"loss": 0.5}
+
+    def test_delay_strategy_default_delay(self):
+        """DELAY strategy uses default delay when not specified."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy({"input_ids": torch.ones(2, 10)})
+            mock_sleep.assert_called_once_with(10.0)
+
+
+class TestNanInputStrategy:
+    """Tests for NAN_INPUT strategy."""
+
+    def test_nan_input_injects_nan(self):
+        """NAN_INPUT strategy injects NaN into input batch."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-nan",
+            strategy=StrategyType.NAN_INPUT,
+            trigger=trigger,
+            parameters={"nan_ratio": 0.5},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(10, 10)}
+        result = proxy(batch)
+
+        # Verify original was called
+        original.assert_called_once()
+        # Verify the batch passed to original has NaN values
+        called_batch = original.call_args[0][0]
+        assert torch.isnan(called_batch["input_ids"]).any()
+        assert result == {"loss": 0.5}
+
+    def test_nan_input_default_ratio(self):
+        """NAN_INPUT strategy uses default ratio (0.1) when not specified."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-nan",
+            strategy=StrategyType.NAN_INPUT,
+            trigger=trigger,
+            parameters={},  # No nan_ratio specified
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(100, 100)}
+        proxy(batch)
+
+        # With 10% ratio on 10000 elements, we expect some NaN values
+        called_batch = original.call_args[0][0]
+        nan_count = torch.isnan(called_batch["input_ids"]).sum().item()
+        # Should have approximately 10% NaN values (allow for randomness)
+        assert 500 < nan_count < 1500  # Roughly 10% of 10000
+
+    def test_nan_input_multiple_tensors(self):
+        """NAN_INPUT strategy injects NaN into all tensors in batch."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-nan",
+            strategy=StrategyType.NAN_INPUT,
+            trigger=trigger,
+            parameters={"nan_ratio": 0.5},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {
+            "input_ids": torch.ones(10, 10),
+            "attention_mask": torch.ones(10, 10),
+        }
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        assert torch.isnan(called_batch["input_ids"]).any()
+        assert torch.isnan(called_batch["attention_mask"]).any()
+
+    def test_nan_input_preserves_non_tensors(self):
+        """NAN_INPUT strategy preserves non-tensor values."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-nan",
+            strategy=StrategyType.NAN_INPUT,
+            trigger=trigger,
+            parameters={"nan_ratio": 0.5},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {
+            "input_ids": torch.ones(10, 10),
+            "batch_size": 10,
+            "name": "test",
+        }
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        assert called_batch["batch_size"] == 10
+        assert called_batch["name"] == "test"
+
+
+class TestExplodingGradientsStrategy:
+    """Tests for EXPLODING_GRADIENTS strategy."""
+
+    def test_exploding_gradients_scales_by_1e6(self):
+        """EXPLODING_GRADIENTS strategy scales input by 1e6."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-explode",
+            strategy=StrategyType.EXPLODING_GRADIENTS,
+            trigger=trigger,
+            parameters={},  # Use default scale
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 2)}
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        expected = torch.ones(2, 2) * 1e6
+        assert torch.allclose(called_batch["input_ids"], expected)
+
+    def test_exploding_gradients_custom_scale(self):
+        """EXPLODING_GRADIENTS strategy uses configured scale."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-explode",
+            strategy=StrategyType.EXPLODING_GRADIENTS,
+            trigger=trigger,
+            parameters={"scale": 100.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 2) * 2.0}
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        expected = torch.ones(2, 2) * 200.0  # 2.0 * 100.0
+        assert torch.allclose(called_batch["input_ids"], expected)
+
+    def test_exploding_gradients_multiple_tensors(self):
+        """EXPLODING_GRADIENTS strategy scales all tensors in batch."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-explode",
+            strategy=StrategyType.EXPLODING_GRADIENTS,
+            trigger=trigger,
+            parameters={"scale": 10.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {
+            "input_ids": torch.ones(2, 2),
+            "attention_mask": torch.ones(2, 2) * 0.5,
+        }
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        assert torch.allclose(called_batch["input_ids"], torch.ones(2, 2) * 10.0)
+        assert torch.allclose(called_batch["attention_mask"], torch.ones(2, 2) * 5.0)
+
+
+class TestVanishingGradientsStrategy:
+    """Tests for VANISHING_GRADIENTS strategy."""
+
+    def test_vanishing_gradients_scales_by_1e_minus_8(self):
+        """VANISHING_GRADIENTS strategy scales input by 1e-8."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-vanish",
+            strategy=StrategyType.VANISHING_GRADIENTS,
+            trigger=trigger,
+            parameters={},  # Use default scale
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 2)}
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        expected = torch.ones(2, 2) * 1e-8
+        assert torch.allclose(called_batch["input_ids"], expected)
+
+    def test_vanishing_gradients_custom_scale(self):
+        """VANISHING_GRADIENTS strategy uses configured scale."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-vanish",
+            strategy=StrategyType.VANISHING_GRADIENTS,
+            trigger=trigger,
+            parameters={"scale": 0.001},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 2) * 100.0}
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        expected = torch.ones(2, 2) * 0.1  # 100.0 * 0.001
+        assert torch.allclose(called_batch["input_ids"], expected)
+
+    def test_vanishing_gradients_preserves_shape(self):
+        """VANISHING_GRADIENTS strategy preserves tensor shape."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-vanish",
+            strategy=StrategyType.VANISHING_GRADIENTS,
+            trigger=trigger,
+            parameters={"scale": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(3, 5, 7)}
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        assert called_batch["input_ids"].shape == torch.Size([3, 5, 7])
+
+
+class TestSkipUpdateStrategy:
+    """Tests for SKIP_UPDATE strategy."""
+
+    def test_skip_update_does_not_call_original(self):
+        """SKIP_UPDATE strategy does not call original function."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip",
+            strategy=StrategyType.SKIP_UPDATE,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        result = proxy(batch)
+
+        original.assert_not_called()
+        assert result is None
+
+    def test_skip_update_returns_default(self):
+        """SKIP_UPDATE strategy returns configured default value."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip",
+            strategy=StrategyType.SKIP_UPDATE,
+            trigger=trigger,
+            parameters={"default_return": {"skipped": True}},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        result = proxy(batch)
+
+        original.assert_not_called()
+        assert result == {"skipped": True}
+
+    def test_skip_update_default_returns_none(self):
+        """SKIP_UPDATE strategy returns None when no default specified."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip",
+            strategy=StrategyType.SKIP_UPDATE,
+            trigger=trigger,
+            parameters={},  # No default_return
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        result = proxy(batch)
+
+        assert result is None
+
+
+class TestDoubleUpdateStrategy:
+    """Tests for DOUBLE_UPDATE strategy."""
+
+    def test_double_update_calls_original_twice(self):
+        """DOUBLE_UPDATE strategy calls original function twice."""
+        call_count = 0
+        results = [{"loss": 0.5, "call": 1}, {"loss": 0.3, "call": 2}]
+
+        def track_calls(*args, **kwargs):
+            nonlocal call_count
+            result = results[call_count]
+            call_count += 1
+            return result
+
+        original = MagicMock(side_effect=track_calls)
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-double",
+            strategy=StrategyType.DOUBLE_UPDATE,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        result = proxy(batch)
+
+        assert call_count == 2
+        assert original.call_count == 2
+        # Should return result from second call
+        assert result == {"loss": 0.3, "call": 2}
+
+    def test_double_update_same_args(self):
+        """DOUBLE_UPDATE strategy passes same arguments to both calls."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-double",
+            strategy=StrategyType.DOUBLE_UPDATE,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        proxy(batch, learning_rate=0.001)
+
+        assert original.call_count == 2
+        # Both calls should have the same arguments
+        for call in original.call_args_list:
+            assert call[0][0] is batch
+            assert call[1]["learning_rate"] == 0.001
+
+    def test_double_update_returns_second_result(self):
+        """DOUBLE_UPDATE strategy returns result from second call."""
+        original = MagicMock(side_effect=[{"loss": 0.5}, {"loss": 0.3}])
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-double",
+            strategy=StrategyType.DOUBLE_UPDATE,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        result = proxy(batch)
+
+        assert result == {"loss": 0.3}
+
+
+class TestUpdateActorProxyIntegration:
+    """Integration tests for UpdateActorProxy."""
+
+    def test_step_based_trigger(self):
+        """Proxy triggers only within specified step range."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(
+            type=TriggerType.STEP_BASED,
+            start_step=5,
+            end_step=10,
+        )
+        config = FaultConfig(
+            id="test-step",
+            strategy=StrategyType.SKIP_UPDATE,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+
+        # Before range - should call original
+        proxy.set_step(3)
+        proxy(batch)
+        assert original.call_count == 1
+
+        # In range - should skip
+        proxy.set_step(7)
+        result = proxy(batch)
+        assert original.call_count == 1  # Still 1 (skipped)
+        assert result is None
+
+        # After range - should call original
+        proxy.set_step(15)
+        proxy(batch)
+        assert original.call_count == 2
+
+    def test_periodic_trigger(self):
+        """Proxy triggers every N steps."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(
+            type=TriggerType.PERIODIC,
+            every_n_steps=5,
+        )
+        config = FaultConfig(
+            id="test-periodic",
+            strategy=StrategyType.SKIP_UPDATE,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        skipped_steps = []
+
+        for step in range(15):
+            proxy.set_step(step)
+            result = proxy(batch)
+            if result is None:
+                skipped_steps.append(step)
+
+        # Should skip at steps 0, 5, 10
+        assert skipped_steps == [0, 5, 10]
+
+    def test_collector_recording(self):
+        """Proxy records injection to collector."""
+        original = MagicMock(return_value={"loss": 0.5})
+        collector = MagicMock()
+        collector.record_fault_injection = MagicMock(return_value="fault-123")
+        collector.record_fault_outcome = MagicMock()
+
+        proxy = UpdateActorProxy(original, collector=collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-record",
+            strategy=StrategyType.SKIP_UPDATE,
+            trigger=trigger,
+            severity="high",
+            expected_behavior="Update skipped",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+        proxy(batch)
+
+        # Should record injection start
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args[1]
+        assert call_kwargs["fault_type"] == "skip_update"
+        assert call_kwargs["target_layer"] == "L2"
+        assert call_kwargs["severity"] == "high"
+
+        # Should record injection end
+        collector.record_fault_outcome.assert_called_once()
+        outcome_kwargs = collector.record_fault_outcome.call_args[1]
+        assert outcome_kwargs["fault_id"] == "fault-123"
+        assert outcome_kwargs["outcome"] == "success"
+
+    def test_collector_records_failure(self):
+        """Proxy records failure to collector when original raises."""
+        original = MagicMock(side_effect=RuntimeError("Training error"))
+        collector = MagicMock()
+        collector.record_fault_injection = MagicMock(return_value="fault-456")
+        collector.record_fault_outcome = MagicMock()
+
+        proxy = UpdateActorProxy(original, collector=collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-failure",
+            strategy=StrategyType.NAN_INPUT,
+            trigger=trigger,
+            parameters={"nan_ratio": 0.1},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+
+        with pytest.raises(RuntimeError, match="Training error"):
+            proxy(batch)
+
+        # Should record failure
+        collector.record_fault_outcome.assert_called_once()
+        outcome_kwargs = collector.record_fault_outcome.call_args[1]
+        assert outcome_kwargs["outcome"] == "error"
+
+    def test_nested_batch_structures(self):
+        """Proxy handles nested batch structures correctly."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-nested",
+            strategy=StrategyType.EXPLODING_GRADIENTS,
+            trigger=trigger,
+            parameters={"scale": 10.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {
+            "inputs": {
+                "input_ids": torch.ones(2, 2),
+                "attention_mask": torch.ones(2, 2),
+            },
+            "labels": torch.ones(2, 2),
+            "meta": {"name": "test"},  # Non-tensor nested
+        }
+        proxy(batch)
+
+        called_batch = original.call_args[0][0]
+        assert torch.allclose(called_batch["inputs"]["input_ids"], torch.ones(2, 2) * 10.0)
+        assert torch.allclose(called_batch["inputs"]["attention_mask"], torch.ones(2, 2) * 10.0)
+        assert torch.allclose(called_batch["labels"], torch.ones(2, 2) * 10.0)
+        assert called_batch["meta"]["name"] == "test"  # Non-tensor preserved
+
+    def test_kwargs_passing(self):
+        """Proxy correctly passes all kwargs to original."""
+        original = MagicMock(return_value={"loss": 0.5})
+        proxy = UpdateActorProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-kwargs",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        batch = {"input_ids": torch.ones(2, 10)}
+
+        with patch("time.sleep"):
+            proxy(
+                batch,
+                learning_rate=0.001,
+                clip_grad=1.0,
+                extra_param="value",
+            )
+
+        original.assert_called_once_with(
+            batch,
+            learning_rate=0.001,
+            clip_grad=1.0,
+            extra_param="value",
+        )

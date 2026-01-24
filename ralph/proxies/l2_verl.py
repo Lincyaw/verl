@@ -13,6 +13,7 @@ from ralph.core.registry import ProxyRegistry
 from ralph.mixins.delay import DelayMixin
 from ralph.mixins.exception import ExceptionMixin
 from ralph.mixins.result import ResultModificationMixin
+from ralph.mixins.skip import SkipMixin
 from ralph.mixins.tensor import TensorCorruptionMixin
 from ralph.proxies.base import BaseProxy
 
@@ -468,3 +469,227 @@ class CheckpointLoadProxy(BaseProxy, TensorCorruptionMixin, ExceptionMixin):
             return tuple(self._apply_partial_load(item, drop_keys, drop_ratio) for item in obj)
         else:
             return obj
+
+
+@ProxyRegistry.register("RayPPOTrainer._update_actor")
+class UpdateActorProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, SkipMixin):
+    """
+    Proxy for RayPPOTrainer._update_actor() operations.
+
+    Supports fault injection at the verl actor update level (L2).
+
+    Supported strategies:
+    - DELAY: Adds delay before calling original _update_actor
+    - NAN_INPUT: Injects NaN values into input batch before update
+    - EXPLODING_GRADIENTS: Scales input by 1e6 to simulate gradient explosion
+    - VANISHING_GRADIENTS: Scales input by 1e-8 to simulate gradient vanishing
+    - SKIP_UPDATE: Skips the update entirely, returning without calling original
+    - DOUBLE_UPDATE: Calls the update twice with the same batch
+
+    Config parameters:
+    - DELAY: delay_seconds (float, default 10.0) - seconds to delay
+    - NAN_INPUT: nan_ratio (float, default 0.1) - fraction of values to set to NaN
+    - EXPLODING_GRADIENTS: scale (float, default 1e6) - multiplier for input
+    - VANISHING_GRADIENTS: scale (float, default 1e-8) - multiplier for input
+    - SKIP_UPDATE: default_return (Any, optional) - value to return (default None)
+    - DOUBLE_UPDATE: (no specific parameters)
+
+    Expected input/output:
+    - Input: batch (DataProto or dict), other parameters for actor update
+    - Output: Typically returns dict with update metrics (loss, grad_norm, etc.)
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.DELAY,
+        StrategyType.NAN_INPUT,
+        StrategyType.EXPLODING_GRADIENTS,
+        StrategyType.VANISHING_GRADIENTS,
+        StrategyType.SKIP_UPDATE,
+        StrategyType.DOUBLE_UPDATE,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "L2"
+
+    def _strategy_nan_input(
+        self,
+        batch: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Inject NaN values into the input batch before update.
+
+        This strategy corrupts the input data by injecting NaN values,
+        which can cause numerical instability during the actor update.
+        The original function is called with the corrupted batch.
+
+        Args:
+            batch: Input batch (DataProto or dict containing tensors)
+            *args: Additional positional arguments to pass to original
+            **kwargs: Additional keyword arguments to pass to original
+
+        Returns:
+            Result from original _update_actor with corrupted input.
+
+        Config parameters:
+            nan_ratio (float): Fraction of tensor values to set to NaN (default 0.1).
+        """
+        nan_ratio = self._config.parameters.get("nan_ratio", 0.1)
+        corrupted_batch = self._inject_nan_into_batch(batch, nan_ratio)
+        return self._original(corrupted_batch, *args, **kwargs)
+
+    def _inject_nan_into_batch(self, obj: Any, nan_ratio: float) -> Any:
+        """
+        Recursively inject NaN values into tensors in a batch.
+
+        Args:
+            obj: Object to corrupt (dict, list, tuple, or tensor)
+            nan_ratio: Fraction of values to set to NaN
+
+        Returns:
+            Object with NaN values injected into tensors
+        """
+        if isinstance(obj, torch.Tensor):
+            return self._inject_nan(obj, nan_ratio)
+        elif isinstance(obj, dict):
+            return {k: self._inject_nan_into_batch(v, nan_ratio) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._inject_nan_into_batch(item, nan_ratio) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self._inject_nan_into_batch(item, nan_ratio) for item in obj)
+        else:
+            return obj
+
+    def _strategy_exploding_gradients(
+        self,
+        batch: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Scale input by a large factor to simulate gradient explosion.
+
+        This strategy multiplies all tensor values in the input batch
+        by a very large factor (default 1e6), which can cause gradient
+        explosion during the backward pass.
+
+        Args:
+            batch: Input batch (DataProto or dict containing tensors)
+            *args: Additional positional arguments to pass to original
+            **kwargs: Additional keyword arguments to pass to original
+
+        Returns:
+            Result from original _update_actor with scaled input.
+
+        Config parameters:
+            scale (float): Multiplier for tensor values (default 1e6).
+        """
+        scale = self._config.parameters.get("scale", 1e6)
+        scaled_batch = self._scale_batch_tensors(batch, scale)
+        return self._original(scaled_batch, *args, **kwargs)
+
+    def _strategy_vanishing_gradients(
+        self,
+        batch: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Scale input by a tiny factor to simulate gradient vanishing.
+
+        This strategy multiplies all tensor values in the input batch
+        by a very small factor (default 1e-8), which can cause gradient
+        vanishing during the backward pass.
+
+        Args:
+            batch: Input batch (DataProto or dict containing tensors)
+            *args: Additional positional arguments to pass to original
+            **kwargs: Additional keyword arguments to pass to original
+
+        Returns:
+            Result from original _update_actor with scaled input.
+
+        Config parameters:
+            scale (float): Multiplier for tensor values (default 1e-8).
+        """
+        scale = self._config.parameters.get("scale", 1e-8)
+        scaled_batch = self._scale_batch_tensors(batch, scale)
+        return self._original(scaled_batch, *args, **kwargs)
+
+    def _scale_batch_tensors(self, obj: Any, scale: float) -> Any:
+        """
+        Recursively scale all tensors in a batch.
+
+        Args:
+            obj: Object to scale (dict, list, tuple, or tensor)
+            scale: Multiplier for tensor values
+
+        Returns:
+            Object with all tensors scaled
+        """
+        if isinstance(obj, torch.Tensor):
+            return self._scale_tensor(obj, scale)
+        elif isinstance(obj, dict):
+            return {k: self._scale_batch_tensors(v, scale) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._scale_batch_tensors(item, scale) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self._scale_batch_tensors(item, scale) for item in obj)
+        else:
+            return obj
+
+    def _strategy_skip_update(
+        self,
+        batch: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Skip the actor update entirely.
+
+        This strategy returns without calling the original _update_actor,
+        effectively skipping a training step. This can simulate dropped
+        updates due to failures or intentional skipping.
+
+        Args:
+            batch: Input batch (ignored)
+            *args: Additional positional arguments (ignored)
+            **kwargs: Additional keyword arguments (ignored)
+
+        Returns:
+            The default_return value from config, or None if not specified.
+
+        Config parameters:
+            default_return (Any): Value to return (optional, defaults to None).
+        """
+        default_return = self._config.parameters.get("default_return", None)
+        return self._skip_operation(default_return)
+
+    def _strategy_double_update(
+        self,
+        batch: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Call the actor update twice with the same batch.
+
+        This strategy calls the original _update_actor twice with the
+        same input batch, simulating duplicate updates that could occur
+        due to retry logic bugs or network issues.
+
+        Args:
+            batch: Input batch (DataProto or dict)
+            *args: Additional positional arguments to pass to original
+            **kwargs: Additional keyword arguments to pass to original
+
+        Returns:
+            Result from the second call to _update_actor.
+        """
+        # Call the first time (result discarded)
+        self._original(batch, *args, **kwargs)
+        # Call the second time (result returned)
+        return self._original(batch, *args, **kwargs)
+

@@ -40,11 +40,13 @@ try:
         CheckpointLoadProxy,
         CheckpointSaveProxy,
         RewardManagerProxy,
+        UpdateActorProxy,
     )
 except ImportError:
     CheckpointLoadProxy = None
     CheckpointSaveProxy = None
     RewardManagerProxy = None
+    UpdateActorProxy = None
 
 # Algorithm proxies - imported conditionally to handle missing torch
 try:
@@ -80,6 +82,7 @@ __all__ = [
     "RewardManagerProxy",
     "CheckpointSaveProxy",
     "CheckpointLoadProxy",
+    "UpdateActorProxy",
     "GAEProxy",
     "KLPenaltyProxy",
     "GenerateProxy",
