@@ -84,9 +84,10 @@ except ImportError:
 
 # Agent proxies - no torch dependency
 try:
-    from ralph.proxies.agent import CallToolProxy
+    from ralph.proxies.agent import CallToolProxy, ToolParserProxy
 except ImportError:
     CallToolProxy = None
+    ToolParserProxy = None
 
 __all__ = [
     "BaseProxy",
@@ -114,4 +115,5 @@ __all__ = [
     "DataProtoConcatProxy",
     "DataProtoChunkProxy",
     "CallToolProxy",
+    "ToolParserProxy",
 ]

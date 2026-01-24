@@ -1200,3 +1200,59 @@
 - Verification passed: ProxyRegistry.is_registered('ToolAgentLoop._call_tool') returns True
 - This unblocks: 12.2-tool-parser-proxy (Agent P2)
 - Next priorities: 12.2-tool-parser-proxy, 13.x-megatron/optimizer proxies, 14.x-data collection
+
+[2026-01-24] 12.2-tool-parser-proxy: COMPLETED
+- Added ToolParserProxy class to ralph/proxies/agent.py
+- Inherits from BaseProxy, DelayMixin
+- Set SUPPORTED_STRATEGIES = {PARSE_FAILURE, WRONG_TOOL_NAME, WRONG_ARGUMENTS, EXTRA_TOOL_CALLS, MISSING_TOOL_CALLS}
+- Implemented _get_layer() returning 'Agent'
+- Implemented strategy methods:
+  - _strategy_parse_failure: Raises parse errors (syntax, json, timeout, encoding, schema)
+    - Supports error_type parameter: "syntax", "json", "schema", "timeout", "encoding"
+    - Supports custom error_message parameter
+    - Raises appropriate exception type (ValueError, JSONDecodeError, TimeoutError, UnicodeDecodeError)
+  - _strategy_wrong_tool_name: Returns incorrect tool names from parsing
+    - Supports replacement_name for specific replacement
+    - Supports corruption_type: "replace", "prefix", "suffix", "typo", "similar"
+    - Handles list of tool calls, dict, and objects with name attribute
+  - _strategy_wrong_arguments: Returns corrupted arguments
+    - Supports corruption_type: "drop", "add_extra", "wrong_type", "wrong_value", "shuffle"
+    - Handles JSON string arguments (parses, corrupts, re-serializes)
+    - Supports drop_ratio and add_noise parameters
+  - _strategy_extra_tool_calls: Adds spurious tool calls to parsing result
+    - Supports extra_count parameter (default 2)
+    - Supports position: "before", "after", "random"
+    - Supports custom extra_tools list
+    - Handles single dict, list, tuple, and None results
+  - _strategy_missing_tool_calls: Removes some tool calls from result
+    - Supports drop_ratio parameter (default 0.5)
+    - Supports keep_first and keep_last parameters
+    - Supports max_keep limit
+    - Handles single dict, list, tuple, and None results
+- Helper methods implemented:
+  - _introduce_typo: Creates realistic typos (swap, delete, insert, replace with nearby key)
+  - _get_similar_name: Maps get->fetch, set->update, etc.
+  - _apply_to_tool_names: Recursively transforms tool names in various formats
+  - _corrupt_arg_value: Handles various corruption types on arguments
+  - _swap_argument_type: Changes types (bool->str, int->str, etc.)
+  - _corrupt_argument_value: Changes values while preserving types
+  - _generate_extra_tool_calls: Creates realistic-looking fake tool calls
+  - _add_extra_tool_calls: Adds extras at specified position
+  - _remove_tool_calls: Drops calls respecting keep_first/keep_last/max_keep
+- Decorated with @ProxyRegistry.register('ToolParser.parse')
+- Updated ralph/proxies/__init__.py to export ToolParserProxy
+- Created 50+ comprehensive unit tests in tests/ralph/test_agent_proxy.py:
+  - TestToolParserProxyRegistration: Registration and supported strategies
+  - TestToolParserProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestParseFailureStrategy: Various error types, custom messages
+  - TestWrongToolNameStrategy: Replacement, typo, prefix, suffix, similar, list handling
+  - TestWrongArgumentsStrategy: Drop, add_extra, wrong_type, wrong_value, shuffle, JSON
+  - TestExtraToolCallsStrategy: Count, position, custom tools, list input
+  - TestMissingToolCallsStrategy: Drop ratio, keep_first, keep_last, max_keep, single dict
+  - TestToolParserProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, args/kwargs passing
+- All syntax verified via py_compile
+- All 8 manual tests pass
+- Verification passed: `from ralph.proxies import ToolParserProxy` works correctly
+- Verification passed: ProxyRegistry.is_registered('ToolParser.parse') returns True
+- This completes the Agent P2 series (CallToolProxy and ToolParserProxy)
+- Next priorities: 13.1-megatron-optimizer-proxy, 13.3-optimizer-step-proxy, 14.1-log-parser

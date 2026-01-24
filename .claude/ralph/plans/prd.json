@@ -670,7 +670,7 @@
       "Decorate with @ProxyRegistry.register('ToolParser.parse')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "12.1-tool-call-proxy"
     ]
