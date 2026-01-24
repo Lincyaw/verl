@@ -1308,3 +1308,49 @@
 - Verification passed: Registration and strategy declarations correct
 - Completed together with 13.3-optimizer-step-proxy in same file
 - Next priorities: 13.1-megatron-optimizer-proxy, 13.2-parallelism-proxy, 14.1-log-parser
+
+[2026-01-24] 13.1-megatron-optimizer-proxy: COMPLETED
+- Created ralph/proxies/megatron.py with MegatronOptimizerProxy class
+- Inherits from BaseProxy, DelayMixin, SkipMixin, TensorCorruptionMixin
+- Set SUPPORTED_STRATEGIES = {SKIP, GRADIENT_OVERFLOW, NAN_PARAMS, WRONG_LR}
+- Implemented _get_layer() returning 'Megatron'
+- Implemented strategy methods:
+  - _strategy_skip: Inherited from SkipMixin - skips optimizer step entirely
+  - _strategy_gradient_overflow: Sets overflow flag in Megatron optimizer
+    - Supports set_flag_only parameter to skip original call
+    - Handles multiple overflow flag locations (optimizer.overflow, found_inf, _overflow_buf)
+    - Works with grad_scaler style overflow detection
+  - _strategy_nan_params: Injects NaN values into model parameters
+    - Configurable nan_ratio (default 0.001)
+    - Optional param_names filter to target specific parameters
+    - Uses TensorCorruptionMixin's _inject_nan method
+  - _strategy_wrong_lr: Applies incorrect learning rate scaling
+    - Configurable lr_factor (default 10.0)
+    - Optional restore_after to restore original LR after step
+    - Handles wrapped optimizers (Float16OptimizerWithFloat16Params)
+- Helper methods implemented:
+  - _get_megatron_engine: Gets engine from bound method or _engine attribute
+  - _set_overflow_flag: Sets various overflow indicators
+  - _inject_nan_into_params: Corrupts model parameters with NaN
+  - _get_model_from_engine: Gets model, handles pipeline parallel lists
+  - _scale_megatron_lr: Scales LR in all param groups, returns originals
+  - _restore_megatron_lr: Restores original LR values
+- Decorated with @ProxyRegistry.register('MegatronEngine.optimizer_step')
+- Updated ralph/proxies/__init__.py to export MegatronOptimizerProxy
+- Created tests/ralph/test_megatron_proxy.py with 45+ comprehensive unit tests:
+  - TestMegatronOptimizerProxyRegistration: Registration and supported strategies
+  - TestMegatronOptimizerProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestMegatronSkipStrategy: Does not call original, returns default value
+  - TestGradientOverflowStrategy: Calls original, set_flag_only, sets overflow/found_inf, passes args
+  - TestNanParamsStrategy: Calls original, default ratio, corrupts params, param_names filter
+  - TestWrongLRStrategy: Calls original, scales LR, default factor, restore_after
+  - TestMegatronOptimizerProxyIntegration: Step-based/periodic trigger, collector recording, failure recording
+  - TestGetMegatronEngine: Bound method, _engine attribute, no context
+  - TestSetOverflowFlag: Sets optimizer/engine overflow
+  - TestGetModelFromEngine: Model attribute, list handling, module fallback
+  - TestScaleMegatronLR: Scales all groups, no optimizer handling
+  - TestRestoreMegatronLR: Restores all groups, no optimizer handling
+- All syntax verified via py_compile
+- Verification passed: Registration and strategy declarations correct
+- This unblocks: 13.2-parallelism-proxy
+- Next priorities: 13.2-parallelism-proxy, 14.1-log-parser, 14.2-metrics-hook

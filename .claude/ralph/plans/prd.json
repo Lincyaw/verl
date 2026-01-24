@@ -686,7 +686,7 @@
       "Decorate with @ProxyRegistry.register('MegatronEngine.optimizer_step')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "3.1-base-proxy",
       "2.2-tensor-mixin"

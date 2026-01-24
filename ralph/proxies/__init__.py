@@ -96,6 +96,12 @@ except ImportError:
     OptimizerStepProxy = None
     LRSchedulerProxy = None
 
+# Megatron proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.megatron import MegatronOptimizerProxy
+except ImportError:
+    MegatronOptimizerProxy = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -125,4 +131,5 @@ __all__ = [
     "ToolParserProxy",
     "OptimizerStepProxy",
     "LRSchedulerProxy",
+    "MegatronOptimizerProxy",
 ]
