@@ -130,3 +130,26 @@
 - This unblocks: 4.1-ray-get-proxy, 4.4-checkpoint-save-proxy, 12.1-tool-call-proxy
 - Next priorities: 2.4-skip-mixin, 2.5-result-mixin, 3.1-base-proxy (critical path), 3.2-dual-stream-collector
 
+[2026-01-24] 3.1-base-proxy: COMPLETED
+- Created ralph/proxies/base.py with BaseProxy abstract class
+- Implemented all required methods and attributes:
+  - SUPPORTED_STRATEGIES: Set[StrategyType] = set() (class attribute, empty set default)
+  - __init__(original_fn, collector): Stores original function and optional collector
+  - _build_strategy_map(): Creates dict mapping StrategyType to _strategy_X methods
+  - set_config(config): Validates strategy is in SUPPORTED_STRATEGIES, raises ValueError if not
+  - set_step(step): Updates self._current_step
+  - set_rng(rng): Sets random number generator for probabilistic triggers
+  - __call__(*args, **kwargs): Checks _should_inject and dispatches to strategy or original
+  - _should_inject(): Checks config exists, enabled, and trigger.should_trigger
+  - _execute_strategy(*args, **kwargs): Looks up strategy method and calls it
+  - _record_injection_start(): Calls collector.record_fault_injection, returns fault_id
+  - _record_injection_end(fault_id, outcome, duration_ms): Calls collector.record_fault_outcome
+  - _get_layer() -> str: Abstract method, must be implemented by subclasses
+  - _get_target_name() -> str: Returns original function's __name__
+  - Helper methods: get_original(), get_config(), get_step()
+- Updated ralph/proxies/__init__.py to export BaseProxy
+- Created tests/ralph/test_base_proxy.py with comprehensive unit tests (45+ tests covering all functionality)
+- Verification passed: Attempting to instantiate BaseProxy raises TypeError with "abstract" message
+- This unblocks: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy, 9.1-gae-proxy, 9.3-generate-proxy, 9.4-compute-values-proxy, 10.1-gpu-memory-injector, 11.1-data-proto-concat-proxy, 12.1-tool-call-proxy, 13.1-megatron-optimizer-proxy, 13.3-optimizer-step-proxy
+- Next priorities: 2.4-skip-mixin, 2.5-result-mixin, 3.2-dual-stream-collector, then proxy implementations (4.x series)
+

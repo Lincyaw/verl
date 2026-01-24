@@ -157,7 +157,7 @@
       "Define abstract _get_layer() -> str method",
       "Verify: Attempting to instantiate BaseProxy raises TypeError"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["1.1-config-classes", "1.2-registry"]
   },
   {
