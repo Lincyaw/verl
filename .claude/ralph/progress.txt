@@ -173,3 +173,31 @@
 - This unblocks: No direct blockers, but SkipMixin can be used by proxy implementations
 - Next priorities: 2.5-result-mixin, 3.2-dual-stream-collector, then proxy implementations (4.x series)
 
+
+[2026-01-24] 2.5-result-mixin: COMPLETED
+- Created ralph/mixins/result.py with ResultModificationMixin class
+- Implemented methods:
+  - _modify_result(result, modifier_fn): Applies arbitrary modifier function to result
+  - _negate_result(result): Negates numeric values (int, float, tensor), recursing for dict/list/tuple
+    - Unsupported types (string, None, etc.) are returned unchanged
+  - _set_constant(result, value): Sets all numeric values to constant
+    - For tensors: Returns torch.full_like(result.float(), value).to(result.dtype)
+    - For int/float: Returns type(result)(value) to preserve type
+    - Handles nested structures recursively
+  - _strategy_modify_result(*args, **kwargs): Reads 'modifier_fn' from config (optional)
+  - _strategy_reward_flip(*args, **kwargs): Negates all numeric values in result
+  - _strategy_constant_reward(*args, **kwargs): Reads 'constant_value' from config (defaults to 0.0)
+- Updated ralph/mixins/__init__.py to export ResultModificationMixin
+- Created tests/ralph/test_result_mixin.py with 52 comprehensive unit tests:
+  - TestModifyResult: 5 tests for applying modifier functions
+  - TestNegateResult: 14 tests for int, float, tensor, dict, list, tuple, nested structures
+  - TestSetConstant: 12 tests for setting constant values, preserving tensor shapes
+  - TestStrategyModifyResult: 4 tests for strategy implementation
+  - TestStrategyRewardFlip: 6 tests for reward flip strategy
+  - TestStrategyConstantReward: 7 tests for constant reward strategy
+  - TestResultModificationMixinIntegration: 4 tests for multiple inheritance, sequences
+- All 52 tests pass
+- Verification passed: `python3 -c 'from ralph.mixins.result import ResultModificationMixin; print("OK")'`
+- This unblocks: 4.3-reward-manager-proxy, 9.1-gae-proxy, 9.4-compute-values-proxy
+- Next priorities: 3.2-dual-stream-collector, 4.1-ray-get-proxy, 4.2-all-reduce-proxy
+

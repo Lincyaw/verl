@@ -136,7 +136,7 @@
       "Implement _set_constant(result, value) returning torch.full_like for tensors or constant for scalars",
       "Verify: Unit tests for numeric, tensor, and nested dict results"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["0.1-project-init"]
   },
   {
