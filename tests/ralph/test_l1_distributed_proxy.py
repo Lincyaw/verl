@@ -594,3 +594,614 @@ class TestAllReduceProxyIntegration:
         proxy.set_step(1)
         proxy(tensor2)
         assert torch.isnan(tensor2).any()
+
+
+# =============================================================================
+# AllGatherProxy Tests
+# =============================================================================
+
+from ralph.proxies.l1_distributed import AllGatherProxy
+
+
+class TestAllGatherProxyRegistration:
+    """Tests for AllGatherProxy registration."""
+
+    def test_registered_with_all_gather_target(self):
+        """AllGatherProxy is registered for 'torch.distributed.all_gather' target."""
+        assert ProxyRegistry.is_registered("torch.distributed.all_gather")
+        assert ProxyRegistry.get_proxy("torch.distributed.all_gather") is AllGatherProxy
+
+    def test_supported_strategies(self):
+        """AllGatherProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("torch.distributed.all_gather")
+        expected = {
+            StrategyType.DELAY,
+            StrategyType.CORRUPT_GATHERED,
+            StrategyType.MISSING_RANK,
+            StrategyType.SHAPE_MISMATCH,
+        }
+        assert strategies == expected
+
+
+class TestAllGatherProxyBasics:
+    """Tests for basic AllGatherProxy functionality."""
+
+    def test_get_layer_returns_l1(self):
+        """_get_layer returns 'L1'."""
+        proxy = AllGatherProxy(lambda tensor_list, tensor: None)
+        assert proxy._get_layer() == "L1"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        tensor_list = [torch.zeros(10), torch.zeros(10)]
+        tensor = torch.ones(10)
+        original = MagicMock(return_value=None)
+        proxy = AllGatherProxy(original)
+        result = proxy(tensor_list, tensor)
+        original.assert_called_once_with(tensor_list, tensor)
+        assert result is None
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        tensor_list = [torch.zeros(10), torch.zeros(10)]
+        tensor = torch.ones(10)
+        original = MagicMock(return_value=None)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        result = proxy(tensor_list, tensor)
+        original.assert_called_once_with(tensor_list, tensor)
+        assert result is None
+
+    def test_unsupported_strategy_raises_error(self):
+        """Unsupported strategy raises ValueError."""
+        proxy = AllGatherProxy(lambda tensor_list, tensor: None)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-unsupported",
+            strategy=StrategyType.DEADLOCK,  # Not supported by AllGatherProxy
+            trigger=trigger,
+        )
+        with pytest.raises(ValueError) as exc_info:
+            proxy.set_config(config)
+        assert "not supported" in str(exc_info.value).lower()
+
+
+class TestAllGatherDelayStrategy:
+    """Tests for AllGatherProxy DELAY strategy."""
+
+    def test_delay_strategy_with_config(self):
+        """DELAY strategy applies configured delay."""
+        tensor_list = [torch.zeros(10), torch.zeros(10)]
+        tensor = torch.ones(10)
+        original = MagicMock(return_value=None)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            result = proxy(tensor_list, tensor)
+            mock_sleep.assert_called_once_with(0.01)
+            assert result is None
+            original.assert_called_once()
+
+    def test_delay_strategy_passes_group(self):
+        """DELAY strategy passes group to original."""
+        tensor_list = [torch.zeros(10), torch.zeros(10)]
+        tensor = torch.ones(10)
+        mock_group = MagicMock()
+        original = MagicMock(return_value=None)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay-group",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep"):
+            proxy(tensor_list, tensor, group=mock_group)
+            original.assert_called_once()
+
+
+class TestCorruptGatheredStrategy:
+    """Tests for CORRUPT_GATHERED strategy."""
+
+    def test_corrupt_gathered_modifies_all_ranks(self):
+        """CORRUPT_GATHERED strategy corrupts all gathered tensors by default."""
+        tensor_list = [torch.ones(10), torch.ones(10), torch.ones(10)]
+        tensor = torch.ones(10)
+        original_values = [t.clone() for t in tensor_list]
+
+        def mock_original(tl, t, **kwargs):
+            # Simulate all_gather filling tensor_list
+            for i, tensor_out in enumerate(tl):
+                tensor_out.fill_(float(i + 1))
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-corrupt-all",
+            strategy=StrategyType.CORRUPT_GATHERED,
+            trigger=trigger,
+            parameters={"noise_scale": 1.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(tensor_list, tensor)
+
+        # All tensors should be corrupted (different from expected values)
+        for i, gathered_tensor in enumerate(tensor_list):
+            expected_val = float(i + 1)
+            # At least some values should differ from expected due to noise
+            assert not torch.allclose(gathered_tensor, torch.full_like(gathered_tensor, expected_val))
+
+    def test_corrupt_gathered_specific_ranks(self):
+        """CORRUPT_GATHERED strategy corrupts only specified ranks."""
+        tensor_list = [torch.zeros(10), torch.zeros(10), torch.zeros(10)]
+        tensor = torch.ones(10)
+
+        def mock_original(tl, t, **kwargs):
+            for i, tensor_out in enumerate(tl):
+                tensor_out.fill_(1.0)  # All ones
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-corrupt-specific",
+            strategy=StrategyType.CORRUPT_GATHERED,
+            trigger=trigger,
+            parameters={"noise_scale": 1.0, "corrupt_ranks": [1]},  # Only corrupt rank 1
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(tensor_list, tensor)
+
+        # Rank 0 and 2 should be unchanged (all ones)
+        assert torch.allclose(tensor_list[0], torch.ones(10))
+        assert torch.allclose(tensor_list[2], torch.ones(10))
+        # Rank 1 should be corrupted
+        assert not torch.allclose(tensor_list[1], torch.ones(10))
+
+    def test_corrupt_gathered_default_noise_scale(self):
+        """CORRUPT_GATHERED uses default noise_scale of 0.1."""
+        tensor_list = [torch.zeros(100)]
+        tensor = torch.ones(100)
+
+        def mock_original(tl, t, **kwargs):
+            tl[0].fill_(0.0)
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-corrupt-default",
+            strategy=StrategyType.CORRUPT_GATHERED,
+            trigger=trigger,
+            parameters={},  # No noise_scale
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(tensor_list, tensor)
+        # With default noise_scale=0.1, mean absolute value should be small
+        assert tensor_list[0].abs().mean() < 0.5
+
+    def test_corrupt_gathered_async_returns_immediately(self):
+        """CORRUPT_GATHERED with async_op=True returns without corrupting."""
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+        mock_result = MagicMock()
+
+        def mock_original(tl, t, **kwargs):
+            return mock_result
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-corrupt-async",
+            strategy=StrategyType.CORRUPT_GATHERED,
+            trigger=trigger,
+            parameters={"noise_scale": 1.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy(tensor_list, tensor, async_op=True)
+        # Should return the async result without modifications
+        assert result is mock_result
+
+
+class TestMissingRankStrategy:
+    """Tests for MISSING_RANK strategy."""
+
+    def test_missing_rank_zeros_out_data(self):
+        """MISSING_RANK strategy zeros out specified rank's data."""
+        tensor_list = [torch.zeros(10), torch.zeros(10), torch.zeros(10)]
+        tensor = torch.ones(10)
+
+        def mock_original(tl, t, **kwargs):
+            for i, tensor_out in enumerate(tl):
+                tensor_out.fill_(float(i + 1))  # Fill with 1, 2, 3
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing",
+            strategy=StrategyType.MISSING_RANK,
+            trigger=trigger,
+            parameters={"missing_rank": 1},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(tensor_list, tensor)
+
+        # Rank 0 should have value 1
+        assert torch.allclose(tensor_list[0], torch.ones(10) * 1.0)
+        # Rank 1 should be zeroed out
+        assert torch.allclose(tensor_list[1], torch.zeros(10))
+        # Rank 2 should have value 3
+        assert torch.allclose(tensor_list[2], torch.ones(10) * 3.0)
+
+    def test_missing_rank_requires_parameter(self):
+        """MISSING_RANK raises ValueError if missing_rank not specified."""
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+        original = MagicMock()
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-no-rank",
+            strategy=StrategyType.MISSING_RANK,
+            trigger=trigger,
+            parameters={},  # Missing 'missing_rank'
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy(tensor_list, tensor)
+        assert "missing_rank must be specified" in str(exc_info.value)
+
+    def test_missing_rank_out_of_bounds_is_safe(self):
+        """MISSING_RANK with out-of-bounds rank is handled safely."""
+        tensor_list = [torch.ones(10), torch.ones(10)]
+        tensor = torch.ones(10)
+
+        def mock_original(tl, t, **kwargs):
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-oob",
+            strategy=StrategyType.MISSING_RANK,
+            trigger=trigger,
+            parameters={"missing_rank": 99},  # Out of bounds
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Should not raise, just skip zeroing
+        proxy(tensor_list, tensor)
+        # Tensors should be unchanged (still ones from initialization)
+        assert torch.allclose(tensor_list[0], torch.ones(10))
+        assert torch.allclose(tensor_list[1], torch.ones(10))
+
+    def test_missing_rank_async_returns_immediately(self):
+        """MISSING_RANK with async_op=True returns without modifying."""
+        tensor_list = [torch.ones(10)]
+        tensor = torch.ones(10)
+        mock_result = MagicMock()
+
+        original = MagicMock(return_value=mock_result)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-async",
+            strategy=StrategyType.MISSING_RANK,
+            trigger=trigger,
+            parameters={"missing_rank": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy(tensor_list, tensor, async_op=True)
+        assert result is mock_result
+
+
+class TestShapeMismatchStrategy:
+    """Tests for SHAPE_MISMATCH strategy."""
+
+    def test_shape_mismatch_expands_tensor(self):
+        """SHAPE_MISMATCH strategy can expand tensor size."""
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+
+        call_args = []
+
+        def mock_original(tl, t, **kwargs):
+            call_args.append((tl, t.clone()))
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-shape-expand",
+            strategy=StrategyType.SHAPE_MISMATCH,
+            trigger=trigger,
+            parameters={"size_delta": 2, "mismatch_rank": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Mock rank to be 0 (the mismatch rank)
+        proxy._get_current_rank = MagicMock(return_value=0)
+
+        proxy(tensor_list, tensor)
+
+        # The tensor passed to original should be expanded
+        _, called_tensor = call_args[0]
+        assert called_tensor.shape[0] == 12  # 10 + 2
+
+    def test_shape_mismatch_shrinks_tensor(self):
+        """SHAPE_MISMATCH strategy can shrink tensor size."""
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+
+        call_args = []
+
+        def mock_original(tl, t, **kwargs):
+            call_args.append((tl, t.clone()))
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-shape-shrink",
+            strategy=StrategyType.SHAPE_MISMATCH,
+            trigger=trigger,
+            parameters={"size_delta": -3, "mismatch_rank": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy._get_current_rank = MagicMock(return_value=0)
+
+        proxy(tensor_list, tensor)
+
+        _, called_tensor = call_args[0]
+        assert called_tensor.shape[0] == 7  # 10 - 3
+
+    def test_shape_mismatch_only_on_configured_rank(self):
+        """SHAPE_MISMATCH only modifies tensor on configured rank."""
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+
+        call_args = []
+
+        def mock_original(tl, t, **kwargs):
+            call_args.append((tl, t.clone()))
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-shape-other-rank",
+            strategy=StrategyType.SHAPE_MISMATCH,
+            trigger=trigger,
+            parameters={"size_delta": 5, "mismatch_rank": 1},  # Only rank 1
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Current rank is 0, mismatch_rank is 1
+        proxy._get_current_rank = MagicMock(return_value=0)
+
+        proxy(tensor_list, tensor)
+
+        # Tensor should not be modified
+        _, called_tensor = call_args[0]
+        assert called_tensor.shape[0] == 10  # Unchanged
+
+    def test_shape_mismatch_default_rank_is_zero(self):
+        """SHAPE_MISMATCH defaults to mismatch_rank=0."""
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+
+        call_args = []
+
+        def mock_original(tl, t, **kwargs):
+            call_args.append((tl, t.clone()))
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-shape-default-rank",
+            strategy=StrategyType.SHAPE_MISMATCH,
+            trigger=trigger,
+            parameters={"size_delta": 2},  # No mismatch_rank specified
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy._get_current_rank = MagicMock(return_value=0)
+
+        proxy(tensor_list, tensor)
+
+        # Should apply to rank 0 by default
+        _, called_tensor = call_args[0]
+        assert called_tensor.shape[0] == 12  # 10 + 2
+
+
+class TestAllGatherProxyIntegration:
+    """Integration tests for AllGatherProxy."""
+
+    def test_step_based_triggering(self):
+        """Strategy only triggers within configured step range."""
+        original = MagicMock(return_value=None)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.STEP_BASED, start_step=5, end_step=7)
+        config = FaultConfig(
+            id="test-step-based",
+            strategy=StrategyType.MISSING_RANK,
+            trigger=trigger,
+            parameters={"missing_rank": 0},
+        )
+        proxy.set_config(config)
+
+        triggered_steps = []
+        for step in range(10):
+            proxy.set_step(step)
+            tensor_list = [torch.ones(10)]
+            tensor = torch.ones(10)
+
+            # Reset tensor_list after original is called
+            def reset_original(tl, t, **kwargs):
+                tl[0].fill_(1.0)
+                return None
+
+            original.side_effect = reset_original
+
+            proxy(tensor_list, tensor)
+
+            # If rank 0 is zeroed, the strategy triggered
+            if torch.allclose(tensor_list[0], torch.zeros(10)):
+                triggered_steps.append(step)
+
+        assert triggered_steps == [5, 6, 7]
+
+    def test_periodic_triggering(self):
+        """Periodic trigger triggers at intervals."""
+        original = MagicMock(return_value=None)
+        proxy = AllGatherProxy(original)
+        trigger = TriggerConfig(type=TriggerType.PERIODIC, every_n_steps=3)
+        config = FaultConfig(
+            id="test-periodic",
+            strategy=StrategyType.MISSING_RANK,
+            trigger=trigger,
+            parameters={"missing_rank": 0},
+        )
+        proxy.set_config(config)
+
+        triggered_steps = []
+        for step in range(10):
+            proxy.set_step(step)
+            tensor_list = [torch.ones(10)]
+            tensor = torch.ones(10)
+
+            def reset_original(tl, t, **kwargs):
+                tl[0].fill_(1.0)
+                return None
+
+            original.side_effect = reset_original
+
+            proxy(tensor_list, tensor)
+
+            if torch.allclose(tensor_list[0], torch.zeros(10)):
+                triggered_steps.append(step)
+
+        assert triggered_steps == [0, 3, 6, 9]
+
+    def test_collector_records_injection(self):
+        """Collector records fault injection when provided."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-789"
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+
+        def mock_original(tl, t, **kwargs):
+            tl[0].fill_(1.0)
+            return None
+
+        original = MagicMock(side_effect=mock_original)
+        proxy = AllGatherProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-recording",
+            strategy=StrategyType.CORRUPT_GATHERED,
+            trigger=trigger,
+            parameters={"noise_scale": 0.1},
+            severity="medium",
+            expected_behavior="Should corrupt gathered data",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(tensor_list, tensor)
+
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args[1]
+        assert call_kwargs["fault_type"] == "corrupt_gathered"
+        assert call_kwargs["target_layer"] == "L1"
+        assert call_kwargs["severity"] == "medium"
+
+        collector.record_fault_outcome.assert_called_once()
+        assert collector.record_fault_outcome.call_args[0][0] == "fault-789"
+        assert collector.record_fault_outcome.call_args[0][1] == "success"
+
+    def test_collector_records_failure(self):
+        """Collector records failure when strategy raises exception."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-err"
+        tensor_list = [torch.zeros(10)]
+        tensor = torch.ones(10)
+        original = MagicMock()
+        proxy = AllGatherProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-failure-recording",
+            strategy=StrategyType.MISSING_RANK,
+            trigger=trigger,
+            parameters={},  # Missing required 'missing_rank'
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError):
+            proxy(tensor_list, tensor)
+
+        # Should record failure
+        collector.record_fault_outcome.assert_called_once()
+        assert collector.record_fault_outcome.call_args[0][0] == "fault-err"
+        assert collector.record_fault_outcome.call_args[0][1] == "failure"
+
+    def test_get_world_size_without_distributed(self):
+        """_get_world_size returns 1 when distributed not initialized."""
+        proxy = AllGatherProxy(lambda tl, t: None)
+        world_size = proxy._get_world_size()
+        assert world_size == 1

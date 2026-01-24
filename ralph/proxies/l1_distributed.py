@@ -256,3 +256,229 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         call_kwargs["async_op"] = async_op
 
         return self._original(tensor, **call_kwargs)
+
+
+@ProxyRegistry.register("torch.distributed.all_gather")
+class AllGatherProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
+    """
+    Proxy for torch.distributed.all_gather() operations.
+
+    Supports fault injection at the distributed communication level (L1).
+
+    Supported strategies:
+    - DELAY: Adds delay before calling original all_gather
+    - CORRUPT_GATHERED: Corrupts gathered tensor data for specified ranks
+    - MISSING_RANK: Zeros out data for specified rank, simulating missing data
+    - SHAPE_MISMATCH: Alters tensor shape to cause shape mismatch errors
+
+    Config parameters:
+    - DELAY: delay_seconds (float, default 10.0) - seconds to delay
+    - CORRUPT_GATHERED: noise_scale (float, default 0.1), corrupt_ranks (list[int], optional)
+    - MISSING_RANK: missing_rank (int, required) - the rank whose data should be zeroed
+    - SHAPE_MISMATCH: size_delta (int, default 1) - how much to change size
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.DELAY,
+        StrategyType.CORRUPT_GATHERED,
+        StrategyType.MISSING_RANK,
+        StrategyType.SHAPE_MISMATCH,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "L1"
+
+    def _get_current_rank(self) -> int:
+        """
+        Get the current process rank.
+
+        Returns:
+            The current rank if distributed is initialized, otherwise 0.
+        """
+        if HAS_DIST and dist.is_initialized():
+            return dist.get_rank()
+        return 0
+
+    def _get_world_size(self) -> int:
+        """
+        Get the world size (number of processes).
+
+        Returns:
+            The world size if distributed is initialized, otherwise 1.
+        """
+        if HAS_DIST and dist.is_initialized():
+            return dist.get_world_size()
+        return 1
+
+    def _strategy_corrupt_gathered(
+        self,
+        tensor_list: list,
+        tensor: torch.Tensor,
+        group: Any = None,
+        async_op: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Corrupt gathered tensor data for specified ranks.
+
+        Calls the original all_gather, then corrupts the gathered data
+        for specified ranks with Gaussian noise.
+
+        Args:
+            tensor_list: List of tensors to gather into (output).
+            tensor: The tensor to send from this rank.
+            group: The process group to work on.
+            async_op: If True, returns a distributed request object.
+            **kwargs: Additional keyword arguments for the original function.
+
+        Returns:
+            Result of the original all_gather with corrupted output tensors.
+
+        Config parameters:
+            noise_scale (float): Standard deviation of Gaussian noise (default 0.1).
+            corrupt_ranks (list[int]): Ranks whose gathered data to corrupt.
+                If not specified, corrupts all ranks.
+        """
+        noise_scale = self._config.parameters.get("noise_scale", 0.1)
+        corrupt_ranks = self._config.parameters.get("corrupt_ranks", None)
+
+        # Build kwargs for original call
+        call_kwargs = dict(kwargs)
+        if group is not None:
+            call_kwargs["group"] = group
+        call_kwargs["async_op"] = async_op
+
+        # Call original all_gather first
+        result = self._original(tensor_list, tensor, **call_kwargs)
+
+        # If async_op, we can't modify the result synchronously
+        if async_op:
+            return result
+
+        # Corrupt the gathered tensors for specified ranks
+        for rank_idx, gathered_tensor in enumerate(tensor_list):
+            if corrupt_ranks is None or rank_idx in corrupt_ranks:
+                corrupted = self._corrupt_tensor(gathered_tensor, noise_scale)
+                gathered_tensor.copy_(corrupted)
+
+        return result
+
+    def _strategy_missing_rank(
+        self,
+        tensor_list: list,
+        tensor: torch.Tensor,
+        group: Any = None,
+        async_op: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Zero out data for specified rank, simulating missing data.
+
+        Calls the original all_gather, then zeros out the gathered data
+        for the specified rank, simulating a scenario where that rank's
+        data was lost or corrupted.
+
+        Args:
+            tensor_list: List of tensors to gather into (output).
+            tensor: The tensor to send from this rank.
+            group: The process group to work on.
+            async_op: If True, returns a distributed request object.
+            **kwargs: Additional keyword arguments for the original function.
+
+        Returns:
+            Result of the original all_gather with zeroed data for missing rank.
+
+        Config parameters:
+            missing_rank (int): The rank whose data should be zeroed (required).
+
+        Raises:
+            ValueError: If missing_rank is not specified in config parameters.
+        """
+        missing_rank = self._config.parameters.get("missing_rank")
+
+        if missing_rank is None:
+            raise ValueError(
+                "missing_rank must be specified in config parameters for MISSING_RANK strategy"
+            )
+
+        # Build kwargs for original call
+        call_kwargs = dict(kwargs)
+        if group is not None:
+            call_kwargs["group"] = group
+        call_kwargs["async_op"] = async_op
+
+        # Call original all_gather first
+        result = self._original(tensor_list, tensor, **call_kwargs)
+
+        # If async_op, we can't modify the result synchronously
+        if async_op:
+            return result
+
+        # Zero out the data for the missing rank
+        if 0 <= missing_rank < len(tensor_list):
+            tensor_list[missing_rank].zero_()
+
+        return result
+
+    def _strategy_shape_mismatch(
+        self,
+        tensor_list: list,
+        tensor: torch.Tensor,
+        group: Any = None,
+        async_op: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Alter tensor shape to cause shape mismatch errors.
+
+        Modifies the input tensor's shape before calling all_gather,
+        which will cause shape mismatch errors in distributed operations.
+        This simulates bugs where tensors have inconsistent shapes across ranks.
+
+        Args:
+            tensor_list: List of tensors to gather into (output).
+            tensor: The tensor to send from this rank.
+            group: The process group to work on.
+            async_op: If True, returns a distributed request object.
+            **kwargs: Additional keyword arguments for the original function.
+
+        Returns:
+            Result of the original all_gather (may raise an error due to mismatch).
+
+        Config parameters:
+            size_delta (int): How much to change the first dimension size (default 1).
+            mismatch_rank (int): Only apply mismatch on this rank (optional).
+                If not specified, applies to current rank 0 only.
+        """
+        size_delta = self._config.parameters.get("size_delta", 1)
+        mismatch_rank = self._config.parameters.get("mismatch_rank", 0)
+
+        current_rank = self._get_current_rank()
+
+        # Only modify on the specified rank
+        if current_rank == mismatch_rank:
+            # Create a tensor with different shape
+            if tensor.dim() > 0:
+                # Add or remove elements from first dimension
+                new_size = max(1, tensor.size(0) + size_delta)
+                if size_delta > 0:
+                    # Expand tensor
+                    padding = torch.zeros(
+                        size_delta, *tensor.shape[1:],
+                        dtype=tensor.dtype,
+                        device=tensor.device
+                    )
+                    tensor = torch.cat([tensor, padding], dim=0)
+                elif size_delta < 0 and tensor.size(0) > abs(size_delta):
+                    # Shrink tensor
+                    tensor = tensor[:new_size]
+
+        # Build kwargs for original call
+        call_kwargs = dict(kwargs)
+        if group is not None:
+            call_kwargs["group"] = group
+        call_kwargs["async_op"] = async_op
+
+        # Call original - this may raise an error due to shape mismatch
+        return self._original(tensor_list, tensor, **call_kwargs)
