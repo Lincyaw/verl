@@ -9,12 +9,14 @@ The InjectionEngine is the central orchestrator that:
 
 import importlib
 import random
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ralph.core.config import FaultConfig
 from ralph.core.registry import ProxyRegistry
 from ralph.core.scheduler import TriggerScheduler
-from ralph.proxies.base import BaseProxy
+
+if TYPE_CHECKING:
+    from ralph.proxies.base import BaseProxy
 
 try:
     from ralph.collectors.dual_stream import DualStreamCollector
@@ -78,7 +80,7 @@ class InjectionEngine:
         self._configs: Dict[str, FaultConfig] = {}
 
         # Proxy instances: target -> proxy instance
-        self._proxies: Dict[str, BaseProxy] = {}
+        self._proxies: Dict[str, "BaseProxy"] = {}
 
         # Original functions: target -> original function reference
         self._originals: Dict[str, Callable] = {}
@@ -471,7 +473,7 @@ class InjectionEngine:
         """
         return self._scheduler.get_active_faults()
 
-    def get_proxy(self, target: str) -> Optional[BaseProxy]:
+    def get_proxy(self, target: str) -> Optional["BaseProxy"]:
         """
         Get the proxy instance for a target.
 

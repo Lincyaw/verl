@@ -48,6 +48,12 @@ except ImportError:
     GAEProxy = None
     KLPenaltyProxy = None
 
+# Inference proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.inference import GenerateProxy
+except ImportError:
+    GenerateProxy = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -64,4 +70,5 @@ __all__ = [
     "CheckpointSaveProxy",
     "GAEProxy",
     "KLPenaltyProxy",
+    "GenerateProxy",
 ]

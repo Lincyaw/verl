@@ -696,3 +696,35 @@
 - All syntax verified via py_compile
 - This unblocks: 11.3-grpo-proxy (which uses similar algorithm patterns)
 - Next priorities: 9.3-generate-proxy (Inference P1), 9.4-compute-values-proxy (Worker P1), 15.1-unit-tests
+
+[2026-01-24] 9.3-generate-proxy: COMPLETED
+- Created ralph/proxies/inference.py with GenerateProxy class
+- Inherits from BaseProxy, DelayMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, GENERATION_TIMEOUT, EMPTY_RESPONSE, TRUNCATED_OUTPUT, GARBAGE_OUTPUT}
+- Implemented _get_layer() returning 'Inference'
+- Implemented strategy methods:
+  - _strategy_delay: Standard delay before generation (default 10.0s)
+  - _strategy_generation_timeout: Very long delay simulating hung generation (default 300.0s)
+  - _strategy_empty_response: Returns empty sequences (handles tensors, strings, lists, dicts)
+  - _strategy_truncated_output: Truncates output to max_tokens (default 1)
+  - _strategy_garbage_output: Replaces output with random tokens (vocab_size default 32000)
+- Helper methods for recursive result transformation:
+  - _apply_empty_response: Handles nested structures, vLLM RequestOutput-like objects
+  - _apply_truncated_output: Truncates along sequence dimension
+  - _apply_garbage_output: Generates random tokens, handles strings with _generate_garbage_text
+- Output key recognition: sequences, generated_ids, output_ids, token_ids, outputs, generated_tokens, generated_text, text
+- Decorated with @ProxyRegistry.register('vllm.generate')
+- Fixed circular import in ralph/core/engine.py by using TYPE_CHECKING guard for BaseProxy import
+- Updated ralph/proxies/__init__.py to export GenerateProxy
+- Created tests/ralph/test_inference_proxy.py with 35+ comprehensive unit tests:
+  - TestGenerateProxyRegistration: Registration and supported strategies verification
+  - TestGenerateProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestDelayStrategy: Config usage, default delay
+  - TestGenerationTimeoutStrategy: Config usage, default timeout (300s)
+  - TestEmptyResponseStrategy: Tensor, string, list outputs, preserves other keys
+  - TestTruncatedOutputStrategy: Tensor, list, string, 2D tensor, default max_tokens
+  - TestGarbageOutputStrategy: Tensor, list, string, shape preservation, vocab size, other keys preserved
+  - TestGenerateProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, args/kwargs passing
+- All syntax verified via py_compile
+- This unblocks: 11.4-update-weights-proxy (Inference P2)
+- Next priorities: 9.4-compute-values-proxy (Worker P1), 10.1-gpu-memory-injector (L3), 15.1-unit-tests
