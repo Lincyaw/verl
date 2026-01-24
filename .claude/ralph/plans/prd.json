@@ -9,7 +9,7 @@
       "Verify: `ls ralph/` shows core, mixins, proxies, collectors, triggers, cli directories",
       "Verify: `find ralph -name '__init__.py' | wc -l` returns at least 7"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "0.2-dependencies",
