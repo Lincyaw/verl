@@ -1444,3 +1444,55 @@
 - All 14 manual tests pass
 - Verification passed: All imports work correctly
 - Remaining incomplete item: 14.2-metrics-hook (last remaining feature)
+
+[2026-01-24] 14.2-metrics-hook: COMPLETED
+- Created ralph/collectors/metrics_hook.py with VerlMetricsHook class
+- Implemented all required functionality:
+  - start_capture() and stop_capture() methods for capture control
+  - get_metrics() returning captured data (samples, by_name, summary, capture_info)
+  - record_metric() and record_metrics() for recording individual and batch metrics
+  - get_metric_values(), get_metric_summary(), get_latest_metrics() for retrieval
+  - set_step() and get_step() for step management
+  - wrap_tracker() and unwrap_tracker() for verl Tracking integration
+  - Context manager support (__enter__, __exit__)
+  - Thread-safe implementation with threading.Lock
+- Integrated with verl's tracking backend (wandb/tensorboard):
+  - wrap_tracker() method intercepts log() calls on Tracking instance
+  - Records metrics through hook while passing to original tracker
+  - Supports all backends (wandb, tensorboard, mlflow, etc.) via wrapping
+- Captured training metrics support:
+  - METRIC_NAMES class attribute defines standard metric groups
+  - Groups: throughput (TPS), loss, gradient_norm, kl, reward, lr
+  - metric_filter parameter supports group-based and pattern-based filtering
+- Additional utility classes implemented:
+  - MetricSample: Dataclass for metric samples with to_dict() serialization
+  - MetricsSummary: Statistics (count, min, max, mean, first/last step)
+  - ThroughputTracker: Tracks tokens/samples per second
+    - start(), record_batch(), get_throughput() methods
+    - get_total_tokens(), get_total_samples(), get_elapsed_time()
+  - GradientNormTracker: Tracks gradient norms over training
+    - compute_grad_norm() for computing from parameters
+    - record(), get_history(), get_latest(), get_mean(), clear()
+- Configuration options:
+  - metric_filter: Filter metrics by name/pattern/group
+  - step_interval: Only capture every N steps
+  - buffer_size: Limit stored samples (default 10000)
+- Updated ralph/collectors/__init__.py to export all new classes
+- Created tests/ralph/test_metrics_hook.py with 50+ comprehensive unit tests:
+  - TestMetricSample: Sample creation, tags, to_dict
+  - TestMetricsSummary: Summary creation, to_dict
+  - TestVerlMetricsHookInit: Default/custom initialization
+  - TestVerlMetricsHookCaptureControl: start/stop/context manager
+  - TestVerlMetricsHookRecording: Recording with/without capture, tags, batches
+  - TestVerlMetricsHookRetrieval: get_metrics, values, summary, latest
+  - TestVerlMetricsHookStepManagement: set_step, get_step
+  - TestVerlMetricsHookTrackerWrapping: wrap/unwrap tracker
+  - TestVerlMetricsHookThreadSafety: Concurrent recording
+  - TestThroughputTracker: All throughput tracking methods
+  - TestGradientNormTracker: All gradient norm tracking methods
+  - TestVerlMetricsHookIntegration: Mock training loop, with collector
+- All 8 manual tests pass
+- Verification passed: Hook captures metrics during mock training loop
+- All imports work correctly: VerlMetricsHook, ThroughputTracker, GradientNormTracker
+- THIS COMPLETES ALL FEATURES IN THE PRD - All 50+ features are now implemented!
+

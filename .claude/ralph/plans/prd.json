@@ -768,7 +768,7 @@
       "Implement get_metrics() returning captured data",
       "Verify: Hook captures metrics during mock training loop"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "3.2-dual-stream-collector"
     ]
