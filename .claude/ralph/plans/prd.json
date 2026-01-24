@@ -636,7 +636,7 @@
       "Decorate with @ProxyRegistry.register('rollout.update_weights')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "9.3-generate-proxy"
     ]

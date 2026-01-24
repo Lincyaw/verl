@@ -1114,3 +1114,44 @@
 - Verification passed: ProxyRegistry.is_registered('compute_grpo_outcome_advantage') returns True
 - This completes the Algorithm P2 GRPO proxy
 - Next priorities: 11.4-update-weights-proxy (Inference P2), 12.1-tool-call-proxy (Agent P2), 13.x-megatron/optimizer proxies
+
+[2026-01-24] 11.4-update-weights-proxy: COMPLETED
+- Added UpdateWeightsProxy class to ralph/proxies/inference.py
+- Inherits from BaseProxy, DelayMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, WEIGHT_MISMATCH, PARTIAL_UPDATE, CORRUPT_WEIGHTS, OLD_WEIGHTS}
+- Implemented _get_layer() returning 'Inference'
+- Implemented strategy methods:
+  - _strategy_delay: Adds delay before weight synchronization (default 10.0s)
+  - _strategy_weight_mismatch: Alters tensor shapes to simulate shape mismatches
+    - Uses mismatch_ratio parameter (default 0.1)
+    - Can increase or decrease dimensions
+  - _strategy_partial_update: Only updates some weights, zeros others
+    - Uses update_ratio parameter (default 0.5)
+    - Supports keys_to_skip for specific keys to skip
+  - _strategy_corrupt_weights: Adds Gaussian noise to weight tensors
+    - Uses noise_scale parameter (default 0.01)
+  - _strategy_old_weights: Returns stale weights from history
+    - Uses staleness_steps parameter (default 1)
+    - Maintains internal weight history buffer
+- Helper methods:
+  - _apply_weight_mismatch: Recursively alters tensor shapes
+  - _apply_partial_update: Recursively zeros some weights
+  - _apply_weight_corruption: Recursively adds noise to tensors
+  - _store_weights: Stores weights in history for OLD_WEIGHTS strategy
+  - _deep_copy_weights: Deep copies tensors to avoid reference issues
+- Decorated with @ProxyRegistry.register('rollout.update_weights')
+- Updated ralph/proxies/__init__.py to export UpdateWeightsProxy
+- Created 35+ comprehensive unit tests in tests/ralph/test_inference_proxy.py:
+  - TestUpdateWeightsProxyRegistration: Registration and supported strategies
+  - TestUpdateWeightsProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestUpdateWeightsDelayStrategy: Config usage, default delay
+  - TestWeightMismatchStrategy: Shape alteration, default ratio, dict handling
+  - TestPartialUpdateStrategy: Zeros some weights, default ratio, specific keys
+  - TestCorruptWeightsStrategy: Noise addition, default scale, multiple tensors, shape preservation
+  - TestOldWeightsStrategy: Returns old weights, default staleness, multiple staleness
+  - TestUpdateWeightsProxyIntegration: Step-based trigger, periodic trigger, collector recording, args passing
+- All syntax verified via py_compile
+- Verification passed: `from ralph.proxies import UpdateWeightsProxy` works correctly
+- Verification passed: ProxyRegistry.is_registered('rollout.update_weights') returns True
+- This completes the Inference P2 series (GenerateProxy and UpdateWeightsProxy)
+- Next priorities: 12.1-tool-call-proxy (Agent P2), 13.x-megatron/optimizer proxies, 14.x-data collection

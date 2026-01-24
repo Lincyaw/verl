@@ -58,9 +58,10 @@ except ImportError:
 
 # Inference proxies - imported conditionally to handle missing torch
 try:
-    from ralph.proxies.inference import GenerateProxy
+    from ralph.proxies.inference import GenerateProxy, UpdateWeightsProxy
 except ImportError:
     GenerateProxy = None
+    UpdateWeightsProxy = None
 
 # Worker proxies - imported conditionally to handle missing torch
 try:
@@ -101,6 +102,7 @@ __all__ = [
     "GRPOProxy",
     "KLPenaltyProxy",
     "GenerateProxy",
+    "UpdateWeightsProxy",
     "ComputeValuesProxy",
     "GPUMemoryInjector",
     "DataProtoConcatProxy",
