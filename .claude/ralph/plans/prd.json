@@ -620,7 +620,7 @@
       "Decorate with @ProxyRegistry.register('compute_grpo_outcome_advantage')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "9.1-gae-proxy"
     ]

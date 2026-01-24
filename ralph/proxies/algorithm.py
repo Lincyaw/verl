@@ -581,3 +581,266 @@ class KLPenaltyProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModific
             return tuple(self._apply_negative_kl(item) for item in result)
         else:
             return result
+
+
+@ProxyRegistry.register("compute_grpo_outcome_advantage")
+class GRPOProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationMixin):
+    """
+    Proxy for compute_grpo_outcome_advantage() operations.
+
+    Supports fault injection at the algorithm level for Group Relative Policy
+    Optimization (GRPO) advantage computation. This allows testing how the
+    training pipeline handles corrupted grouping, normalization, or advantage
+    estimates in GRPO-based training.
+
+    GRPO groups samples by index and normalizes rewards within each group to
+    compute advantages. The strategies here target different aspects of this
+    computation.
+
+    Supported strategies:
+    - WRONG_GROUPING: Uses shuffled or random group indices
+    - WRONG_NORMALIZATION: Applies incorrect mean/std computation
+    - SKIP_NORMALIZATION: Skips normalization, returns raw scores
+    - SINGLE_SAMPLE_GROUPS: Treats each sample as its own group
+
+    Config parameters:
+    - WRONG_GROUPING: shuffle_seed (int, optional) - seed for reproducible shuffling
+    - WRONG_NORMALIZATION: mean_scale (float, default 2.0), std_scale (float, default 0.5)
+    - SKIP_NORMALIZATION: No specific parameters
+    - SINGLE_SAMPLE_GROUPS: No specific parameters
+
+    Expected input/output:
+    - Input: token_level_rewards, response_mask, index, epsilon, norm_adv_by_std_in_grpo
+    - Output: Tuple of (advantages, returns) tensors, both shape (bs, response_length)
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.WRONG_GROUPING,
+        StrategyType.WRONG_NORMALIZATION,
+        StrategyType.SKIP_NORMALIZATION,
+        StrategyType.SINGLE_SAMPLE_GROUPS,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "Algorithm"
+
+    def _strategy_wrong_grouping(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Use shuffled or random group indices for GRPO computation.
+
+        Extracts the index array from arguments and shuffles it before passing
+        to the original function. This causes samples to be grouped incorrectly,
+        potentially mixing samples from different prompts/groups.
+
+        Args:
+            *args: Positional arguments (token_level_rewards, response_mask, index, ...)
+            **kwargs: Keyword arguments
+
+        Returns:
+            Result with incorrect grouping applied.
+
+        Config parameters:
+            shuffle_seed (int, optional): Seed for reproducible shuffling.
+            randomize (bool, default False): If True, use completely random indices.
+        """
+        import numpy as np
+        import random
+
+        # Extract index from args or kwargs
+        # Signature: (token_level_rewards, response_mask, index, epsilon, norm_adv_by_std_in_grpo)
+        args_list = list(args)
+
+        if "index" in kwargs:
+            index = kwargs["index"]
+            index_source = "kwargs"
+        elif len(args) >= 3:
+            index = args[2]
+            index_source = "args"
+        else:
+            # No index found, just call original
+            return self._original(*args, **kwargs)
+
+        # Get config parameters
+        shuffle_seed = self._config.parameters.get("shuffle_seed", None)
+        randomize = self._config.parameters.get("randomize", False)
+
+        # Create corrupted index
+        if isinstance(index, np.ndarray):
+            corrupted_index = index.copy()
+        else:
+            corrupted_index = np.array(index)
+
+        if randomize:
+            # Completely random indices
+            if shuffle_seed is not None:
+                np.random.seed(shuffle_seed)
+            unique_indices = np.unique(corrupted_index)
+            corrupted_index = np.random.choice(unique_indices, size=len(corrupted_index))
+        else:
+            # Shuffle the existing indices
+            if shuffle_seed is not None:
+                random.seed(shuffle_seed)
+            random.shuffle(corrupted_index)
+
+        # Apply corrupted index
+        if index_source == "kwargs":
+            kwargs["index"] = corrupted_index
+        else:
+            args_list[2] = corrupted_index
+            args = tuple(args_list)
+
+        return self._original(*args, **kwargs)
+
+    def _strategy_wrong_normalization(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Apply incorrect mean/std computation for GRPO normalization.
+
+        Calls the original function to get the result, then applies additional
+        incorrect scaling to simulate bugs in the normalization computation.
+        This can cause advantages to be miscalibrated.
+
+        Args:
+            *args: Positional arguments to pass to original function
+            **kwargs: Keyword arguments to pass to original function
+
+        Returns:
+            Result with additional scaling applied to simulate wrong normalization.
+
+        Config parameters:
+            mean_scale (float, default 2.0): Factor to scale mean subtraction effect.
+            std_scale (float, default 0.5): Factor to scale std division effect.
+        """
+        # Get the original result
+        result = self._original(*args, **kwargs)
+
+        # Get scaling factors
+        mean_scale = self._config.parameters.get("mean_scale", 2.0)
+        std_scale = self._config.parameters.get("std_scale", 0.5)
+
+        # Apply wrong scaling to simulate incorrect normalization
+        # The idea is: if original did (x - mean) / std,
+        # we modify it to look like it was computed with wrong mean/std
+        return self._apply_wrong_normalization(result, mean_scale, std_scale)
+
+    def _apply_wrong_normalization(
+        self, result: Any, mean_scale: float, std_scale: float
+    ) -> Any:
+        """
+        Recursively apply wrong normalization scaling to advantage tensors.
+
+        Args:
+            result: Result to process (tensor, tuple, dict, list)
+            mean_scale: Factor to scale the mean-subtracted component
+            std_scale: Factor to scale the std-divided component
+
+        Returns:
+            Result with modified normalization
+        """
+        if isinstance(result, torch.Tensor):
+            # Apply combined scaling: essentially scale * x + bias
+            # This simulates effect of wrong mean/std computation
+            return result * mean_scale * std_scale
+        elif isinstance(result, tuple):
+            return tuple(
+                self._apply_wrong_normalization(item, mean_scale, std_scale)
+                for item in result
+            )
+        elif isinstance(result, dict):
+            return {
+                k: self._apply_wrong_normalization(v, mean_scale, std_scale)
+                for k, v in result.items()
+            }
+        elif isinstance(result, list):
+            return [
+                self._apply_wrong_normalization(item, mean_scale, std_scale)
+                for item in result
+            ]
+        else:
+            return result
+
+    def _strategy_skip_normalization(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Skip normalization and return raw scores as advantages.
+
+        Instead of computing normalized advantages within groups, this strategy
+        returns the raw summed scores without any normalization. This simulates
+        a bug where the normalization step is bypassed.
+
+        Args:
+            *args: Positional arguments (token_level_rewards, response_mask, ...)
+            **kwargs: Keyword arguments
+
+        Returns:
+            Raw scores without group normalization applied.
+        """
+        # Extract token_level_rewards and response_mask
+        if len(args) >= 2:
+            token_level_rewards = args[0]
+            response_mask = args[1]
+        else:
+            token_level_rewards = kwargs.get("token_level_rewards")
+            response_mask = kwargs.get("response_mask")
+
+        if token_level_rewards is None or response_mask is None:
+            # Fallback to original if we can't extract tensors
+            return self._original(*args, **kwargs)
+
+        # Compute raw scores without normalization
+        # This is what GRPO does before normalizing within groups
+        with torch.no_grad():
+            scores = token_level_rewards.sum(dim=-1)
+            # Broadcast to response length without normalization
+            advantages = scores.unsqueeze(-1) * response_mask
+
+        # GRPO returns (advantages, returns) where both are the same
+        return advantages, advantages.clone()
+
+    def _strategy_single_sample_groups(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Treat each sample as its own group.
+
+        Modifies the index array so each sample has a unique group index,
+        effectively eliminating the grouping benefit of GRPO. With single-sample
+        groups, the mean equals the sample value and std is 0 (or 1 if handled),
+        resulting in zero or undefined advantages.
+
+        Args:
+            *args: Positional arguments (token_level_rewards, response_mask, index, ...)
+            **kwargs: Keyword arguments
+
+        Returns:
+            Result computed with each sample in its own group.
+
+        Config parameters:
+            zero_std_handling (str, default "one"): How to handle zero std -
+                "one" sets std to 1, "epsilon" uses small value.
+        """
+        import numpy as np
+
+        # Extract tensor shape to determine batch size
+        if len(args) >= 1:
+            token_level_rewards = args[0]
+        else:
+            token_level_rewards = kwargs.get("token_level_rewards")
+
+        if token_level_rewards is None:
+            return self._original(*args, **kwargs)
+
+        batch_size = token_level_rewards.shape[0]
+
+        # Create unique index for each sample
+        single_sample_index = np.arange(batch_size)
+
+        # Replace index in args/kwargs
+        args_list = list(args)
+        if "index" in kwargs:
+            kwargs["index"] = single_sample_index
+        elif len(args) >= 3:
+            args_list[2] = single_sample_index
+            args = tuple(args_list)
+        else:
+            # If no index parameter position found, add to kwargs
+            kwargs["index"] = single_sample_index
+
+        return self._original(*args, **kwargs)

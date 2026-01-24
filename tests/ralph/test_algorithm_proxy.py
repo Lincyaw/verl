@@ -14,16 +14,23 @@ Tests also cover KLPenaltyProxy with all 5 supported strategies:
 - ZERO_KL: Returns zero KL penalty
 - EXTREME_KL: Returns very large KL value
 - NEGATIVE_KL: Returns negative KL penalty
+
+Tests also cover GRPOProxy with all 4 supported strategies:
+- WRONG_GROUPING: Uses shuffled or random group indices
+- WRONG_NORMALIZATION: Applies incorrect mean/std computation
+- SKIP_NORMALIZATION: Skips normalization, returns raw scores
+- SINGLE_SAMPLE_GROUPS: Treats each sample as its own group
 """
 
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 import torch
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.registry import ProxyRegistry
-from ralph.proxies.algorithm import GAEProxy, KLPenaltyProxy
+from ralph.proxies.algorithm import GAEProxy, GRPOProxy, KLPenaltyProxy
 
 
 class TestGAEProxyRegistration:
@@ -1429,3 +1436,654 @@ class TestKLPenaltyProxyIntegration:
         proxy(policy_logprobs, ref_logprobs, kl_coef=0.1)
 
         original.assert_called_once_with(policy_logprobs, ref_logprobs, kl_coef=0.1)
+
+
+# =============================================================================
+# GRPOProxy Tests
+# =============================================================================
+
+
+class TestGRPOProxyRegistration:
+    """Test GRPOProxy registration in ProxyRegistry."""
+
+    def test_proxy_is_registered(self):
+        """GRPOProxy should be registered for compute_grpo_outcome_advantage."""
+        assert ProxyRegistry.is_registered("compute_grpo_outcome_advantage")
+
+    def test_supported_strategies(self):
+        """GRPOProxy should support correct strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("compute_grpo_outcome_advantage")
+        assert StrategyType.WRONG_GROUPING in strategies
+        assert StrategyType.WRONG_NORMALIZATION in strategies
+        assert StrategyType.SKIP_NORMALIZATION in strategies
+        assert StrategyType.SINGLE_SAMPLE_GROUPS in strategies
+        assert len(strategies) == 4
+
+
+class TestGRPOProxyBasics:
+    """Test basic GRPOProxy functionality."""
+
+    def test_get_layer_returns_algorithm(self):
+        """_get_layer should return 'Algorithm'."""
+        original = MagicMock()
+        proxy = GRPOProxy(original)
+        assert proxy._get_layer() == "Algorithm"
+
+    def test_call_without_config_calls_original(self):
+        """Calling proxy without config should call original function."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+        proxy = GRPOProxy(original)
+
+        result = proxy()
+
+        original.assert_called_once()
+        assert result[0] is advantages
+        assert result[1] is returns
+
+    def test_disabled_config_calls_original(self):
+        """Disabled config should not inject fault."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_GROUPING,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        original.assert_called_once()
+        assert result[0] is advantages
+
+    def test_unsupported_strategy_raises_error(self):
+        """Setting unsupported strategy should raise ValueError."""
+        original = MagicMock()
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,  # Not supported by GRPOProxy
+            trigger=trigger,
+        )
+
+        with pytest.raises(ValueError, match="not supported"):
+            proxy.set_config(config)
+
+
+class TestWrongGroupingStrategy:
+    """Test WRONG_GROUPING strategy."""
+
+    def test_shuffles_index_array(self):
+        """WRONG_GROUPING should shuffle the index array."""
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+        original_index = np.array([0, 0, 1, 1])
+
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_GROUPING,
+            trigger=trigger,
+            parameters={"shuffle_seed": 42},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(token_rewards, response_mask, original_index.copy())
+
+        # Check that original was called with a modified index
+        original.assert_called_once()
+        call_args = original.call_args[0]
+        # The index should have been shuffled
+        assert len(call_args) >= 3
+
+    def test_with_index_in_kwargs(self):
+        """WRONG_GROUPING handles index passed as kwarg."""
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+        original_index = np.array([0, 0, 1, 1])
+
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_GROUPING,
+            trigger=trigger,
+            parameters={"shuffle_seed": 42},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(token_rewards, response_mask, index=original_index.copy())
+
+        original.assert_called_once()
+        call_kwargs = original.call_args[1]
+        assert "index" in call_kwargs
+
+    def test_randomize_option(self):
+        """WRONG_GROUPING with randomize=True uses random indices."""
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+        original_index = np.array([0, 0, 1, 1])
+
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_GROUPING,
+            trigger=trigger,
+            parameters={"randomize": True, "shuffle_seed": 42},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(token_rewards, response_mask, original_index.copy())
+
+        original.assert_called_once()
+
+    def test_no_index_parameter_calls_original(self):
+        """When no index parameter found, calls original unchanged."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_GROUPING,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Call with only 2 args (no index)
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+        proxy(token_rewards, response_mask)
+
+        original.assert_called_once()
+
+
+class TestWrongNormalizationStrategy:
+    """Test WRONG_NORMALIZATION strategy."""
+
+    def test_scales_result(self):
+        """WRONG_NORMALIZATION scales the result."""
+        advantages = torch.ones(4, 10)
+        returns = torch.ones(4, 10)
+        original = MagicMock(return_value=(advantages.clone(), returns.clone()))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+            parameters={"mean_scale": 2.0, "std_scale": 0.5},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        # Result should be scaled by mean_scale * std_scale = 2.0 * 0.5 = 1.0
+        expected = advantages * 2.0 * 0.5
+        torch.testing.assert_close(result[0], expected)
+
+    def test_default_scales(self):
+        """WRONG_NORMALIZATION uses default scales if not specified."""
+        advantages = torch.ones(4, 10)
+        returns = torch.ones(4, 10)
+        original = MagicMock(return_value=(advantages.clone(), returns.clone()))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        # Default mean_scale=2.0, std_scale=0.5
+        expected = advantages * 2.0 * 0.5
+        torch.testing.assert_close(result[0], expected)
+
+    def test_custom_scales(self):
+        """WRONG_NORMALIZATION uses custom scale values."""
+        advantages = torch.ones(4, 10) * 2
+        returns = torch.ones(4, 10)
+        original = MagicMock(return_value=(advantages.clone(), returns.clone()))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+            parameters={"mean_scale": 3.0, "std_scale": 2.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        # Result scaled by 3.0 * 2.0 = 6.0
+        expected = advantages * 6.0
+        torch.testing.assert_close(result[0], expected)
+
+    def test_handles_dict_result(self):
+        """WRONG_NORMALIZATION handles dict results."""
+        original_result = {
+            "advantages": torch.ones(4, 10),
+            "returns": torch.ones(4, 10) * 2,
+        }
+        original = MagicMock(return_value=original_result)
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+            parameters={"mean_scale": 2.0, "std_scale": 0.5},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert isinstance(result, dict)
+        torch.testing.assert_close(result["advantages"], torch.ones(4, 10))
+        torch.testing.assert_close(result["returns"], torch.ones(4, 10) * 2)
+
+
+class TestSkipNormalizationStrategy:
+    """Test SKIP_NORMALIZATION strategy."""
+
+    def test_returns_raw_scores(self):
+        """SKIP_NORMALIZATION returns unnormalized scores."""
+        token_rewards = torch.ones(4, 10)  # Sum will be 10 for each
+        response_mask = torch.ones(4, 10)
+
+        original = MagicMock()
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SKIP_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy(token_rewards, response_mask)
+
+        # Should NOT call original
+        original.assert_not_called()
+        # Result should be raw scores broadcasted
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        # Each row should have sum=10 broadcasted across response length
+        expected_score = torch.ones(4, 10) * 10
+        torch.testing.assert_close(result[0], expected_score)
+
+    def test_different_rewards(self):
+        """SKIP_NORMALIZATION handles different reward values."""
+        token_rewards = torch.tensor([[1.0, 2.0], [3.0, 4.0]])  # Sums: 3, 7
+        response_mask = torch.ones(2, 2)
+
+        original = MagicMock()
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SKIP_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy(token_rewards, response_mask)
+
+        expected = torch.tensor([[3.0, 3.0], [7.0, 7.0]])
+        torch.testing.assert_close(result[0], expected)
+
+    def test_with_kwargs(self):
+        """SKIP_NORMALIZATION handles kwargs input."""
+        token_rewards = torch.ones(4, 10)
+        response_mask = torch.ones(4, 10)
+
+        original = MagicMock()
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SKIP_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy(token_level_rewards=token_rewards, response_mask=response_mask)
+
+        assert isinstance(result, tuple)
+        original.assert_not_called()
+
+    def test_fallback_on_missing_args(self):
+        """SKIP_NORMALIZATION falls back to original if args missing."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SKIP_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Call with no args
+        result = proxy()
+
+        original.assert_called_once()
+
+
+class TestSingleSampleGroupsStrategy:
+    """Test SINGLE_SAMPLE_GROUPS strategy."""
+
+    def test_creates_unique_indices(self):
+        """SINGLE_SAMPLE_GROUPS creates unique index for each sample."""
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+        original_index = np.array([0, 0, 1, 1])
+
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SINGLE_SAMPLE_GROUPS,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(token_rewards, response_mask, original_index.copy())
+
+        original.assert_called_once()
+        call_args = original.call_args[0]
+        # Third argument should be unique indices
+        modified_index = call_args[2]
+        assert len(np.unique(modified_index)) == 4  # Each sample in own group
+
+    def test_with_index_in_kwargs(self):
+        """SINGLE_SAMPLE_GROUPS handles index in kwargs."""
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+        original_index = np.array([0, 0, 1, 1])
+
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SINGLE_SAMPLE_GROUPS,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(token_rewards, response_mask, index=original_index)
+
+        original.assert_called_once()
+        call_kwargs = original.call_args[1]
+        assert "index" in call_kwargs
+        assert len(np.unique(call_kwargs["index"])) == 4
+
+    def test_adds_index_if_missing(self):
+        """SINGLE_SAMPLE_GROUPS adds index to kwargs if not in args."""
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SINGLE_SAMPLE_GROUPS,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Only pass 2 args (no index in position 3)
+        proxy(token_rewards, response_mask)
+
+        original.assert_called_once()
+        call_kwargs = original.call_args[1]
+        assert "index" in call_kwargs
+        np.testing.assert_array_equal(call_kwargs["index"], np.arange(4))
+
+    def test_fallback_when_no_rewards(self):
+        """SINGLE_SAMPLE_GROUPS falls back when can't determine batch size."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.SINGLE_SAMPLE_GROUPS,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Call with no args
+        result = proxy()
+
+        original.assert_called_once()
+        assert result[0] is advantages
+
+
+class TestGRPOProxyIntegration:
+    """Integration tests for GRPOProxy."""
+
+    def test_step_based_trigger(self):
+        """GRPOProxy respects step-based trigger."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(
+            type=TriggerType.STEP_BASED, start_step=5, end_step=10
+        )
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        # Before range - should not inject
+        proxy.set_step(3)
+        result = proxy()
+        assert result[0] is advantages  # Original unchanged
+
+        # In range - should inject
+        proxy.set_step(7)
+        result = proxy()
+        assert result[0] is not advantages  # Modified
+
+    def test_periodic_trigger(self):
+        """GRPOProxy respects periodic trigger."""
+        original = MagicMock(return_value=(torch.ones(4, 10), torch.ones(4, 10)))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.PERIODIC, every_n_steps=3)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        results = []
+        for step in range(6):
+            proxy.set_step(step)
+            original.reset_mock()
+            original.return_value = (torch.ones(4, 10), torch.ones(4, 10))
+            result = proxy()
+            # Check if result was modified (scale != 1)
+            is_modified = not torch.allclose(result[0], torch.ones(4, 10))
+            results.append(is_modified)
+
+        # Steps 0, 3 should trigger (every 3 steps)
+        assert results[0] is True   # step 0
+        assert results[1] is False  # step 1
+        assert results[2] is False  # step 2
+        assert results[3] is True   # step 3
+
+    def test_collector_records_fault(self):
+        """GRPOProxy records fault with collector."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+        collector = MagicMock()
+        collector.record_fault_injection = MagicMock(return_value="fault123")
+        collector.record_fault_outcome = MagicMock()
+
+        proxy = GRPOProxy(original, collector=collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+            severity="medium",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy()
+
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args[1]
+        assert call_kwargs["fault_type"] == "wrong_normalization"
+        assert call_kwargs["target_layer"] == "Algorithm"
+        assert call_kwargs["severity"] == "medium"
+        collector.record_fault_outcome.assert_called_once_with("fault123", "success", 0)
+
+    def test_failure_recording(self):
+        """GRPOProxy records failure when strategy raises exception."""
+        original = MagicMock(side_effect=RuntimeError("GRPO computation failed"))
+        collector = MagicMock()
+        collector.record_fault_injection = MagicMock(return_value="fault123")
+        collector.record_fault_outcome = MagicMock()
+
+        proxy = GRPOProxy(original, collector=collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(RuntimeError, match="GRPO computation failed"):
+            proxy()
+
+        collector.record_fault_outcome.assert_called_once()
+        call_args = collector.record_fault_outcome.call_args[0]
+        assert call_args[0] == "fault123"
+        assert "exception" in call_args[1]
+
+    def test_tuple_output_preservation(self):
+        """GRPOProxy preserves tuple output structure."""
+        advantages = torch.ones(4, 10)
+        returns = torch.ones(4, 10) * 2
+        original = MagicMock(return_value=(advantages.clone(), returns.clone()))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+            parameters={"mean_scale": 1.0, "std_scale": 1.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+
+    def test_passes_all_args_to_original(self):
+        """GRPOProxy passes all arguments to original function."""
+        advantages = torch.randn(4, 10)
+        returns = torch.randn(4, 10)
+        original = MagicMock(return_value=(advantages, returns))
+
+        proxy = GRPOProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_NORMALIZATION,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        token_rewards = torch.randn(4, 10)
+        response_mask = torch.ones(4, 10)
+        index = np.array([0, 0, 1, 1])
+        proxy(token_rewards, response_mask, index, epsilon=1e-6, norm_adv_by_std_in_grpo=True)
+
+        original.assert_called_once()
+        call_args = original.call_args
+        torch.testing.assert_close(call_args[0][0], token_rewards)
+        torch.testing.assert_close(call_args[0][1], response_mask)
+        assert call_args[1]["epsilon"] == 1e-6
+        assert call_args[1]["norm_adv_by_std_in_grpo"] is True

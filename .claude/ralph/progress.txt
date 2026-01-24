@@ -1074,3 +1074,43 @@
 - Verification passed: ProxyRegistry.is_registered('DataProto.chunk') returns True
 - This completes the Data Pipeline P2 series (11.1 and 11.2)
 - Next priorities: 11.3-grpo-proxy (Algorithm P2), 11.4-update-weights-proxy (Inference P2), 12.1-tool-call-proxy (Agent P2)
+
+[2026-01-24] 11.3-grpo-proxy: COMPLETED
+- Added GRPOProxy class to ralph/proxies/algorithm.py
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationMixin
+- Set SUPPORTED_STRATEGIES = {WRONG_GROUPING, WRONG_NORMALIZATION, SKIP_NORMALIZATION, SINGLE_SAMPLE_GROUPS}
+- Implemented _get_layer() returning 'Algorithm'
+- Implemented strategy methods:
+  - _strategy_wrong_grouping: Shuffles or randomizes group indices
+    - Supports shuffle_seed for reproducibility
+    - Supports randomize=True for completely random indices
+    - Handles index in both args and kwargs
+  - _strategy_wrong_normalization: Applies incorrect mean/std scaling
+    - Configurable mean_scale (default 2.0) and std_scale (default 0.5)
+    - Recursively handles tuple, dict, list results
+  - _strategy_skip_normalization: Returns raw scores without normalization
+    - Computes sum of token_level_rewards without group normalization
+    - Returns (advantages, returns) tuple as expected by GRPO
+  - _strategy_single_sample_groups: Treats each sample as its own group
+    - Creates unique index for each sample (np.arange(batch_size))
+    - Effectively eliminates variance reduction benefit of GRPO
+- Config parameters per strategy:
+  - WRONG_GROUPING: shuffle_seed (int, optional), randomize (bool, default False)
+  - WRONG_NORMALIZATION: mean_scale (float, default 2.0), std_scale (float, default 0.5)
+  - SKIP_NORMALIZATION: (no parameters)
+  - SINGLE_SAMPLE_GROUPS: (no parameters)
+- Decorated with @ProxyRegistry.register('compute_grpo_outcome_advantage')
+- Updated ralph/proxies/__init__.py to export GRPOProxy
+- Created 36+ comprehensive unit tests in tests/ralph/test_algorithm_proxy.py:
+  - TestGRPOProxyRegistration: Registration and supported strategies verification
+  - TestGRPOProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestWrongGroupingStrategy: Shuffle index, kwargs handling, randomize option, no index fallback
+  - TestWrongNormalizationStrategy: Scaling, default scales, custom scales, dict results
+  - TestSkipNormalizationStrategy: Raw scores, different rewards, kwargs handling, fallback
+  - TestSingleSampleGroupsStrategy: Unique indices, kwargs, adds index if missing, fallback
+  - TestGRPOProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, tuple preservation, args passing
+- All syntax verified via py_compile
+- Verification passed: `from ralph.proxies import GRPOProxy` works correctly
+- Verification passed: ProxyRegistry.is_registered('compute_grpo_outcome_advantage') returns True
+- This completes the Algorithm P2 GRPO proxy
+- Next priorities: 11.4-update-weights-proxy (Inference P2), 12.1-tool-call-proxy (Agent P2), 13.x-megatron/optimizer proxies
