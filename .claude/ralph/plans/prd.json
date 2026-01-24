@@ -323,7 +323,7 @@
       "Convert trigger dict to TriggerConfig and scenario to FaultConfig",
       "Verify: Sample config from spec.md loads without errors"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "1.1-config-classes",
       "0.2-dependencies"

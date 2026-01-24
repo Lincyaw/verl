@@ -388,3 +388,29 @@
 - Verification passed: `from ralph import get_dependency_status` works correctly
 - This unblocks: 5.2-yaml-config-loader (which is now high priority to complete)
 - Next priorities: 5.2-yaml-config-loader (HIGH, unblocked), 6.1-cli-main (MEDIUM, blocked by 5.2)
+
+[2026-01-24] 5.2-yaml-config-loader: COMPLETED
+- Created load_yaml_config(yaml_path) function in ralph/core/config.py
+- Created supporting dataclasses: ExperimentConfig, GlobalConfig, DataCollectionConfig, RalphConfig
+- Implemented _substitute_variables() for ${global.var} and ${var} pattern substitution
+- Implemented _parse_trigger_config() to convert trigger dict to TriggerConfig
+- Implemented _parse_fault_config() to convert scenario dict to FaultConfig
+- Created validate_yaml_config() for lightweight config validation
+- Full YAML parsing supports:
+  - version and experiment sections (name, description, seed)
+  - global section (enabled, log_level, output_dir)
+  - data_collection section with stream_a and stream_b (paths with variable substitution)
+  - scenarios section with all required fields validated
+- Strategy aliases supported:
+  - nccl_timeout -> DELAY
+  - gradient_corruption -> CORRUPT_TENSOR
+  - wrong_reward -> CORRUPT_TENSOR
+  - io_error -> RAISE_EXCEPTION
+  - memory_pressure -> DELAY
+- Added layer and target fields to FaultConfig dataclass
+- Updated ralph/core/__init__.py to export all new classes and functions
+- Created tests/ralph/test_yaml_config.py with 30+ comprehensive unit tests
+- Verification passed: Sample config from spec.md loads without errors
+- Verification passed: Variable substitution works correctly (${global.output_dir}/telemetry.jsonl)
+- This unblocks: 6.1-cli-main, 7.1-sample-configs
+- Next priorities: 6.1-cli-main (MEDIUM, now unblocked), 7.1-sample-configs (MEDIUM, now unblocked)
