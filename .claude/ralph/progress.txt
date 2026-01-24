@@ -376,3 +376,15 @@
 - This unblocks: 6.1-cli-main, 15.1-unit-tests
 - Next priorities: 5.2-yaml-config-loader (for complete YAML support), 6.1-cli-main (CLI entry point)
 
+
+[2026-01-24] 0.2-dependencies: COMPLETED
+- Created ralph/requirements.txt declaring pyyaml>=6.0 as required dependency
+- Note: torch and ray are expected to be provided by the verl runtime environment
+- Updated ralph/__init__.py with:
+  - Comprehensive docstring documenting all dependencies
+  - check_dependencies() function that raises ImportError if pyyaml is missing
+  - get_dependency_status() function for non-raising status check
+- Verification passed: `python -c 'import yaml; print(yaml.__version__)'` returns 6.0
+- Verification passed: `from ralph import get_dependency_status` works correctly
+- This unblocks: 5.2-yaml-config-loader (which is now high priority to complete)
+- Next priorities: 5.2-yaml-config-loader (HIGH, unblocked), 6.1-cli-main (MEDIUM, blocked by 5.2)

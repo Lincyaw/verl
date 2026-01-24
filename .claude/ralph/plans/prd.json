@@ -21,7 +21,7 @@
       "Ensure ray is available (already in verl)",
       "Verify: `python -c 'import yaml; print(yaml.__version__)'` succeeds"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "0.1-project-init"
     ]

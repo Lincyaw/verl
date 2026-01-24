@@ -1,0 +1,9 @@
+# Ralph - Fault Injection Framework for verl
+# Required dependencies
+
+# YAML configuration parsing
+pyyaml>=6.0
+
+# The following are expected to be provided by the verl environment:
+# torch>=2.0.0  - PyTorch for tensor operations
+# ray>=2.0.0    - Ray for distributed computing
