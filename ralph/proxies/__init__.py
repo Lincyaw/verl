@@ -82,6 +82,12 @@ except ImportError:
     DataProtoConcatProxy = None
     DataProtoChunkProxy = None
 
+# Agent proxies - no torch dependency
+try:
+    from ralph.proxies.agent import CallToolProxy
+except ImportError:
+    CallToolProxy = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -107,4 +113,5 @@ __all__ = [
     "GPUMemoryInjector",
     "DataProtoConcatProxy",
     "DataProtoChunkProxy",
+    "CallToolProxy",
 ]

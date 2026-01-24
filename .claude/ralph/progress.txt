@@ -1155,3 +1155,48 @@
 - Verification passed: ProxyRegistry.is_registered('rollout.update_weights') returns True
 - This completes the Inference P2 series (GenerateProxy and UpdateWeightsProxy)
 - Next priorities: 12.1-tool-call-proxy (Agent P2), 13.x-megatron/optimizer proxies, 14.x-data collection
+
+[2026-01-24] 12.1-tool-call-proxy: COMPLETED
+- Created ralph/proxies/agent.py with CallToolProxy class
+- Inherits from BaseProxy, DelayMixin, ExceptionMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, TOOL_TIMEOUT, TOOL_EXCEPTION, WRONG_RESULT, EMPTY_RESULT, MALFORMED_RESULT}
+- Implemented _get_layer() returning 'Agent'
+- Implemented strategy methods:
+  - _strategy_delay: Standard delay before tool call (default 10.0s)
+  - _strategy_tool_timeout: Very long delay simulating hung tool (default 300.0s)
+  - _strategy_tool_exception: Raises configurable exception with tool-specific error message
+  - _strategy_wrong_result: Returns incorrect result with multiple corruption types:
+    - negate: Inverts booleans, negates numbers, reverses strings
+    - invert: Reverses collections, inverts dict key-values
+    - randomize: Generates random values of same type
+    - swap_type: Changes type (bool->int, dict->list, etc.)
+  - _strategy_empty_result: Returns empty/None with type matching:
+    - Supports none, empty_string, empty_dict, empty_list, zero, false
+    - Optional call_original to detect and match original return type
+  - _strategy_malformed_result: Returns structurally invalid result:
+    - truncate: Shortens strings/lists/dicts by truncate_ratio
+    - add_noise_keys: Adds random keys to dicts
+    - wrap_extra: Wraps in extra nesting layers
+    - corrupt_structure: Removes keys, adds invalid keys
+- Helper methods:
+  - _extract_tool_name: Extracts tool name from args/kwargs for error messages
+  - _negate_result, _invert_result, _randomize_result, _swap_type_result: Result corruption
+  - _get_empty_value, _get_empty_value_like: Empty value generation
+  - _truncate_result, _add_noise_keys, _wrap_extra, _corrupt_structure: Malformation
+- Decorated with @ProxyRegistry.register('ToolAgentLoop._call_tool')
+- Updated ralph/proxies/__init__.py to export CallToolProxy
+- Created tests/ralph/test_agent_proxy.py with 50+ comprehensive unit tests:
+  - TestCallToolProxyRegistration: Registration and supported strategies
+  - TestCallToolProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestDelayStrategy: Config usage, default delay
+  - TestToolTimeoutStrategy: Config usage, default timeout
+  - TestToolExceptionStrategy: Various types, default message, missing exc_type, tool name extraction
+  - TestWrongResultStrategy: Specific value, negate, invert, swap_type, randomize, default swap_type
+  - TestEmptyResultStrategy: None, empty_string, empty_dict, empty_list, zero, call_original, type matching
+  - TestMalformedResultStrategy: truncate, add_noise_keys, wrap_extra, corrupt_structure, default
+  - TestCallToolProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, args/kwargs passing
+- All 8 manual tests pass
+- Verification passed: `from ralph.proxies import CallToolProxy` works correctly
+- Verification passed: ProxyRegistry.is_registered('ToolAgentLoop._call_tool') returns True
+- This unblocks: 12.2-tool-parser-proxy (Agent P2)
+- Next priorities: 12.2-tool-parser-proxy, 13.x-megatron/optimizer proxies, 14.x-data collection
