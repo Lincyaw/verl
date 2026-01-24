@@ -228,3 +228,34 @@
 - This unblocks: 5.1-injection-engine, 14.1-log-parser, 14.2-metrics-hook
 - Next priorities: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy
 
+
+[2026-01-24] 4.1-ray-get-proxy: COMPLETED
+- Created ralph/proxies/l0_ray.py with RayGetProxy class
+- Inherits from BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, RAISE_EXCEPTION, CORRUPT_TENSOR, OBJECT_LOST, PARTIAL_FAILURE}
+- Implemented _get_layer() returning 'L0'
+- Implemented _strategy_object_lost(futures, timeout):
+  - Raises ray.exceptions.ObjectLostError when Ray is installed
+  - Falls back to custom ObjectLostError when Ray is not installed
+  - Reports first ref in error message for list inputs
+- Implemented _strategy_partial_failure(futures, timeout):
+  - Calls original ray.get first to get results
+  - Sets fail_ratio (default 0.5) of results to None
+  - Handles both single ref and list of refs
+  - Passes timeout and other kwargs to original
+- Decorated with @ProxyRegistry.register('ray.get')
+- Created ObjectLostError fallback exception class with object_ref, owner_address, call_site attributes
+- Updated ralph/proxies/__init__.py to export RayGetProxy and ObjectLostError (with conditional import for torch)
+- Created tests/ralph/test_l0_ray_proxy.py with comprehensive unit tests covering:
+  - TestRayGetProxyRegistration: Registration and supported strategies verification
+  - TestRayGetProxyBasics: _get_layer, call without config, disabled config
+  - TestDelayStrategy: Config usage, default delay
+  - TestRaiseExceptionStrategy: Various exception types
+  - TestCorruptTensorStrategy: Single tensor, list, nested structures
+  - TestObjectLostStrategy: Single ref, list refs, error attributes
+  - TestPartialFailureStrategy: Single ref, list, default ratio, kwargs passing
+  - TestRayGetProxyIntegration: Step-based triggering, periodic trigger, collector recording
+- Verification passed: Code compiles without syntax errors
+- This unblocks: 8.1-ray-put-proxy, 8.2-execute-all-proxy, 5.1-injection-engine (partial)
+- Next priorities: 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy
+

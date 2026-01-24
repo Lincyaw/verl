@@ -6,4 +6,11 @@ Organized by layer: L0 (Ray), L1 (Distributed), L2 (verl), L3 (Resource).
 
 from ralph.proxies.base import BaseProxy
 
-__all__ = ["BaseProxy"]
+# L0 Ray proxies - imported conditionally to handle missing torch/ray
+try:
+    from ralph.proxies.l0_ray import ObjectLostError, RayGetProxy
+except ImportError:
+    RayGetProxy = None
+    ObjectLostError = None
+
+__all__ = ["BaseProxy", "RayGetProxy", "ObjectLostError"]

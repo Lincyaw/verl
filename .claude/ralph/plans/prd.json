@@ -22,7 +22,9 @@
       "Verify: `python -c 'import yaml; print(yaml.__version__)'` succeeds"
     ],
     "passes": false,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "1.1-config-classes",
@@ -36,7 +38,9 @@
       "Verify: `python -c 'from ralph.core.config import TriggerType, StrategyType, TriggerConfig, FaultConfig; print(\"OK\")'` succeeds"
     ],
     "passes": true,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "1.2-registry",
@@ -51,7 +55,9 @@
       "Verify: `python -c 'from ralph.core.registry import ProxyRegistry; print(ProxyRegistry.list_targets())'` succeeds"
     ],
     "passes": true,
-    "blockedBy": ["1.1-config-classes"]
+    "blockedBy": [
+      "1.1-config-classes"
+    ]
   },
   {
     "id": "1.3-scheduler",
@@ -66,7 +72,9 @@
       "Verify: Unit test for each trigger type passes"
     ],
     "passes": true,
-    "blockedBy": ["1.1-config-classes"]
+    "blockedBy": [
+      "1.1-config-classes"
+    ]
   },
   {
     "id": "2.1-delay-mixin",
@@ -79,7 +87,9 @@
       "Verify: Unit test confirms delay actually delays execution by expected amount"
     ],
     "passes": true,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "2.2-tensor-mixin",
@@ -95,7 +105,9 @@
       "Verify: Unit tests for each corruption method with various tensor shapes"
     ],
     "passes": true,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "2.3-exception-mixin",
@@ -109,7 +121,9 @@
       "Verify: Unit test confirms correct exception type and message are raised"
     ],
     "passes": true,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "2.4-skip-mixin",
@@ -123,7 +137,9 @@
       "Verify: Unit tests confirm skip returns default and repeat calls original N times"
     ],
     "passes": true,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "2.5-result-mixin",
@@ -137,7 +153,9 @@
       "Verify: Unit tests for numeric, tensor, and nested dict results"
     ],
     "passes": true,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "3.1-base-proxy",
@@ -158,7 +176,10 @@
       "Verify: Attempting to instantiate BaseProxy raises TypeError"
     ],
     "passes": true,
-    "blockedBy": ["1.1-config-classes", "1.2-registry"]
+    "blockedBy": [
+      "1.1-config-classes",
+      "1.2-registry"
+    ]
   },
   {
     "id": "3.2-dual-stream-collector",
@@ -175,7 +196,9 @@
       "Verify: Written JSONL files are valid and parseable"
     ],
     "passes": true,
-    "blockedBy": ["0.1-project-init"]
+    "blockedBy": [
+      "0.1-project-init"
+    ]
   },
   {
     "id": "4.1-ray-get-proxy",
@@ -191,8 +214,13 @@
       "Decorate with @ProxyRegistry.register('ray.get')",
       "Verify: Unit tests for each of the 5 strategies"
     ],
-    "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.2-tensor-mixin", "2.3-exception-mixin"]
+    "passes": true,
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.1-delay-mixin",
+      "2.2-tensor-mixin",
+      "2.3-exception-mixin"
+    ]
   },
   {
     "id": "4.2-all-reduce-proxy",
@@ -210,7 +238,11 @@
       "Verify: Unit tests for each of the 5 strategies"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.2-tensor-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.1-delay-mixin",
+      "2.2-tensor-mixin"
+    ]
   },
   {
     "id": "4.3-reward-manager-proxy",
@@ -227,7 +259,12 @@
       "Verify: Unit tests for each of the 4 strategies"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.2-tensor-mixin", "2.5-result-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.1-delay-mixin",
+      "2.2-tensor-mixin",
+      "2.5-result-mixin"
+    ]
   },
   {
     "id": "4.4-checkpoint-save-proxy",
@@ -243,7 +280,11 @@
       "Verify: Unit tests for both strategies"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.3-exception-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.1-delay-mixin",
+      "2.3-exception-mixin"
+    ]
   },
   {
     "id": "5.1-injection-engine",
@@ -260,7 +301,15 @@
       "Verify: Engine can install/uninstall proxies without errors; original functions work after uninstall"
     ],
     "passes": false,
-    "blockedBy": ["1.1-config-classes", "1.2-registry", "3.2-dual-stream-collector", "4.1-ray-get-proxy", "4.2-all-reduce-proxy", "4.3-reward-manager-proxy", "4.4-checkpoint-save-proxy"]
+    "blockedBy": [
+      "1.1-config-classes",
+      "1.2-registry",
+      "3.2-dual-stream-collector",
+      "4.1-ray-get-proxy",
+      "4.2-all-reduce-proxy",
+      "4.3-reward-manager-proxy",
+      "4.4-checkpoint-save-proxy"
+    ]
   },
   {
     "id": "5.2-yaml-config-loader",
@@ -275,7 +324,10 @@
       "Verify: Sample config from spec.md loads without errors"
     ],
     "passes": false,
-    "blockedBy": ["1.1-config-classes", "0.2-dependencies"]
+    "blockedBy": [
+      "1.1-config-classes",
+      "0.2-dependencies"
+    ]
   },
   {
     "id": "6.1-cli-main",
@@ -291,7 +343,10 @@
       "Verify: `python -m ralph.cli.main --help` prints usage and exits 0"
     ],
     "passes": false,
-    "blockedBy": ["5.1-injection-engine", "5.2-yaml-config-loader"]
+    "blockedBy": [
+      "5.1-injection-engine",
+      "5.2-yaml-config-loader"
+    ]
   },
   {
     "id": "7.1-sample-configs",
@@ -306,7 +361,9 @@
       "Verify: All configs load successfully via load_yaml_config"
     ],
     "passes": false,
-    "blockedBy": ["5.2-yaml-config-loader"]
+    "blockedBy": [
+      "5.2-yaml-config-loader"
+    ]
   },
   {
     "id": "8.1-ray-put-proxy",
@@ -322,7 +379,9 @@
       "Verify: Unit tests for each of the 4 strategies"
     ],
     "passes": false,
-    "blockedBy": ["4.1-ray-get-proxy"]
+    "blockedBy": [
+      "4.1-ray-get-proxy"
+    ]
   },
   {
     "id": "8.2-execute-all-proxy",
@@ -339,7 +398,9 @@
       "Verify: Unit tests for each of the 4 strategies"
     ],
     "passes": false,
-    "blockedBy": ["4.1-ray-get-proxy"]
+    "blockedBy": [
+      "4.1-ray-get-proxy"
+    ]
   },
   {
     "id": "8.3-all-gather-proxy",
@@ -355,7 +416,9 @@
       "Verify: Unit tests for each of the 4 strategies"
     ],
     "passes": false,
-    "blockedBy": ["4.2-all-reduce-proxy"]
+    "blockedBy": [
+      "4.2-all-reduce-proxy"
+    ]
   },
   {
     "id": "8.4-barrier-proxy",
@@ -371,7 +434,9 @@
       "Verify: Unit tests for each of the 4 strategies"
     ],
     "passes": false,
-    "blockedBy": ["4.2-all-reduce-proxy"]
+    "blockedBy": [
+      "4.2-all-reduce-proxy"
+    ]
   },
   {
     "id": "9.1-gae-proxy",
@@ -388,7 +453,11 @@
       "Verify: Unit tests for each of the 5 strategies"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.2-tensor-mixin", "2.5-result-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.2-tensor-mixin",
+      "2.5-result-mixin"
+    ]
   },
   {
     "id": "9.2-kl-penalty-proxy",
@@ -405,7 +474,9 @@
       "Verify: Unit tests for each of the 5 strategies"
     ],
     "passes": false,
-    "blockedBy": ["9.1-gae-proxy"]
+    "blockedBy": [
+      "9.1-gae-proxy"
+    ]
   },
   {
     "id": "9.3-generate-proxy",
@@ -422,7 +493,10 @@
       "Verify: Unit tests for each of the 5 strategies"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.1-delay-mixin"
+    ]
   },
   {
     "id": "9.4-compute-values-proxy",
@@ -439,7 +513,11 @@
       "Verify: Unit tests for each of the 5 strategies"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.2-tensor-mixin", "2.5-result-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.2-tensor-mixin",
+      "2.5-result-mixin"
+    ]
   },
   {
     "id": "10.1-gpu-memory-injector",
@@ -455,7 +533,9 @@
       "Verify: Unit tests confirm memory allocation behavior"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy"]
+    "blockedBy": [
+      "3.1-base-proxy"
+    ]
   },
   {
     "id": "10.2-checkpoint-load-proxy",
@@ -471,7 +551,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["4.4-checkpoint-save-proxy"]
+    "blockedBy": [
+      "4.4-checkpoint-save-proxy"
+    ]
   },
   {
     "id": "10.3-update-actor-proxy",
@@ -488,7 +570,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["4.3-reward-manager-proxy"]
+    "blockedBy": [
+      "4.3-reward-manager-proxy"
+    ]
   },
   {
     "id": "11.1-data-proto-concat-proxy",
@@ -505,7 +589,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy"]
+    "blockedBy": [
+      "3.1-base-proxy"
+    ]
   },
   {
     "id": "11.2-data-proto-chunk-proxy",
@@ -519,7 +605,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["11.1-data-proto-concat-proxy"]
+    "blockedBy": [
+      "11.1-data-proto-concat-proxy"
+    ]
   },
   {
     "id": "11.3-grpo-proxy",
@@ -533,7 +621,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["9.1-gae-proxy"]
+    "blockedBy": [
+      "9.1-gae-proxy"
+    ]
   },
   {
     "id": "11.4-update-weights-proxy",
@@ -547,7 +637,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["9.3-generate-proxy"]
+    "blockedBy": [
+      "9.3-generate-proxy"
+    ]
   },
   {
     "id": "12.1-tool-call-proxy",
@@ -561,7 +653,11 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.3-exception-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.1-delay-mixin",
+      "2.3-exception-mixin"
+    ]
   },
   {
     "id": "12.2-tool-parser-proxy",
@@ -575,7 +671,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["12.1-tool-call-proxy"]
+    "blockedBy": [
+      "12.1-tool-call-proxy"
+    ]
   },
   {
     "id": "13.1-megatron-optimizer-proxy",
@@ -589,7 +687,10 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy", "2.2-tensor-mixin"]
+    "blockedBy": [
+      "3.1-base-proxy",
+      "2.2-tensor-mixin"
+    ]
   },
   {
     "id": "13.2-parallelism-proxy",
@@ -602,7 +703,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["13.1-megatron-optimizer-proxy"]
+    "blockedBy": [
+      "13.1-megatron-optimizer-proxy"
+    ]
   },
   {
     "id": "13.3-optimizer-step-proxy",
@@ -616,7 +719,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["3.1-base-proxy"]
+    "blockedBy": [
+      "3.1-base-proxy"
+    ]
   },
   {
     "id": "13.4-lr-scheduler-proxy",
@@ -630,7 +735,9 @@
       "Verify: Unit tests for each strategy"
     ],
     "passes": false,
-    "blockedBy": ["13.3-optimizer-step-proxy"]
+    "blockedBy": [
+      "13.3-optimizer-step-proxy"
+    ]
   },
   {
     "id": "14.1-log-parser",
@@ -645,7 +752,9 @@
       "Verify: Parser extracts events from sample log files"
     ],
     "passes": false,
-    "blockedBy": ["3.2-dual-stream-collector"]
+    "blockedBy": [
+      "3.2-dual-stream-collector"
+    ]
   },
   {
     "id": "14.2-metrics-hook",
@@ -660,7 +769,9 @@
       "Verify: Hook captures metrics during mock training loop"
     ],
     "passes": false,
-    "blockedBy": ["3.2-dual-stream-collector"]
+    "blockedBy": [
+      "3.2-dual-stream-collector"
+    ]
   },
   {
     "id": "15.1-unit-tests",
@@ -676,7 +787,9 @@
       "Verify: `pytest tests/ralph/ -v --cov=ralph --cov-report=term-missing` passes with >80% coverage"
     ],
     "passes": false,
-    "blockedBy": ["5.1-injection-engine"]
+    "blockedBy": [
+      "5.1-injection-engine"
+    ]
   },
   {
     "id": "15.2-integration-tests",
@@ -691,6 +804,9 @@
       "Verify: All integration tests pass"
     ],
     "passes": false,
-    "blockedBy": ["15.1-unit-tests", "7.1-sample-configs"]
+    "blockedBy": [
+      "15.1-unit-tests",
+      "7.1-sample-configs"
+    ]
   }
 ]
