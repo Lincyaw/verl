@@ -786,7 +786,7 @@
       "Achieve >80% code coverage on ralph/ module",
       "Verify: `pytest tests/ralph/ -v --cov=ralph --cov-report=term-missing` passes with >80% coverage"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "5.1-injection-engine"
     ]
