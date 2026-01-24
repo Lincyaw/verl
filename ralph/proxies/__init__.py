@@ -73,6 +73,12 @@ try:
 except ImportError:
     GPUMemoryInjector = None
 
+# Data pipeline proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.data_pipeline import DataProtoConcatProxy
+except ImportError:
+    DataProtoConcatProxy = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -94,4 +100,5 @@ __all__ = [
     "GenerateProxy",
     "ComputeValuesProxy",
     "GPUMemoryInjector",
+    "DataProtoConcatProxy",
 ]

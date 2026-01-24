@@ -588,7 +588,7 @@
       "Decorate with @ProxyRegistry.register('DataProto.concat')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "3.1-base-proxy"
     ]

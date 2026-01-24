@@ -989,3 +989,44 @@
   - Complete workflow testing from config loading to cleanup
 - This completes the medium-priority testing tasks
 - Next priorities: Low-priority P2/P3 features (11.x, 12.x, 13.x, 14.x series)
+
+[2026-01-24] 11.1-data-proto-concat-proxy: COMPLETED
+- Created ralph/proxies/data_pipeline.py with DataProtoConcatProxy class
+- Inherits from BaseProxy, DelayMixin
+- Set SUPPORTED_STRATEGIES = {DATA_MISMATCH, LOST_ITEMS, DUPLICATE_ITEMS, WRONG_ORDER}
+- Implemented _get_layer() returning 'DataPipeline'
+- Implemented strategy methods:
+  - _strategy_data_mismatch: Returns result with modified batch sizes (increase/decrease)
+    - Uses mismatch_ratio parameter (default 0.1)
+    - Recursively handles tensors, dicts, lists, tuples
+  - _strategy_lost_items: Drops some input DataProtos before concatenation
+    - Uses drop_ratio parameter (default 0.2, clamped to [0, 1])
+    - Keeps at least one item to avoid empty results
+    - Randomly selects items to drop
+  - _strategy_duplicate_items: Repeats some input DataProtos
+    - Uses duplicate_ratio parameter (default 0.2, clamped to [0, 1])
+    - Randomly selects items to duplicate
+  - _strategy_wrong_order: Shuffles input order
+    - Optional seed parameter for reproducibility
+    - Uses Python random for shuffling
+- Helper methods:
+  - _extract_items: Extracts list of items from various calling conventions
+  - _call_with_modified_items: Reconstructs call with modified item list
+  - _apply_data_mismatch: Recursively applies batch size modification
+- Decorated with @ProxyRegistry.register('DataProto.concat')
+- Updated ralph/proxies/__init__.py to export DataProtoConcatProxy
+- Created tests/ralph/test_data_pipeline_proxy.py with 36 comprehensive unit tests:
+  - TestDataProtoConcatProxyRegistration: Registration and supported strategies
+  - TestDataProtoConcatProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestDataMismatchStrategy: Increase/decrease batch, default ratio, dict results
+  - TestLostItemsStrategy: Drop items, default ratio, keep at least one, clamped ratio
+  - TestDuplicateItemsStrategy: Add items, default ratio, preserves content, clamped ratio
+  - TestWrongOrderStrategy: Shuffles, reproducible with seed, different seeds, single item
+  - TestExtractItems: Various calling conventions (list arg, tuple, kwargs)
+  - TestCallWithModifiedItems: List first arg, kwarg
+  - TestDataProtoConcatProxyIntegration: Step-based trigger, periodic trigger, collector recording, kwargs passing, failure recording
+- All 36 tests pass
+- Verification passed: `from ralph.proxies import DataProtoConcatProxy` works correctly
+- Verification passed: ProxyRegistry.is_registered('DataProto.concat') returns True
+- This unblocks: 11.2-data-proto-chunk-proxy
+- Next priorities: 11.2-data-proto-chunk-proxy, 11.3-grpo-proxy, 12.1-tool-call-proxy
