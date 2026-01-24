@@ -35,7 +35,7 @@
       "Create FaultConfig dataclass with fields: id, strategy, trigger, parameters, enabled, severity, expected_behavior",
       "Verify: `python -c 'from ralph.core.config import TriggerType, StrategyType, TriggerConfig, FaultConfig; print(\"OK\")'` succeeds"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["0.1-project-init"]
   },
   {

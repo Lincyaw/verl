@@ -5,3 +5,14 @@
 - Verification passed: `ls ralph/` shows all required directories
 - Verification passed: `find ralph -name '__init__.py' | wc -l` returns 7
 - Next priorities: 0.2-dependencies (install pyyaml), 1.1-config-classes (core configuration)
+
+[2026-01-24] 1.1-config-classes: COMPLETED
+- Created ralph/core/config.py with:
+  - TriggerType enum: ONE_SHOT, STEP_BASED, PROBABILISTIC, PERIODIC
+  - StrategyType enum: All strategy types from spec (~50 strategies covering L0-L3 layers)
+  - TriggerConfig dataclass with should_trigger(current_step, rng) method
+  - FaultConfig dataclass with id, strategy, trigger, parameters, enabled, severity, expected_behavior
+- All trigger types tested: ONE_SHOT, STEP_BASED, PERIODIC working correctly
+- Verification passed: imports work correctly
+- This unblocks: 1.2-registry, 1.3-scheduler, 3.1-base-proxy, 5.2-yaml-config-loader
+- Next priorities: 0.2-dependencies (quick), 1.2-registry (ProxyRegistry), 2.x-mixins (strategy implementations)
