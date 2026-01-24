@@ -78,7 +78,7 @@
       "Implement _strategy_delay(*args, **kwargs) that reads delay_seconds from self._config.parameters",
       "Verify: Unit test confirms delay actually delays execution by expected amount"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["0.1-project-init"]
   },
   {

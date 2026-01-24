@@ -61,3 +61,18 @@
 - Verification passed: `python3 -c 'from ralph.core.scheduler import TriggerScheduler; print("OK")'`
 - This unblocks: No direct blockers, but scheduler is used by InjectionEngine
 - Next priorities: 3.1-base-proxy (critical path), 2.x-mixins, 3.2-dual-stream-collector
+
+[2026-01-24] 2.1-delay-mixin: COMPLETED
+- Created ralph/mixins/delay.py with DelayMixin class
+- Implemented methods:
+  - _apply_delay(seconds: float): Sleeps for the specified duration (guards against negative values)
+  - _strategy_delay(*args, **kwargs): Reads delay_seconds from self._config.parameters (defaults to 10.0), applies delay, then calls original function
+- Updated ralph/mixins/__init__.py to export DelayMixin
+- Created tests/ralph/test_delay_mixin.py with 12 comprehensive unit tests:
+  - TestApplyDelay: Tests for positive, zero, negative, and fractional delay values
+  - TestStrategyDelay: Tests for config usage, default values, argument passing, return values, exception propagation
+  - TestDelayMixinIntegration: Tests for multiple inheritance and real timing
+- All 12 tests pass
+- Verification passed: `python3 -c 'from ralph.mixins.delay import DelayMixin; print("OK")'`
+- This unblocks: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy, 9.3-generate-proxy, 12.1-tool-call-proxy
+- Next priorities: 2.2-tensor-mixin, 2.3-exception-mixin, 3.1-base-proxy (critical path)
