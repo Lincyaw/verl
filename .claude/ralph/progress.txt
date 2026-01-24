@@ -728,3 +728,36 @@
 - All syntax verified via py_compile
 - This unblocks: 11.4-update-weights-proxy (Inference P2)
 - Next priorities: 9.4-compute-values-proxy (Worker P1), 10.1-gpu-memory-injector (L3), 15.1-unit-tests
+
+[2026-01-24] 9.4-compute-values-proxy: COMPLETED
+- Created ralph/proxies/worker.py with ComputeValuesProxy class
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, WRONG_VALUES, CONSTANT_VALUES, NAN_VALUES, INVERTED_VALUES}
+- Implemented _get_layer() returning 'Worker'
+- Implemented strategy methods:
+  - _strategy_delay: Standard delay before value computation (default 10.0s)
+  - _strategy_wrong_values: Adds Gaussian noise to computed values (noise_scale default 0.1)
+  - _strategy_constant_values: Returns constant value for all predictions (constant_value default 0.0)
+  - _strategy_nan_values: Injects NaN into value predictions (nan_ratio default 0.1)
+  - _strategy_inverted_values: Negates all computed values
+- Helper methods for recursive result transformation:
+  - _apply_noise_to_values: Adds noise to value-related keys
+  - _apply_constant_to_values: Sets constant value for value-related keys
+  - _apply_nan_to_values: Injects NaN into value-related keys
+  - _apply_inversion_to_values: Negates value-related keys
+- Value key recognition: values, value, v, critic_values, state_values, v_values
+- Decorated with @ProxyRegistry.register('CriticWorker.compute_values')
+- Updated ralph/proxies/__init__.py to export ComputeValuesProxy
+- Created tests/ralph/test_worker_proxy.py with 35+ comprehensive unit tests:
+  - TestComputeValuesProxyRegistration: Registration and supported strategies verification
+  - TestComputeValuesProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestDelayStrategy: Config usage, default delay
+  - TestWrongValuesStrategy: Noise addition, default scale, multiple keys, shape preservation
+  - TestConstantValuesStrategy: Constant return, default zero, negative, shape/dtype preservation
+  - TestNanValuesStrategy: NaN injection, default ratio, zero/full ratio, shape preservation
+  - TestInvertedValuesStrategy: Value negation, shape preservation, multiple keys, scalars
+  - TestComputeValuesProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, args passing, tuple/list outputs
+- All syntax verified via py_compile
+- This unblocks: No direct blockers (this was a P1 Worker proxy)
+- Next priorities: 10.1-gpu-memory-injector (L3), 10.2-checkpoint-load-proxy (L2), 10.3-update-actor-proxy (L2), 15.1-unit-tests
+

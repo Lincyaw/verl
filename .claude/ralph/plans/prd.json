@@ -512,7 +512,7 @@
       "Decorate with @ProxyRegistry.register('CriticWorker.compute_values')",
       "Verify: Unit tests for each of the 5 strategies"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "3.1-base-proxy",
       "2.2-tensor-mixin",

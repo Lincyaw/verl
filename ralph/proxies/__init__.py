@@ -54,6 +54,12 @@ try:
 except ImportError:
     GenerateProxy = None
 
+# Worker proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.worker import ComputeValuesProxy
+except ImportError:
+    ComputeValuesProxy = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -71,4 +77,5 @@ __all__ = [
     "GAEProxy",
     "KLPenaltyProxy",
     "GenerateProxy",
+    "ComputeValuesProxy",
 ]
