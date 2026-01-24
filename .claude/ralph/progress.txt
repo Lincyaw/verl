@@ -414,3 +414,37 @@
 - Verification passed: Variable substitution works correctly (${global.output_dir}/telemetry.jsonl)
 - This unblocks: 6.1-cli-main, 7.1-sample-configs
 - Next priorities: 6.1-cli-main (MEDIUM, now unblocked), 7.1-sample-configs (MEDIUM, now unblocked)
+
+[2026-01-24] 6.1-cli-main: COMPLETED
+- Created ralph/cli/main.py with argparse-based CLI
+- Implemented all required CLI options:
+  - --config (-c) YAML_PATH: Specify YAML configuration file
+  - --list-targets (-l): Print all registered injection targets
+  - --validate (-v): Validate config without running
+  - --output-dir (-o) DIR: Override output directory from config
+  - --dry-run (-n): Show what would be done without executing
+  - --version: Show version number
+  - --help (-h): Show help message
+- Implemented core functions:
+  - create_parser(): Creates ArgumentParser with all options
+  - list_targets(): Prints registered targets and their strategies
+  - validate_config(path): Validates YAML config file
+  - run_with_config(path, output_dir, dry_run): Loads and processes config
+  - main(argv): Main entry point function
+- Features:
+  - Graceful handling of missing torch/ray dependencies
+  - Variable substitution in config paths works correctly
+  - Dry-run mode shows enabled/disabled scenarios
+  - Provides usage instructions for integrating with training scripts
+- Updated ralph/cli/__init__.py to export main function with lazy import
+- Created tests/ralph/test_cli.py with 30+ comprehensive unit tests:
+  - TestCreateParser: Parser creation and all option parsing
+  - TestListTargets: Output verification
+  - TestValidateConfig: Valid/invalid config handling
+  - TestMain: Entry point with various option combinations
+  - TestMainIntegration: Full workflow tests
+  - TestMainModuleExecution: Import verification
+- All 8 manual tests pass
+- Verification passed: `python -m ralph.cli.main --help` prints usage and exits 0
+- This unblocks: User can now use Ralph CLI to validate configs and inspect targets
+- Next priorities: 7.1-sample-configs (create sample YAML configurations), 15.1-unit-tests (comprehensive unit tests)

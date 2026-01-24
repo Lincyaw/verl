@@ -342,7 +342,7 @@
       "Implement main() function as entry point",
       "Verify: `python -m ralph.cli.main --help` prints usage and exits 0"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "5.1-injection-engine",
       "5.2-yaml-config-loader"
