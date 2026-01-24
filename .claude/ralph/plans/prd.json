@@ -174,7 +174,7 @@
       "Implement close() flushing and closing files",
       "Verify: Written JSONL files are valid and parseable"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["0.1-project-init"]
   },
   {

@@ -201,3 +201,30 @@
 - This unblocks: 4.3-reward-manager-proxy, 9.1-gae-proxy, 9.4-compute-values-proxy
 - Next priorities: 3.2-dual-stream-collector, 4.1-ray-get-proxy, 4.2-all-reduce-proxy
 
+
+[2026-01-24] 3.2-dual-stream-collector: COMPLETED
+- Created ralph/collectors/dual_stream.py with DualStreamCollector class
+- Implemented all required methods:
+  - __init__(output_dir, telemetry_file, labels_file, buffer_size, auto_flush): Sets up paths and buffers
+  - record_fault_injection(fault_type, target_layer, target_function, severity, parameters, expected_behavior) -> str: Returns unique fault_id
+  - record_fault_outcome(fault_id, outcome, duration_ms): Appends outcome to labels
+  - record_telemetry(event_type, data) -> str: Records system telemetry events
+  - flush(): Writes buffered data to JSONL files
+  - close(): Flushes and closes the collector
+- Additional features implemented:
+  - Thread-safe with threading.Lock for concurrent access
+  - Auto-flush when buffer reaches configured size
+  - Context manager support (__enter__, __exit__)
+  - Active fault tracking (get_active_fault_count)
+  - Buffer size monitoring (get_buffer_sizes)
+  - Proper handling of None parameters and empty fault_ids
+  - Unicode support in JSONL output
+- Data format:
+  - Labels JSONL has record_type: "fault_injection_start" or "fault_injection_end"
+  - Telemetry JSONL has event_id, timestamp, event_type, data
+- Updated ralph/collectors/__init__.py to export DualStreamCollector
+- Created tests/ralph/test_dual_stream_collector.py with comprehensive tests (40+ test cases)
+- Verification passed: All 10 manual tests pass, JSONL files are valid and parseable
+- This unblocks: 5.1-injection-engine, 14.1-log-parser, 14.2-metrics-hook
+- Next priorities: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy
+
