@@ -106,3 +106,27 @@
 - This unblocks: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 9.1-gae-proxy, 9.4-compute-values-proxy, 13.1-megatron-optimizer-proxy
 - Next priorities: 2.3-exception-mixin, 2.4-skip-mixin, 2.5-result-mixin, 3.1-base-proxy (critical path)
 
+[2026-01-24] 2.3-exception-mixin: COMPLETED
+- Created ralph/mixins/exception.py with ExceptionMixin class
+- Defined EXCEPTION_MAP dict mapping string names to exception classes:
+  - IOError, RuntimeError, ValueError, PermissionError, TimeoutError, FileNotFoundError, OSError
+  - Also added: KeyError, TypeError, AttributeError, ConnectionError, MemoryError (extra for flexibility)
+- Implemented methods:
+  - _raise_exception(exc_type, message, **kwargs): Raises specified exception type with message
+    - Raises ValueError if exc_type not found in EXCEPTION_MAP
+    - Accepts additional kwargs for future extensibility
+  - _strategy_raise_exception(*args, **kwargs): Reads exc_type and message from self._config.parameters
+    - exc_type is required (raises ValueError if missing)
+    - message defaults to "Fault injection: {exc_type}"
+    - Original function is never called (this is a terminal strategy)
+- Updated ralph/mixins/__init__.py to export ExceptionMixin
+- Created tests/ralph/test_exception_mixin.py with 31 comprehensive unit tests:
+  - TestExceptionMap: Verifies all 7 required exception types are present
+  - TestRaiseException: Tests each exception type, unknown type handling, message preservation
+  - TestStrategyRaiseException: Config reading, default message, error cases, all exception types
+  - TestExceptionMixinIntegration: Multiple inheritance, exact exception class verification
+- All 31 tests pass
+- Verification passed: `python -c 'from ralph.mixins.exception import ExceptionMixin; print("OK")'`
+- This unblocks: 4.1-ray-get-proxy, 4.4-checkpoint-save-proxy, 12.1-tool-call-proxy
+- Next priorities: 2.4-skip-mixin, 2.5-result-mixin, 3.1-base-proxy (critical path), 3.2-dual-stream-collector
+

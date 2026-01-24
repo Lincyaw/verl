@@ -108,7 +108,7 @@
       "Implement _strategy_raise_exception(*args, **kwargs) reading exc_type and message from config",
       "Verify: Unit test confirms correct exception type and message are raised"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["0.1-project-init"]
   },
   {
