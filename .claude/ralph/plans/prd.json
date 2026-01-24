@@ -94,7 +94,7 @@
       "Implement _corrupt_result_tensors(result, noise_scale) recursively corrupting tensors in dict/list/tuple",
       "Verify: Unit tests for each corruption method with various tensor shapes"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["0.1-project-init"]
   },
   {

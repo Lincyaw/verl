@@ -76,3 +76,33 @@
 - Verification passed: `python3 -c 'from ralph.mixins.delay import DelayMixin; print("OK")'`
 - This unblocks: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy, 9.3-generate-proxy, 12.1-tool-call-proxy
 - Next priorities: 2.2-tensor-mixin, 2.3-exception-mixin, 3.1-base-proxy (critical path)
+
+[2026-01-24] 2.2-tensor-mixin: COMPLETED
+- Created ralph/mixins/tensor.py with TensorCorruptionMixin class
+- Implemented methods:
+  - _corrupt_tensor(tensor, noise_scale): Adds Gaussian noise (tensor + randn_like(tensor) * noise_scale)
+  - _inject_nan(tensor, ratio): Sets random ratio of elements to NaN (clones tensor to avoid mutation)
+  - _inject_inf(tensor, ratio, positive=True): Sets random ratio of elements to +/-Inf
+  - _scale_tensor(tensor, scale): Returns tensor * scale
+  - _corrupt_result_tensors(result, noise_scale): Recursively corrupts tensors in dict/list/tuple structures
+  - _inject_nan_result(result, nan_ratio): Recursively injects NaN into nested structures
+  - _inject_inf_result(result, inf_ratio, positive): Recursively injects Inf into nested structures
+  - _strategy_corrupt_tensor(*args, **kwargs): Reads noise_scale from config (default 0.1), corrupts result tensors
+  - _strategy_inject_nan(*args, **kwargs): Reads nan_ratio from config (default 0.001), injects NaN
+  - _strategy_inject_inf(*args, **kwargs): Reads inf_ratio and positive from config, injects Inf
+- Updated ralph/mixins/__init__.py to export TensorCorruptionMixin
+- Created tests/ralph/test_tensor_mixin.py with 40 comprehensive unit tests:
+  - TestCorruptTensor: Noise addition, shape preservation, dtype handling, zero/large noise scale
+  - TestInjectNan: NaN injection, zero/full ratio, shape preservation, original tensor immutability
+  - TestInjectInf: Positive/negative Inf injection, ratio handling
+  - TestScaleTensor: Positive/negative/zero scaling
+  - TestCorruptResultTensors: Single tensor, dict, list, tuple, nested structures, non-tensor passthrough
+  - TestStrategyCurruptTensor: Config usage, default values, dict results
+  - TestStrategyInjectNan: Config usage, default ratio, nested results
+  - TestStrategyInjectInf: Config usage, positive/negative Inf from config
+  - TestTensorCorruptionMixinIntegration: Multiple inheritance, device preservation
+- All 40 tests pass
+- Verification passed: `python -c 'from ralph.mixins.tensor import TensorCorruptionMixin; print("OK")'`
+- This unblocks: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 9.1-gae-proxy, 9.4-compute-values-proxy, 13.1-megatron-optimizer-proxy
+- Next priorities: 2.3-exception-mixin, 2.4-skip-mixin, 2.5-result-mixin, 3.1-base-proxy (critical path)
+
