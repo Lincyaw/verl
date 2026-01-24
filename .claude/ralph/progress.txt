@@ -839,3 +839,65 @@
 - All syntax verified via py_compile
 - This unblocks: No direct blockers
 - Next priorities: 10.1-gpu-memory-injector (L3), 15.1-unit-tests (comprehensive tests), 15.2-integration-tests
+
+
+[2026-01-24] 10.1-gpu-memory-injector: COMPLETED
+- Created ralph/proxies/l3_resource.py with GPUMemoryInjector class
+- Inherits from BaseProxy (unlike other proxies, this is an active injector, not a function wrapper)
+- Set SUPPORTED_STRATEGIES = {MEMORY_PRESSURE, OOM_SIMULATION, MEMORY_FRAGMENTATION, MEMORY_LEAK}
+- Implemented _get_layer() returning 'L3'
+- Implemented core methods:
+  - allocate_pressure(ratio): Fills GPU to specified ratio (0.0-1.0)
+    - Validates ratio is between 0 and 1
+    - Returns False if CUDA not available
+    - Allocates tensors to reach target memory utilization
+  - trigger_oom(leave_headroom_mb): Fills GPU to cause OOM
+    - Raises RuntimeError if CUDA not available
+    - Iteratively allocates memory in decreasing chunks
+    - Can leave specified headroom or fill completely
+  - cause_fragmentation(count): Creates memory fragmentation
+    - Allocates many small tensors of varying sizes
+    - Frees every other tensor to create fragmentation
+    - Returns number of operations performed
+  - start_leak(rate_mb_per_step): Starts gradual memory leak
+    - Sets leak rate and activates leak mode
+    - Handles negative rate (defaults to 0)
+  - step_leak(): Executes one step of memory leak
+    - Returns bytes leaked or 0 if not active/failed
+  - stop_leak(): Stops leak without releasing memory
+  - release(): Frees all allocated tensors
+    - Clears pressure, leak, and fragmentation tensors
+    - Stops active leak and clears CUDA cache
+  - get_memory_stats(): Returns dict of memory statistics
+  - get_leak_total_mb(): Returns total leaked memory in MB
+- Implemented strategy methods:
+  - _strategy_memory_pressure: Reads pressure_ratio from config (default 0.9)
+  - _strategy_oom_simulation: Reads leave_headroom_mb from config (default 0)
+  - _strategy_memory_fragmentation: Reads fragment_count from config (default 1000)
+  - _strategy_memory_leak: Reads leak_rate_mb from config (default 100)
+- Added L3 GPU memory strategy types to StrategyType enum:
+  - MEMORY_PRESSURE = "memory_pressure"
+  - OOM_SIMULATION = "oom_simulation"
+  - MEMORY_FRAGMENTATION = "memory_fragmentation"
+  - MEMORY_LEAK = "memory_leak"
+- Decorated with @ProxyRegistry.register('gpu_memory')
+- Updated ralph/proxies/__init__.py to export GPUMemoryInjector
+- Created tests/ralph/test_l3_resource_proxy.py with comprehensive unit tests (40+ tests):
+  - TestGPUMemoryInjectorRegistration: Registration and supported strategies
+  - TestGPUMemoryInjectorBasics: Layer, init, call without config, disabled config, unsupported strategy
+  - TestAllocatePressure: Invalid ratio, no CUDA, with CUDA
+  - TestTriggerOOM: No CUDA error, fills memory with CUDA
+  - TestCauseFragmentation: No CUDA returns 0, negative count, creates fragmentation
+  - TestMemoryLeak: start_leak, stop_leak, step_leak behavior
+  - TestRelease: Clears all tensors
+  - TestGetMemoryStats: Returns zeros without CUDA, valid stats with CUDA
+  - TestMemoryPressureStrategy: Config reading, default ratio
+  - TestOOMSimulationStrategy: Config reading, default headroom
+  - TestFragmentationStrategy: Config reading, default count
+  - TestMemoryLeakStrategy: Config reading, default rate
+  - TestGPUMemoryInjectorIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, kwargs passing, destructor cleanup
+  - TestHelperMethods: _get_device, _is_cuda_available, memory query methods
+- All 10 manual tests pass
+- Verification passed: `from ralph.proxies import GPUMemoryInjector` works correctly
+- This unblocks: No direct blockers
+- Next priorities: 15.1-unit-tests (comprehensive tests), 11.1-data-proto-concat-proxy, 11.3-grpo-proxy

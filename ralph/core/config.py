@@ -150,6 +150,12 @@ class StrategyType(Enum):
     LR_SPIKE = "lr_spike"
     LR_ZERO = "lr_zero"
 
+    # L3 GPU Memory strategies
+    MEMORY_PRESSURE = "memory_pressure"
+    OOM_SIMULATION = "oom_simulation"
+    MEMORY_FRAGMENTATION = "memory_fragmentation"
+    MEMORY_LEAK = "memory_leak"
+
 
 @dataclass
 class TriggerConfig:

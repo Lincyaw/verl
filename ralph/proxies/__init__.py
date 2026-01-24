@@ -67,6 +67,12 @@ try:
 except ImportError:
     ComputeValuesProxy = None
 
+# L3 Resource proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.l3_resource import GPUMemoryInjector
+except ImportError:
+    GPUMemoryInjector = None
+
 __all__ = [
     "BaseProxy",
     "RayGetProxy",
@@ -87,4 +93,5 @@ __all__ = [
     "KLPenaltyProxy",
     "GenerateProxy",
     "ComputeValuesProxy",
+    "GPUMemoryInjector",
 ]
