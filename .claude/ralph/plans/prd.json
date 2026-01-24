@@ -1,0 +1,696 @@
+[
+  {
+    "id": "0.1-project-init",
+    "story": "Initialize Ralph project structure",
+    "priority": "high",
+    "requirements": [
+      "Create directory structure: ralph/{core,mixins,proxies,collectors,triggers,cli}",
+      "Create __init__.py files in all directories",
+      "Verify: `ls ralph/` shows core, mixins, proxies, collectors, triggers, cli directories",
+      "Verify: `find ralph -name '__init__.py' | wc -l` returns at least 7"
+    ],
+    "passes": false
+  },
+  {
+    "id": "0.2-dependencies",
+    "story": "Install and configure dependencies",
+    "priority": "high",
+    "requirements": [
+      "Add pyyaml dependency for YAML config parsing",
+      "Ensure torch is available (already in verl)",
+      "Ensure ray is available (already in verl)",
+      "Verify: `python -c 'import yaml; print(yaml.__version__)'` succeeds"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "1.1-config-classes",
+    "story": "Implement core configuration classes",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/core/config.py with TriggerType enum (ONE_SHOT, STEP_BASED, PROBABILISTIC, PERIODIC)",
+      "Create StrategyType enum with all strategy types from spec (DELAY, CORRUPT_TENSOR, INJECT_NAN, INJECT_INF, RAISE_EXCEPTION, SKIP, REPEAT, MODIFY_RESULT, OBJECT_LOST, PARTIAL_FAILURE, WORKER_DEATH, DEADLOCK, REWARD_FLIP, CONSTANT_REWARD)",
+      "Create TriggerConfig dataclass with should_trigger(current_step, rng) method",
+      "Create FaultConfig dataclass with fields: id, strategy, trigger, parameters, enabled, severity, expected_behavior",
+      "Verify: `python -c 'from ralph.core.config import TriggerType, StrategyType, TriggerConfig, FaultConfig; print(\"OK\")'` succeeds"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "1.2-registry",
+    "story": "Implement proxy registry",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/core/registry.py with ProxyRegistry class",
+      "Implement @register(target) class decorator for proxy classes",
+      "Implement get_proxy(target) -> Type[BaseProxy] method",
+      "Implement get_supported_strategies(target) -> Set[StrategyType] method",
+      "Implement list_targets() -> List[str] method",
+      "Verify: `python -c 'from ralph.core.registry import ProxyRegistry; print(ProxyRegistry.list_targets())'` succeeds"
+    ],
+    "passes": false,
+    "blockedBy": ["1.1-config-classes"]
+  },
+  {
+    "id": "1.3-scheduler",
+    "story": "Implement trigger scheduler",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/core/scheduler.py with TriggerScheduler class",
+      "Support ONE_SHOT: trigger exactly at specified step",
+      "Support STEP_BASED: trigger within step range [start_step, end_step]",
+      "Support PROBABILISTIC: trigger with given probability each step",
+      "Support PERIODIC: trigger every N steps",
+      "Verify: Unit test for each trigger type passes"
+    ],
+    "passes": false,
+    "blockedBy": ["1.1-config-classes"]
+  },
+  {
+    "id": "2.1-delay-mixin",
+    "story": "Implement DelayMixin",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/mixins/delay.py with DelayMixin class",
+      "Implement _apply_delay(seconds: float) method using time.sleep",
+      "Implement _strategy_delay(*args, **kwargs) that reads delay_seconds from self._config.parameters",
+      "Verify: Unit test confirms delay actually delays execution by expected amount"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "2.2-tensor-mixin",
+    "story": "Implement TensorCorruptionMixin",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/mixins/tensor.py with TensorCorruptionMixin class",
+      "Implement _corrupt_tensor(tensor, noise_scale) adding Gaussian noise: tensor + randn_like(tensor) * noise_scale",
+      "Implement _inject_nan(tensor, ratio) setting random ratio of elements to float('nan')",
+      "Implement _inject_inf(tensor, ratio, positive=True) setting random ratio to +/-inf",
+      "Implement _scale_tensor(tensor, scale) returning tensor * scale",
+      "Implement _corrupt_result_tensors(result, noise_scale) recursively corrupting tensors in dict/list/tuple",
+      "Verify: Unit tests for each corruption method with various tensor shapes"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "2.3-exception-mixin",
+    "story": "Implement ExceptionMixin",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/mixins/exception.py with ExceptionMixin class",
+      "Define EXCEPTION_MAP dict mapping string names to exception classes (IOError, RuntimeError, ValueError, PermissionError, TimeoutError, FileNotFoundError, OSError)",
+      "Implement _raise_exception(exc_type, message, **kwargs) that raises the specified exception",
+      "Implement _strategy_raise_exception(*args, **kwargs) reading exc_type and message from config",
+      "Verify: Unit test confirms correct exception type and message are raised"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "2.4-skip-mixin",
+    "story": "Implement SkipMixin",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/mixins/skip.py with SkipMixin class",
+      "Implement _skip_operation(default_return=None) returning the default value without calling original",
+      "Implement _repeat_operation(times, *args, **kwargs) calling self._original times times",
+      "Implement _strategy_skip and _strategy_repeat reading parameters from config",
+      "Verify: Unit tests confirm skip returns default and repeat calls original N times"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "2.5-result-mixin",
+    "story": "Implement ResultModificationMixin",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/mixins/result.py with ResultModificationMixin class",
+      "Implement _modify_result(result, modifier_fn) applying arbitrary function to result",
+      "Implement _negate_result(result) returning -result for numbers/tensors, recursing for dict",
+      "Implement _set_constant(result, value) returning torch.full_like for tensors or constant for scalars",
+      "Verify: Unit tests for numeric, tensor, and nested dict results"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "3.1-base-proxy",
+    "story": "Implement BaseProxy abstract class",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/proxies/base.py with BaseProxy ABC",
+      "Define SUPPORTED_STRATEGIES: Set[StrategyType] class attribute (empty set default)",
+      "Implement __init__(original_fn, collector) storing references",
+      "Implement _build_strategy_map() creating dict from strategy to _strategy_X method",
+      "Implement set_config(config) validating strategy is in SUPPORTED_STRATEGIES",
+      "Implement set_step(step) updating self._current_step",
+      "Implement __call__(*args, **kwargs) checking _should_inject and dispatching",
+      "Implement _should_inject() checking config.enabled and trigger.should_trigger",
+      "Implement _execute_strategy(*args, **kwargs) looking up and calling strategy method",
+      "Implement _record_injection_start() and _record_injection_end(fault_id, outcome)",
+      "Define abstract _get_layer() -> str method",
+      "Verify: Attempting to instantiate BaseProxy raises TypeError"
+    ],
+    "passes": false,
+    "blockedBy": ["1.1-config-classes", "1.2-registry"]
+  },
+  {
+    "id": "3.2-dual-stream-collector",
+    "story": "Implement DualStreamCollector",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/collectors/dual_stream.py with DualStreamCollector class",
+      "Implement __init__(output_dir, telemetry_file, labels_file) setting up paths",
+      "Implement record_fault_injection(fault_type, target_layer, target_function, severity, parameters, expected_behavior) -> str returning unique fault_id",
+      "Implement record_fault_outcome(fault_id, outcome, duration_ms) appending to labels",
+      "Implement record_telemetry(event_type, data) for system telemetry",
+      "Implement flush() writing buffered data to JSONL files",
+      "Implement close() flushing and closing files",
+      "Verify: Written JSONL files are valid and parseable"
+    ],
+    "passes": false,
+    "blockedBy": ["0.1-project-init"]
+  },
+  {
+    "id": "4.1-ray-get-proxy",
+    "story": "Implement RayGetProxy (L0 P0)",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/proxies/l0_ray.py with RayGetProxy class",
+      "Inherit from BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin",
+      "Set SUPPORTED_STRATEGIES = {DELAY, RAISE_EXCEPTION, CORRUPT_TENSOR, OBJECT_LOST, PARTIAL_FAILURE}",
+      "Implement _get_layer() returning 'L0'",
+      "Implement _strategy_object_lost(futures, timeout) raising ray.exceptions.ObjectLostError",
+      "Implement _strategy_partial_failure(futures, timeout) setting fail_ratio of results to None",
+      "Decorate with @ProxyRegistry.register('ray.get')",
+      "Verify: Unit tests for each of the 5 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.2-tensor-mixin", "2.3-exception-mixin"]
+  },
+  {
+    "id": "4.2-all-reduce-proxy",
+    "story": "Implement AllReduceProxy (L1 P0)",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/proxies/l1_distributed.py with AllReduceProxy class",
+      "Inherit from BaseProxy, DelayMixin, TensorCorruptionMixin",
+      "Set SUPPORTED_STRATEGIES = {DELAY, CORRUPT_TENSOR, INJECT_NAN, INJECT_INF, DEADLOCK}",
+      "Implement _get_layer() returning 'L1'",
+      "Implement _strategy_deadlock(tensor, op, group, async_op) hanging deadlock_rank forever",
+      "Implement _strategy_inject_nan(tensor, op, group, async_op) injecting NaN before reduce",
+      "Implement _strategy_inject_inf(tensor, op, group, async_op) injecting Inf before reduce",
+      "Decorate with @ProxyRegistry.register('torch.distributed.all_reduce')",
+      "Verify: Unit tests for each of the 5 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.2-tensor-mixin"]
+  },
+  {
+    "id": "4.3-reward-manager-proxy",
+    "story": "Implement RewardManagerProxy (L2 P0)",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/proxies/l2_verl.py with RewardManagerProxy class",
+      "Inherit from BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationMixin",
+      "Set SUPPORTED_STRATEGIES = {DELAY, CORRUPT_TENSOR, REWARD_FLIP, CONSTANT_REWARD}",
+      "Implement _get_layer() returning 'L2'",
+      "Implement _strategy_reward_flip(data, return_dict) negating returned reward tensor",
+      "Implement _strategy_constant_reward(data, return_dict) returning constant_value for all rewards",
+      "Decorate with @ProxyRegistry.register('RewardManager.__call__')",
+      "Verify: Unit tests for each of the 4 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.2-tensor-mixin", "2.5-result-mixin"]
+  },
+  {
+    "id": "4.4-checkpoint-save-proxy",
+    "story": "Implement CheckpointSaveProxy (L2 P0)",
+    "priority": "high",
+    "requirements": [
+      "Add CheckpointSaveProxy class to ralph/proxies/l2_verl.py",
+      "Inherit from BaseProxy, DelayMixin, ExceptionMixin",
+      "Set SUPPORTED_STRATEGIES = {DELAY, RAISE_EXCEPTION}",
+      "Implement _get_layer() returning 'L2'",
+      "Override _strategy_raise_exception(local_path, hdfs_path, global_step, max_ckpt) with checkpoint-specific error message",
+      "Decorate with @ProxyRegistry.register('FSDPCheckpointManager.save_checkpoint')",
+      "Verify: Unit tests for both strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.3-exception-mixin"]
+  },
+  {
+    "id": "5.1-injection-engine",
+    "story": "Implement InjectionEngine orchestrator",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/core/engine.py with InjectionEngine class",
+      "Implement __init__(collector) storing collector reference and empty proxy dict",
+      "Implement load_config(yaml_path) parsing YAML and creating FaultConfig objects",
+      "Implement install_proxies() monkey-patching target functions with proxy instances",
+      "Implement uninstall_proxies() restoring all original functions",
+      "Implement update_step(step) calling set_step on all active proxies",
+      "Implement __enter__ and __exit__ for context manager pattern",
+      "Verify: Engine can install/uninstall proxies without errors; original functions work after uninstall"
+    ],
+    "passes": false,
+    "blockedBy": ["1.1-config-classes", "1.2-registry", "3.2-dual-stream-collector", "4.1-ray-get-proxy", "4.2-all-reduce-proxy", "4.3-reward-manager-proxy", "4.4-checkpoint-save-proxy"]
+  },
+  {
+    "id": "5.2-yaml-config-loader",
+    "story": "Implement YAML configuration loader",
+    "priority": "high",
+    "requirements": [
+      "Add load_yaml_config(yaml_path) function to ralph/core/config.py",
+      "Support variable substitution ${global.output_dir} -> actual path",
+      "Parse experiment, global, data_collection, and scenarios sections",
+      "Validate each scenario has required fields (id, layer, target, fault_type, trigger, expected_behavior)",
+      "Convert trigger dict to TriggerConfig and scenario to FaultConfig",
+      "Verify: Sample config from spec.md loads without errors"
+    ],
+    "passes": false,
+    "blockedBy": ["1.1-config-classes", "0.2-dependencies"]
+  },
+  {
+    "id": "6.1-cli-main",
+    "story": "Implement CLI entry point",
+    "priority": "medium",
+    "requirements": [
+      "Create ralph/cli/main.py with argparse-based CLI",
+      "Support --config <yaml_path> to specify config file",
+      "Support --list-targets to print all registered injection points",
+      "Support --validate to validate config without running",
+      "Support --output-dir <dir> to override output directory",
+      "Implement main() function as entry point",
+      "Verify: `python -m ralph.cli.main --help` prints usage and exits 0"
+    ],
+    "passes": false,
+    "blockedBy": ["5.1-injection-engine", "5.2-yaml-config-loader"]
+  },
+  {
+    "id": "7.1-sample-configs",
+    "story": "Create sample YAML configurations",
+    "priority": "medium",
+    "requirements": [
+      "Create directory configs/ralph/",
+      "Create configs/ralph/default.yaml with one scenario per P0 injection point",
+      "Create configs/ralph/nccl_timeout_test.yaml testing all_reduce delay/deadlock",
+      "Create configs/ralph/checkpoint_resilience.yaml testing checkpoint save failures",
+      "Each config must pass validation with --validate",
+      "Verify: All configs load successfully via load_yaml_config"
+    ],
+    "passes": false,
+    "blockedBy": ["5.2-yaml-config-loader"]
+  },
+  {
+    "id": "8.1-ray-put-proxy",
+    "story": "Implement RayPutProxy (L0)",
+    "priority": "medium",
+    "requirements": [
+      "Add RayPutProxy class to ralph/proxies/l0_ray.py",
+      "Inherit from BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin",
+      "Set SUPPORTED_STRATEGIES = {DELAY, CORRUPT_TENSOR, STORE_FULL, SILENT_DROP}",
+      "Implement _strategy_store_full raising appropriate Ray exception",
+      "Implement _strategy_silent_drop returning dummy ObjectRef",
+      "Decorate with @ProxyRegistry.register('ray.put')",
+      "Verify: Unit tests for each of the 4 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["4.1-ray-get-proxy"]
+  },
+  {
+    "id": "8.2-execute-all-proxy",
+    "story": "Implement ExecuteAllProxy (L0)",
+    "priority": "medium",
+    "requirements": [
+      "Add ExecuteAllProxy class to ralph/proxies/l0_ray.py",
+      "Set SUPPORTED_STRATEGIES = {WORKER_DEATH, STRAGGLER, SKIP_WORKER, DUPLICATE_CALL}",
+      "Implement _strategy_worker_death using ray.kill on specified worker",
+      "Implement _strategy_straggler adding delay to specified worker index",
+      "Implement _strategy_skip_worker removing worker from execution list",
+      "Implement _strategy_duplicate_call calling worker twice",
+      "Decorate with @ProxyRegistry.register('execute_all_sync')",
+      "Verify: Unit tests for each of the 4 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["4.1-ray-get-proxy"]
+  },
+  {
+    "id": "8.3-all-gather-proxy",
+    "story": "Implement AllGatherProxy (L1)",
+    "priority": "medium",
+    "requirements": [
+      "Add AllGatherProxy class to ralph/proxies/l1_distributed.py",
+      "Set SUPPORTED_STRATEGIES = {DELAY, CORRUPT_GATHERED, MISSING_RANK, SHAPE_MISMATCH}",
+      "Implement _strategy_corrupt_gathered modifying result for specified ranks",
+      "Implement _strategy_missing_rank zeroing out data for specified rank",
+      "Implement _strategy_shape_mismatch altering tensor shape",
+      "Decorate with @ProxyRegistry.register('torch.distributed.all_gather')",
+      "Verify: Unit tests for each of the 4 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["4.2-all-reduce-proxy"]
+  },
+  {
+    "id": "8.4-barrier-proxy",
+    "story": "Implement BarrierProxy (L1)",
+    "priority": "medium",
+    "requirements": [
+      "Add BarrierProxy class to ralph/proxies/l1_distributed.py",
+      "Set SUPPORTED_STRATEGIES = {DELAY, BARRIER_TIMEOUT, BARRIER_SKIP, ASYNC_DESYNC}",
+      "Implement _strategy_barrier_timeout hanging specified rank indefinitely",
+      "Implement _strategy_barrier_skip returning without calling original",
+      "Implement _strategy_async_desync adding random delay per rank",
+      "Decorate with @ProxyRegistry.register('torch.distributed.barrier')",
+      "Verify: Unit tests for each of the 4 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["4.2-all-reduce-proxy"]
+  },
+  {
+    "id": "9.1-gae-proxy",
+    "story": "Implement GAEProxy (Algorithm P1)",
+    "priority": "medium",
+    "requirements": [
+      "Create ralph/proxies/algorithm.py with GAEProxy class",
+      "Set SUPPORTED_STRATEGIES = {WRONG_ADVANTAGE, ZERO_ADVANTAGE, INVERTED_ADVANTAGE, SCALED_ADVANTAGE, DELAYED_ADVANTAGE}",
+      "Implement _strategy_wrong_advantage returning random noise",
+      "Implement _strategy_zero_advantage returning zeros",
+      "Implement _strategy_inverted_advantage negating advantages",
+      "Implement _strategy_scaled_advantage multiplying by scale factor",
+      "Decorate with @ProxyRegistry.register('compute_gae_advantage_return')",
+      "Verify: Unit tests for each of the 5 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.2-tensor-mixin", "2.5-result-mixin"]
+  },
+  {
+    "id": "9.2-kl-penalty-proxy",
+    "story": "Implement KLPenaltyProxy (Algorithm P1)",
+    "priority": "medium",
+    "requirements": [
+      "Add KLPenaltyProxy class to ralph/proxies/algorithm.py",
+      "Set SUPPORTED_STRATEGIES = {DELAY, WRONG_KL, ZERO_KL, EXTREME_KL, NEGATIVE_KL}",
+      "Implement _strategy_wrong_kl scaling KL by configured factor",
+      "Implement _strategy_zero_kl returning zero KL penalty",
+      "Implement _strategy_extreme_kl returning very large KL value",
+      "Implement _strategy_negative_kl returning negative KL",
+      "Decorate with @ProxyRegistry.register('apply_kl_penalty')",
+      "Verify: Unit tests for each of the 5 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["9.1-gae-proxy"]
+  },
+  {
+    "id": "9.3-generate-proxy",
+    "story": "Implement GenerateProxy (Inference P1)",
+    "priority": "medium",
+    "requirements": [
+      "Create ralph/proxies/inference.py with GenerateProxy class",
+      "Set SUPPORTED_STRATEGIES = {DELAY, GENERATION_TIMEOUT, EMPTY_RESPONSE, TRUNCATED_OUTPUT, GARBAGE_OUTPUT}",
+      "Implement _strategy_generation_timeout with very long delay",
+      "Implement _strategy_empty_response returning empty sequences",
+      "Implement _strategy_truncated_output limiting output length",
+      "Implement _strategy_garbage_output returning random tokens",
+      "Decorate with @ProxyRegistry.register('vllm.generate')",
+      "Verify: Unit tests for each of the 5 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin"]
+  },
+  {
+    "id": "9.4-compute-values-proxy",
+    "story": "Implement ComputeValuesProxy (Worker P1)",
+    "priority": "medium",
+    "requirements": [
+      "Create ralph/proxies/worker.py with ComputeValuesProxy class",
+      "Set SUPPORTED_STRATEGIES = {DELAY, WRONG_VALUES, CONSTANT_VALUES, NAN_VALUES, INVERTED_VALUES}",
+      "Implement _strategy_wrong_values adding noise to values",
+      "Implement _strategy_constant_values returning constant",
+      "Implement _strategy_nan_values injecting NaN",
+      "Implement _strategy_inverted_values negating values",
+      "Decorate with @ProxyRegistry.register('CriticWorker.compute_values')",
+      "Verify: Unit tests for each of the 5 strategies"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.2-tensor-mixin", "2.5-result-mixin"]
+  },
+  {
+    "id": "10.1-gpu-memory-injector",
+    "story": "Implement GPUMemoryInjector (L3)",
+    "priority": "medium",
+    "requirements": [
+      "Create ralph/proxies/l3_resource.py with GPUMemoryInjector class",
+      "Implement allocate_pressure(ratio) filling GPU to specified ratio",
+      "Implement trigger_oom() filling GPU completely to cause OOM",
+      "Implement cause_fragmentation(count) allocating/freeing many small tensors",
+      "Implement start_leak(rate_mb_per_step) for gradual memory leak",
+      "Implement release() to free allocated tensors",
+      "Verify: Unit tests confirm memory allocation behavior"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy"]
+  },
+  {
+    "id": "10.2-checkpoint-load-proxy",
+    "story": "Implement CheckpointLoadProxy (L2)",
+    "priority": "medium",
+    "requirements": [
+      "Add CheckpointLoadProxy class to ralph/proxies/l2_verl.py",
+      "Set SUPPORTED_STRATEGIES = {RAISE_EXCEPTION, FILE_NOT_FOUND, CORRUPT_STATE_DICT, PARTIAL_LOAD}",
+      "Implement _strategy_file_not_found raising FileNotFoundError",
+      "Implement _strategy_corrupt_state_dict adding noise to loaded params",
+      "Implement _strategy_partial_load removing some keys from state dict",
+      "Decorate with @ProxyRegistry.register('FSDPCheckpointManager.load_checkpoint')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["4.4-checkpoint-save-proxy"]
+  },
+  {
+    "id": "10.3-update-actor-proxy",
+    "story": "Implement UpdateActorProxy (L2)",
+    "priority": "medium",
+    "requirements": [
+      "Add UpdateActorProxy class to ralph/proxies/l2_verl.py",
+      "Set SUPPORTED_STRATEGIES = {DELAY, NAN_INPUT, EXPLODING_GRADIENTS, VANISHING_GRADIENTS, SKIP_UPDATE, DOUBLE_UPDATE}",
+      "Implement _strategy_nan_input injecting NaN into input batch",
+      "Implement _strategy_exploding_gradients scaling input by 1e6",
+      "Implement _strategy_vanishing_gradients scaling input by 1e-8",
+      "Implement _strategy_skip_update returning without calling original",
+      "Decorate with @ProxyRegistry.register('RayPPOTrainer._update_actor')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["4.3-reward-manager-proxy"]
+  },
+  {
+    "id": "11.1-data-proto-concat-proxy",
+    "story": "Implement DataProtoConcatProxy (Data Pipeline P2)",
+    "priority": "low",
+    "requirements": [
+      "Create ralph/proxies/data_pipeline.py with DataProtoConcatProxy class",
+      "Set SUPPORTED_STRATEGIES = {DATA_MISMATCH, LOST_ITEMS, DUPLICATE_ITEMS, WRONG_ORDER}",
+      "Implement _strategy_data_mismatch returning inconsistent batch sizes",
+      "Implement _strategy_lost_items dropping some input DataProtos",
+      "Implement _strategy_duplicate_items repeating some inputs",
+      "Implement _strategy_wrong_order shuffling input order",
+      "Decorate with @ProxyRegistry.register('DataProto.concat')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy"]
+  },
+  {
+    "id": "11.2-data-proto-chunk-proxy",
+    "story": "Implement DataProtoChunkProxy (Data Pipeline P2)",
+    "priority": "low",
+    "requirements": [
+      "Add DataProtoChunkProxy class to ralph/proxies/data_pipeline.py",
+      "Set SUPPORTED_STRATEGIES = {UNEVEN_SPLIT, LOST_CHUNKS, EMPTY_CHUNK, OVERLAPPING_CHUNKS}",
+      "Implement each strategy manipulating chunk results",
+      "Decorate with @ProxyRegistry.register('DataProto.chunk')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["11.1-data-proto-concat-proxy"]
+  },
+  {
+    "id": "11.3-grpo-proxy",
+    "story": "Implement GRPOProxy (Algorithm P2)",
+    "priority": "low",
+    "requirements": [
+      "Add GRPOProxy class to ralph/proxies/algorithm.py",
+      "Set SUPPORTED_STRATEGIES = {WRONG_GROUPING, WRONG_NORMALIZATION, SKIP_NORMALIZATION, SINGLE_SAMPLE_GROUPS}",
+      "Implement each strategy manipulating GRPO computation",
+      "Decorate with @ProxyRegistry.register('compute_grpo_outcome_advantage')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["9.1-gae-proxy"]
+  },
+  {
+    "id": "11.4-update-weights-proxy",
+    "story": "Implement UpdateWeightsProxy (Inference P2)",
+    "priority": "low",
+    "requirements": [
+      "Add UpdateWeightsProxy class to ralph/proxies/inference.py",
+      "Set SUPPORTED_STRATEGIES = {DELAY, WEIGHT_MISMATCH, PARTIAL_UPDATE, CORRUPT_WEIGHTS, OLD_WEIGHTS}",
+      "Implement each strategy manipulating weight synchronization",
+      "Decorate with @ProxyRegistry.register('rollout.update_weights')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["9.3-generate-proxy"]
+  },
+  {
+    "id": "12.1-tool-call-proxy",
+    "story": "Implement CallToolProxy (Agent P2)",
+    "priority": "low",
+    "requirements": [
+      "Create ralph/proxies/agent.py with CallToolProxy class",
+      "Set SUPPORTED_STRATEGIES = {DELAY, TOOL_TIMEOUT, TOOL_EXCEPTION, WRONG_RESULT, EMPTY_RESULT, MALFORMED_RESULT}",
+      "Implement each strategy manipulating tool call behavior",
+      "Decorate with @ProxyRegistry.register('ToolAgentLoop._call_tool')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.1-delay-mixin", "2.3-exception-mixin"]
+  },
+  {
+    "id": "12.2-tool-parser-proxy",
+    "story": "Implement ToolParserProxy (Agent P2)",
+    "priority": "low",
+    "requirements": [
+      "Add ToolParserProxy class to ralph/proxies/agent.py",
+      "Set SUPPORTED_STRATEGIES = {PARSE_FAILURE, WRONG_TOOL_NAME, WRONG_ARGUMENTS, EXTRA_TOOL_CALLS, MISSING_TOOL_CALLS}",
+      "Implement each strategy manipulating tool parsing",
+      "Decorate with @ProxyRegistry.register('ToolParser.parse')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["12.1-tool-call-proxy"]
+  },
+  {
+    "id": "13.1-megatron-optimizer-proxy",
+    "story": "Implement MegatronOptimizerProxy (Megatron P3)",
+    "priority": "low",
+    "requirements": [
+      "Create ralph/proxies/megatron.py with MegatronOptimizerProxy class",
+      "Set SUPPORTED_STRATEGIES = {SKIP, GRADIENT_OVERFLOW, NAN_PARAMS, WRONG_LR}",
+      "Implement each strategy manipulating Megatron optimizer",
+      "Decorate with @ProxyRegistry.register('MegatronEngine.optimizer_step')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy", "2.2-tensor-mixin"]
+  },
+  {
+    "id": "13.2-parallelism-proxy",
+    "story": "Implement ParallelismProxy (Megatron P3)",
+    "priority": "low",
+    "requirements": [
+      "Add ParallelismProxy class to ralph/proxies/megatron.py",
+      "Set SUPPORTED_STRATEGIES = {PP_STAGE_FAILURE, TP_DESYNC, WRONG_MICRO_BATCH_ROUTING, ACTIVATION_CORRUPTION}",
+      "Implement each strategy manipulating parallel execution",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["13.1-megatron-optimizer-proxy"]
+  },
+  {
+    "id": "13.3-optimizer-step-proxy",
+    "story": "Implement OptimizerStepProxy (Optimizer P3)",
+    "priority": "low",
+    "requirements": [
+      "Create ralph/proxies/optimizer.py with OptimizerStepProxy class",
+      "Set SUPPORTED_STRATEGIES = {SKIP, REPEAT, CORRUPTED_MOMENTUM, RESET_STATE}",
+      "Implement each strategy manipulating optimizer step",
+      "Decorate with @ProxyRegistry.register('optimizer.step')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["3.1-base-proxy"]
+  },
+  {
+    "id": "13.4-lr-scheduler-proxy",
+    "story": "Implement LRSchedulerProxy (Optimizer P3)",
+    "priority": "low",
+    "requirements": [
+      "Add LRSchedulerProxy class to ralph/proxies/optimizer.py",
+      "Set SUPPORTED_STRATEGIES = {SKIP, WRONG_LR, LR_SPIKE, LR_ZERO}",
+      "Implement each strategy manipulating learning rate",
+      "Decorate with @ProxyRegistry.register('lr_scheduler.step')",
+      "Verify: Unit tests for each strategy"
+    ],
+    "passes": false,
+    "blockedBy": ["13.3-optimizer-step-proxy"]
+  },
+  {
+    "id": "14.1-log-parser",
+    "story": "Implement log parser for data collection",
+    "priority": "low",
+    "requirements": [
+      "Create ralph/collectors/log_parser.py with RayLogParser and NCCLLogParser classes",
+      "Implement parse_ray_logs(log_dir) extracting structured events",
+      "Implement parse_nccl_logs(log_content) finding timeout/error events",
+      "Support common error patterns (ObjectLostError, Watchdog timeout, etc.)",
+      "Return list of structured event dicts with timestamp, type, message",
+      "Verify: Parser extracts events from sample log files"
+    ],
+    "passes": false,
+    "blockedBy": ["3.2-dual-stream-collector"]
+  },
+  {
+    "id": "14.2-metrics-hook",
+    "story": "Implement metrics hook for verl Tracking",
+    "priority": "low",
+    "requirements": [
+      "Create ralph/collectors/metrics_hook.py with VerlMetricsHook class",
+      "Integrate with verl's tracking backend (wandb/tensorboard)",
+      "Capture throughput (TPS), loss, gradient norm metrics",
+      "Implement start_capture() and stop_capture() methods",
+      "Implement get_metrics() returning captured data",
+      "Verify: Hook captures metrics during mock training loop"
+    ],
+    "passes": false,
+    "blockedBy": ["3.2-dual-stream-collector"]
+  },
+  {
+    "id": "15.1-unit-tests",
+    "story": "Create comprehensive unit tests",
+    "priority": "medium",
+    "requirements": [
+      "Create tests/ralph/test_config.py with tests for TriggerConfig, FaultConfig, YAML loading",
+      "Create tests/ralph/test_mixins.py testing DelayMixin, TensorCorruptionMixin, ExceptionMixin, SkipMixin, ResultModificationMixin",
+      "Create tests/ralph/test_registry.py testing ProxyRegistry",
+      "Create tests/ralph/test_proxies.py testing all proxy classes",
+      "Create tests/ralph/test_collectors.py testing DualStreamCollector",
+      "Achieve >80% code coverage on ralph/ module",
+      "Verify: `pytest tests/ralph/ -v --cov=ralph --cov-report=term-missing` passes with >80% coverage"
+    ],
+    "passes": false,
+    "blockedBy": ["5.1-injection-engine"]
+  },
+  {
+    "id": "15.2-integration-tests",
+    "story": "Create integration tests",
+    "priority": "medium",
+    "requirements": [
+      "Create tests/ralph/test_integration.py",
+      "Test full workflow: load_config -> install_proxies -> simulate_training -> collect_data",
+      "Test proxy uninstallation restores original function behavior",
+      "Test multiple simultaneous proxies with different triggers",
+      "Test JSONL output files are valid and contain expected data",
+      "Verify: All integration tests pass"
+    ],
+    "passes": false,
+    "blockedBy": ["15.1-unit-tests", "7.1-sample-configs"]
+  }
+]
