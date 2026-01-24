@@ -258,7 +258,7 @@
       "Decorate with @ProxyRegistry.register('RewardManager.__call__')",
       "Verify: Unit tests for each of the 4 strategies"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "3.1-base-proxy",
       "2.1-delay-mixin",

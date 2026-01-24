@@ -19,4 +19,16 @@ try:
 except ImportError:
     AllReduceProxy = None
 
-__all__ = ["BaseProxy", "RayGetProxy", "ObjectLostError", "AllReduceProxy"]
+# L2 verl proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.l2_verl import RewardManagerProxy
+except ImportError:
+    RewardManagerProxy = None
+
+__all__ = [
+    "BaseProxy",
+    "RayGetProxy",
+    "ObjectLostError",
+    "AllReduceProxy",
+    "RewardManagerProxy",
+]

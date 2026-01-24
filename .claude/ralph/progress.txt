@@ -292,3 +292,30 @@
 - This unblocks: 8.3-all-gather-proxy, 8.4-barrier-proxy, 5.1-injection-engine (partial)
 - Next priorities: 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy, 5.1-injection-engine
 
+
+[2026-01-24] 4.3-reward-manager-proxy: COMPLETED
+- Created ralph/proxies/l2_verl.py with RewardManagerProxy class
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, CORRUPT_TENSOR, REWARD_FLIP, CONSTANT_REWARD}
+- Implemented _get_layer() returning 'L2'
+- Implemented strategy methods:
+  - _strategy_corrupt_tensor: Corrupts tensor data with Gaussian noise (reads noise_scale from config)
+  - _strategy_reward_flip: Negates all reward values (positive becomes negative)
+  - _strategy_constant_reward: Returns constant value for all rewards (reads constant_value from config)
+  - DELAY: Inherited from DelayMixin, works out of the box
+- Decorated with @ProxyRegistry.register('RewardManager.__call__')
+- Updated ralph/proxies/__init__.py to export RewardManagerProxy
+- Created tests/ralph/test_l2_verl_proxy.py with 31 comprehensive unit tests:
+  - TestRewardManagerProxyRegistration: Registration and supported strategies verification
+  - TestRewardManagerProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestDelayStrategy: Config usage, default delay, kwargs passing
+  - TestCorruptTensorStrategy: Single tensor, multiple tensors, default noise scale, preserves non-tensors
+  - TestRewardFlipStrategy: Single tensor, multiple tensors, nested structures, non-numeric preservation
+  - TestConstantRewardStrategy: Single tensor, default zero, negative value, multiple tensors, shape preservation, dtype
+  - TestRewardManagerProxyIntegration: Step-based trigger, periodic trigger, collector recording, exception recording
+- All 31 tests pass
+- Verification passed: `from ralph.proxies import RewardManagerProxy` works correctly
+- This unblocks: 5.1-injection-engine (partial), 10.3-update-actor-proxy
+- Next priorities: 4.4-checkpoint-save-proxy (also L2 P0), 5.1-injection-engine (needs 4.4), 5.2-yaml-config-loader
+
+
