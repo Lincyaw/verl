@@ -1400,3 +1400,47 @@
 - Verification passed: Registration and strategy declarations correct
 - This completes the Megatron P3 series (MegatronOptimizerProxy and ParallelismProxy)
 - Remaining incomplete items: 14.1-log-parser, 14.2-metrics-hook (both low priority data collection)
+
+[2026-01-24] 14.1-log-parser: COMPLETED
+- Created ralph/collectors/log_parser.py with RayLogParser and NCCLLogParser classes
+- LogEvent dataclass for structured event representation with:
+  - timestamp, event_type, message, source_file, line_number, level, metadata
+  - to_dict() method for serialization
+- RayLogParser class features:
+  - Patterns for: object_lost, worker_death, task_failure, actor_failure, scheduling_timeout, object_store_full, exception
+  - parse_line(line) for single line parsing
+  - parse_file(file_path) for file parsing
+  - parse_ray_logs(log_dir) for directory scanning
+  - Supports multiple Ray log file patterns (raylet.*.log, worker.*.out, etc.)
+  - Log level filtering with _log_level_filter parameter
+  - Timestamp extraction (ISO, space-separated, Unix)
+  - Metadata extraction (object_ref, exit_code, etc.)
+- NCCLLogParser class features:
+  - Patterns for: watchdog_timeout, nccl_error, comm_failure, process_group_failure, deadlock, rank_desync, cuda_nccl_error, connection_error
+  - parse_line(line) for single line parsing
+  - parse_nccl_logs(log_content) for content parsing
+  - parse_file(file_path) for file parsing
+  - Rank extraction from multiple formats ([N], rank=N, worker N)
+  - Log level filtering
+- Convenience functions:
+  - parse_ray_logs(log_dir) -> List[Dict]
+  - parse_nccl_logs(log_content) -> List[Dict]
+- Updated ralph/collectors/__init__.py to export all new classes and functions
+- Created tests/ralph/test_log_parser.py with 70+ comprehensive unit tests:
+  - TestLogEvent: creation, to_dict
+  - TestRayLogParserInit: default, with filter
+  - TestRayLogParserExtraction: timestamp, log level
+  - TestRayLogParserClassification: all event types
+  - TestRayLogParserParseLine: basic, context, empty, filtering
+  - TestRayLogParserParseFile: basic, nonexistent, empty
+  - TestRayLogParserParseRayLogs: basic, multiple files, nested
+  - TestNCCLLogParserInit: default, with filter
+  - TestNCCLLogParserExtraction: rank formats
+  - TestNCCLLogParserClassification: all event types
+  - TestNCCLLogParserParseLine: basic, empty, filtering
+  - TestNCCLLogParserParseNCCLLogs: basic, empty, sorted
+  - TestConvenienceFunctions: parse_ray_logs, parse_nccl_logs
+  - TestLogParserIntegration: realistic Ray/NCCL logs, mixed logs
+- All 14 manual tests pass
+- Verification passed: All imports work correctly
+- Remaining incomplete item: 14.2-metrics-hook (last remaining feature)

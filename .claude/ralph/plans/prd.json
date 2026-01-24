@@ -751,7 +751,7 @@
       "Return list of structured event dicts with timestamp, type, message",
       "Verify: Parser extracts events from sample log files"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "3.2-dual-stream-collector"
     ]
