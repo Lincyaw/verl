@@ -50,7 +50,7 @@
       "Implement list_targets() -> List[str] method",
       "Verify: `python -c 'from ralph.core.registry import ProxyRegistry; print(ProxyRegistry.list_targets())'` succeeds"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["1.1-config-classes"]
   },
   {

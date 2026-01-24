@@ -16,3 +16,20 @@
 - Verification passed: imports work correctly
 - This unblocks: 1.2-registry, 1.3-scheduler, 3.1-base-proxy, 5.2-yaml-config-loader
 - Next priorities: 0.2-dependencies (quick), 1.2-registry (ProxyRegistry), 2.x-mixins (strategy implementations)
+
+[2026-01-24] 1.2-registry: COMPLETED
+- Created ralph/core/registry.py with ProxyRegistry class
+- Implemented class methods:
+  - @register(target): Class decorator for registering proxy classes
+  - get_proxy(target) -> Type[BaseProxy]: Retrieves proxy class for a target
+  - get_supported_strategies(target) -> Set[StrategyType]: Gets supported strategies for a proxy
+  - list_targets() -> List[str]: Lists all registered targets (sorted)
+  - is_registered(target) -> bool: Checks if target has registered proxy
+  - unregister(target): Removes a registration (for testing)
+  - clear(): Clears all registrations (for testing)
+  - get_all_registrations() -> Dict: Gets copy of all registrations
+- Error handling: KeyError for missing targets, ValueError for duplicate registrations
+- Updated ralph/core/__init__.py to export ProxyRegistry
+- Verification passed: `python3 -c 'from ralph.core.registry import ProxyRegistry; print(ProxyRegistry.list_targets())'` returns []
+- This unblocks: 3.1-base-proxy (which unblocks all proxy implementations)
+- Next priorities: 3.1-base-proxy (critical path), 1.3-scheduler, 2.x-mixins, 3.2-dual-stream-collector
