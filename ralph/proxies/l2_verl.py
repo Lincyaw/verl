@@ -11,6 +11,7 @@ import torch
 from ralph.core.config import StrategyType
 from ralph.core.registry import ProxyRegistry
 from ralph.mixins.delay import DelayMixin
+from ralph.mixins.exception import ExceptionMixin
 from ralph.mixins.result import ResultModificationMixin
 from ralph.mixins.tensor import TensorCorruptionMixin
 from ralph.proxies.base import BaseProxy
@@ -154,3 +155,79 @@ class RewardManagerProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultMod
 
         # Set all numeric values to constant
         return self._set_constant(result, constant_value)
+
+
+@ProxyRegistry.register("FSDPCheckpointManager.save_checkpoint")
+class CheckpointSaveProxy(BaseProxy, DelayMixin, ExceptionMixin):
+    """
+    Proxy for FSDPCheckpointManager.save_checkpoint() operations.
+
+    Supports fault injection at the verl checkpoint saving level (L2).
+
+    Supported strategies:
+    - DELAY: Adds delay before calling original save_checkpoint
+    - RAISE_EXCEPTION: Raises configurable exception instead of saving
+
+    Config parameters:
+    - DELAY: delay_seconds (float, default 10.0) - seconds to delay
+    - RAISE_EXCEPTION: exc_type (str, required) - exception type to raise,
+                       message (str, optional) - error message
+
+    Expected input/output:
+    - Input: local_path (str), hdfs_path (str/optional), global_step (int), max_ckpt (int)
+    - Output: None or dict with checkpoint metadata
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.DELAY,
+        StrategyType.RAISE_EXCEPTION,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "L2"
+
+    def _strategy_raise_exception(
+        self,
+        local_path: Optional[str] = None,
+        hdfs_path: Optional[str] = None,
+        global_step: Optional[int] = None,
+        max_ckpt: Optional[int] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Raise an exception instead of saving checkpoint.
+
+        This strategy is a terminal operation - the original save_checkpoint
+        is never called when this strategy triggers.
+
+        Args:
+            local_path: Local filesystem path for checkpoint
+            hdfs_path: HDFS path for checkpoint (optional)
+            global_step: Current training step
+            max_ckpt: Maximum number of checkpoints to keep
+            *args: Additional positional arguments (ignored)
+            **kwargs: Additional keyword arguments (ignored)
+
+        Raises:
+            The exception type specified in config with checkpoint-specific context.
+
+        Config parameters:
+            exc_type (str): The exception type name (required). Valid types include:
+                IOError, RuntimeError, PermissionError, OSError, FileNotFoundError, etc.
+            message (str): Custom error message (optional). If not provided, a
+                checkpoint-specific message is generated.
+        """
+        exc_type = self._config.parameters.get("exc_type")
+        if exc_type is None:
+            raise ValueError("exc_type must be specified in config parameters")
+
+        # Build checkpoint-specific default message with context
+        default_message = (
+            f"Fault injection: {exc_type} during checkpoint save "
+            f"(local_path={local_path}, global_step={global_step})"
+        )
+        message = self._config.parameters.get("message", default_message)
+
+        self._raise_exception(exc_type, message)

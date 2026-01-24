@@ -6,6 +6,10 @@ Tests cover RewardManagerProxy with all 4 supported strategies:
 - CORRUPT_TENSOR: Corrupts tensor data with Gaussian noise
 - REWARD_FLIP: Negates all reward values
 - CONSTANT_REWARD: Returns constant value for all rewards
+
+Tests cover CheckpointSaveProxy with 2 supported strategies:
+- DELAY: Adds delay before calling original save_checkpoint
+- RAISE_EXCEPTION: Raises configurable exception instead of saving
 """
 
 from unittest.mock import MagicMock, patch
@@ -15,7 +19,7 @@ import torch
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.registry import ProxyRegistry
-from ralph.proxies.l2_verl import RewardManagerProxy
+from ralph.proxies.l2_verl import CheckpointSaveProxy, RewardManagerProxy
 
 
 class TestRewardManagerProxyRegistration:
@@ -679,3 +683,377 @@ class TestRewardManagerProxyIntegration:
         call_args = original.call_args
         assert call_args[1]["return_dict"] is True
         assert call_args[1]["custom_param"] == 42
+
+
+# =============================================================================
+# CheckpointSaveProxy Tests
+# =============================================================================
+
+
+class TestCheckpointSaveProxyRegistration:
+    """Tests for CheckpointSaveProxy registration."""
+
+    def test_registered_with_checkpoint_manager_target(self):
+        """CheckpointSaveProxy is registered for 'FSDPCheckpointManager.save_checkpoint' target."""
+        assert ProxyRegistry.is_registered("FSDPCheckpointManager.save_checkpoint")
+        assert ProxyRegistry.get_proxy("FSDPCheckpointManager.save_checkpoint") is CheckpointSaveProxy
+
+    def test_supported_strategies(self):
+        """CheckpointSaveProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("FSDPCheckpointManager.save_checkpoint")
+        expected = {
+            StrategyType.DELAY,
+            StrategyType.RAISE_EXCEPTION,
+        }
+        assert strategies == expected
+
+
+class TestCheckpointSaveProxyBasics:
+    """Tests for basic CheckpointSaveProxy functionality."""
+
+    def test_get_layer_returns_l2(self):
+        """_get_layer returns 'L2'."""
+        proxy = CheckpointSaveProxy(lambda *args, **kwargs: None)
+        assert proxy._get_layer() == "L2"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        original = MagicMock(return_value=None)
+        proxy = CheckpointSaveProxy(original)
+        proxy("/path/to/local", "/path/to/hdfs", global_step=100, max_ckpt=5)
+        original.assert_called_once_with("/path/to/local", "/path/to/hdfs", global_step=100, max_ckpt=5)
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        original = MagicMock(return_value=None)
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        proxy("/path/to/local", global_step=100)
+        original.assert_called_once()
+
+    def test_unsupported_strategy_raises_error(self):
+        """Setting an unsupported strategy raises ValueError."""
+        proxy = CheckpointSaveProxy(lambda *args, **kwargs: None)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.REWARD_FLIP,  # Not supported by CheckpointSaveProxy
+            trigger=trigger,
+        )
+        with pytest.raises(ValueError) as exc_info:
+            proxy.set_config(config)
+        assert "not supported" in str(exc_info.value)
+
+
+class TestCheckpointSaveDelayStrategy:
+    """Tests for CheckpointSaveProxy DELAY strategy."""
+
+    def test_delay_strategy_with_config(self):
+        """DELAY strategy applies configured delay."""
+        original = MagicMock(return_value=None)
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy("/path/to/checkpoint", global_step=50)
+            mock_sleep.assert_called_once_with(0.01)
+            original.assert_called_once()
+
+    def test_delay_strategy_default_delay(self):
+        """DELAY strategy uses default delay when not specified."""
+        original = MagicMock(return_value=None)
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay-default",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy("/path/to/checkpoint")
+            mock_sleep.assert_called_once_with(10.0)  # Default is 10 seconds
+
+    def test_delay_passes_all_kwargs(self):
+        """DELAY strategy passes all arguments to original."""
+        original = MagicMock(return_value={"status": "saved"})
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay-kwargs",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep"):
+            result = proxy(
+                "/local/path",
+                "/hdfs/path",
+                global_step=1000,
+                max_ckpt=10,
+                extra_option=True,
+            )
+            original.assert_called_once()
+            args, kwargs = original.call_args
+            assert args[0] == "/local/path"
+            assert args[1] == "/hdfs/path"
+            assert kwargs["global_step"] == 1000
+            assert kwargs["max_ckpt"] == 10
+            assert kwargs["extra_option"] is True
+
+
+class TestCheckpointSaveRaiseExceptionStrategy:
+    """Tests for CheckpointSaveProxy RAISE_EXCEPTION strategy."""
+
+    def test_raise_exception_ioerror(self):
+        """RAISE_EXCEPTION strategy raises IOError."""
+        original = MagicMock()
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-ioerror",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "IOError", "message": "Disk full"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(IOError) as exc_info:
+            proxy("/path/to/checkpoint", global_step=100)
+        assert "Disk full" in str(exc_info.value)
+        original.assert_not_called()
+
+    def test_raise_exception_permission_error(self):
+        """RAISE_EXCEPTION strategy raises PermissionError."""
+        original = MagicMock()
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-permission",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "PermissionError", "message": "Access denied"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(PermissionError) as exc_info:
+            proxy("/protected/path")
+        assert "Access denied" in str(exc_info.value)
+
+    def test_raise_exception_oserror(self):
+        """RAISE_EXCEPTION strategy raises OSError."""
+        original = MagicMock()
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-oserror",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "OSError", "message": "System error"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(OSError) as exc_info:
+            proxy("/path/to/checkpoint")
+        assert "System error" in str(exc_info.value)
+
+    def test_raise_exception_runtime_error(self):
+        """RAISE_EXCEPTION strategy raises RuntimeError."""
+        original = MagicMock()
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-runtime",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "RuntimeError", "message": "Serialization failed"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(RuntimeError) as exc_info:
+            proxy("/path/to/checkpoint")
+        assert "Serialization failed" in str(exc_info.value)
+
+    def test_raise_exception_default_message(self):
+        """RAISE_EXCEPTION strategy uses checkpoint-specific default message."""
+        original = MagicMock()
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-default-msg",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "IOError"},  # No message provided
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(IOError) as exc_info:
+            proxy("/local/checkpoint", global_step=500)
+        error_msg = str(exc_info.value)
+        assert "IOError" in error_msg
+        assert "checkpoint" in error_msg.lower()
+        assert "/local/checkpoint" in error_msg
+        assert "500" in error_msg
+
+    def test_raise_exception_missing_exc_type(self):
+        """RAISE_EXCEPTION strategy raises ValueError if exc_type not provided."""
+        original = MagicMock()
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-type",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={},  # No exc_type
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy("/path/to/checkpoint")
+        assert "exc_type" in str(exc_info.value)
+
+
+class TestCheckpointSaveProxyIntegration:
+    """Integration tests for CheckpointSaveProxy."""
+
+    def test_strategy_only_triggers_at_configured_step(self):
+        """Strategy only triggers at configured step."""
+        original = MagicMock(return_value=None)
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=5)
+        config = FaultConfig(
+            id="test-step",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "IOError", "message": "Injection"},
+        )
+        proxy.set_config(config)
+
+        # Steps 0-4 should call original normally
+        for step in range(5):
+            proxy.set_step(step)
+            original.reset_mock()
+            proxy("/path", global_step=step)
+            original.assert_called_once()
+
+        # Step 5 should raise exception
+        proxy.set_step(5)
+        with pytest.raises(IOError):
+            proxy("/path", global_step=5)
+
+        # Step 6 should call original again (one-shot already fired)
+        proxy.set_step(6)
+        original.reset_mock()
+        proxy("/path", global_step=6)
+        original.assert_called_once()
+
+    def test_periodic_trigger(self):
+        """Periodic trigger triggers at intervals."""
+        original = MagicMock(return_value=None)
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.PERIODIC, every_n_steps=3)
+        config = FaultConfig(
+            id="test-periodic",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            parameters={"exc_type": "IOError"},
+        )
+        proxy.set_config(config)
+
+        # Track which steps trigger exception
+        exception_steps = []
+        for step in range(10):
+            proxy.set_step(step)
+            try:
+                proxy("/path", global_step=step)
+            except IOError:
+                exception_steps.append(step)
+
+        # Steps 0, 3, 6, 9 should trigger (step % 3 == 0)
+        assert exception_steps == [0, 3, 6, 9]
+
+    def test_collector_records_injection(self):
+        """Collector records fault injection when provided."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-ckpt-001"
+        original = MagicMock(return_value=None)
+        proxy = CheckpointSaveProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-recording",
+            strategy=StrategyType.RAISE_EXCEPTION,
+            trigger=trigger,
+            severity="critical",
+            expected_behavior="Should fail checkpoint save",
+            parameters={"exc_type": "IOError", "message": "Disk failure"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(IOError):
+            proxy("/path/to/checkpoint", global_step=100)
+
+        # Check injection was recorded
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args[1]
+        assert call_kwargs["fault_type"] == "raise_exception"
+        assert call_kwargs["target_layer"] == "L2"
+        assert call_kwargs["severity"] == "critical"
+        assert call_kwargs["expected_behavior"] == "Should fail checkpoint save"
+
+        # Check outcome was recorded
+        collector.record_fault_outcome.assert_called_once()
+        args = collector.record_fault_outcome.call_args[0]
+        assert args[0] == "fault-ckpt-001"
+        # The outcome should indicate the exception was raised (success for injection)
+        assert "exception" in args[1] or args[1] == "success"
+
+    def test_delay_then_original_succeeds(self):
+        """DELAY strategy delays then calls original successfully."""
+        result_data = {"checkpoint_path": "/saved/path", "step": 100}
+        original = MagicMock(return_value=result_data)
+        proxy = CheckpointSaveProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay-success",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.001},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            result = proxy("/local/path", global_step=100)
+            mock_sleep.assert_called_once()
+            assert result == result_data
+            original.assert_called_once()
+

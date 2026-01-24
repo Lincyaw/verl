@@ -319,3 +319,25 @@
 - Next priorities: 4.4-checkpoint-save-proxy (also L2 P0), 5.1-injection-engine (needs 4.4), 5.2-yaml-config-loader
 
 
+
+[2026-01-24] 4.4-checkpoint-save-proxy: COMPLETED
+- Added CheckpointSaveProxy class to ralph/proxies/l2_verl.py
+- Inherits from BaseProxy, DelayMixin, ExceptionMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, RAISE_EXCEPTION}
+- Implemented _get_layer() returning 'L2'
+- Implemented _strategy_raise_exception with checkpoint-specific error message:
+  - Includes local_path and global_step in default error message
+  - Supports all exception types from ExceptionMixin (IOError, PermissionError, OSError, etc.)
+  - Raises ValueError if exc_type not specified in config
+- Decorated with @ProxyRegistry.register('FSDPCheckpointManager.save_checkpoint')
+- Updated ralph/proxies/__init__.py to export CheckpointSaveProxy
+- Created 19 comprehensive unit tests in tests/ralph/test_l2_verl_proxy.py:
+  - TestCheckpointSaveProxyRegistration: Registration and supported strategies verification
+  - TestCheckpointSaveProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestCheckpointSaveDelayStrategy: Config usage, default delay, kwargs passing
+  - TestCheckpointSaveRaiseExceptionStrategy: IOError, PermissionError, OSError, RuntimeError, default message, missing exc_type
+  - TestCheckpointSaveProxyIntegration: Step-based trigger, periodic trigger, collector recording, delay success
+- All 50 tests pass (31 RewardManagerProxy + 19 CheckpointSaveProxy)
+- Verification passed: `from ralph.proxies import CheckpointSaveProxy` works correctly
+- This unblocks: 5.1-injection-engine (all P0 proxies now complete), 10.2-checkpoint-load-proxy
+- Next priorities: 5.1-injection-engine (critical path), 5.2-yaml-config-loader (unblocked), 0.2-dependencies (quick)

@@ -279,7 +279,7 @@
       "Decorate with @ProxyRegistry.register('FSDPCheckpointManager.save_checkpoint')",
       "Verify: Unit tests for both strategies"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "3.1-base-proxy",
       "2.1-delay-mixin",
