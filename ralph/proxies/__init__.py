@@ -43,9 +43,10 @@ except ImportError:
 
 # Algorithm proxies - imported conditionally to handle missing torch
 try:
-    from ralph.proxies.algorithm import GAEProxy
+    from ralph.proxies.algorithm import GAEProxy, KLPenaltyProxy
 except ImportError:
     GAEProxy = None
+    KLPenaltyProxy = None
 
 __all__ = [
     "BaseProxy",
@@ -62,4 +63,5 @@ __all__ = [
     "RewardManagerProxy",
     "CheckpointSaveProxy",
     "GAEProxy",
+    "KLPenaltyProxy",
 ]

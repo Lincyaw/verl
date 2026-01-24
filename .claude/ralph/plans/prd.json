@@ -473,7 +473,7 @@
       "Decorate with @ProxyRegistry.register('apply_kl_penalty')",
       "Verify: Unit tests for each of the 5 strategies"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "9.1-gae-proxy"
     ]

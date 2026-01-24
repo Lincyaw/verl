@@ -7,6 +7,13 @@ Tests cover GAEProxy with all 5 supported strategies:
 - INVERTED_ADVANTAGE: Negates the computed advantages
 - SCALED_ADVANTAGE: Multiplies advantages by a scale factor
 - DELAYED_ADVANTAGE: Adds delay before computing advantages
+
+Tests also cover KLPenaltyProxy with all 5 supported strategies:
+- DELAY: Adds delay before computing KL penalty
+- WRONG_KL: Scales KL penalty by a configurable factor
+- ZERO_KL: Returns zero KL penalty
+- EXTREME_KL: Returns very large KL value
+- NEGATIVE_KL: Returns negative KL penalty
 """
 
 from unittest.mock import MagicMock, patch
@@ -16,7 +23,7 @@ import torch
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.registry import ProxyRegistry
-from ralph.proxies.algorithm import GAEProxy
+from ralph.proxies.algorithm import GAEProxy, KLPenaltyProxy
 
 
 class TestGAEProxyRegistration:
@@ -692,3 +699,733 @@ class TestGAEProxyIntegration:
         proxy(values, rewards, gamma=0.99, lam=0.95)
 
         original.assert_called_once_with(values, rewards, gamma=0.99, lam=0.95)
+
+
+# ============================================================================
+# KLPenaltyProxy Tests
+# ============================================================================
+
+
+class TestKLPenaltyProxyRegistration:
+    """Tests for proxy registration."""
+
+    def test_registered_with_kl_penalty_target(self):
+        """KLPenaltyProxy is registered for 'apply_kl_penalty' target."""
+        assert ProxyRegistry.is_registered("apply_kl_penalty")
+        assert ProxyRegistry.get_proxy("apply_kl_penalty") is KLPenaltyProxy
+
+    def test_supported_strategies(self):
+        """KLPenaltyProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("apply_kl_penalty")
+        expected = {
+            StrategyType.DELAY,
+            StrategyType.WRONG_KL,
+            StrategyType.ZERO_KL,
+            StrategyType.EXTREME_KL,
+            StrategyType.NEGATIVE_KL,
+        }
+        assert strategies == expected
+
+
+class TestKLPenaltyProxyBasics:
+    """Tests for basic proxy functionality."""
+
+    def test_get_layer_returns_algorithm(self):
+        """_get_layer returns 'Algorithm'."""
+        proxy = KLPenaltyProxy(lambda: None)
+        assert proxy._get_layer() == "Algorithm"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        original = MagicMock(return_value={"kl": torch.ones(5), "kl_penalty": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        result = proxy()
+        original.assert_called_once()
+        assert "kl" in result
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_KL,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        result = proxy()
+        original.assert_called_once()
+        torch.testing.assert_close(result["kl"], torch.ones(5))
+
+    def test_unsupported_strategy_raises_error(self):
+        """Setting an unsupported strategy raises ValueError."""
+        proxy = KLPenaltyProxy(lambda: None)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.OBJECT_LOST,  # Not supported by KLPenaltyProxy
+            trigger=trigger,
+        )
+        with pytest.raises(ValueError) as exc_info:
+            proxy.set_config(config)
+        assert "not supported" in str(exc_info.value)
+
+
+class TestKLPenaltyDelayStrategy:
+    """Tests for DELAY strategy."""
+
+    def test_delay_with_config(self):
+        """DELAY strategy applies configured delay."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch.object(proxy, "_apply_delay") as mock_delay:
+            result = proxy()
+            mock_delay.assert_called_once_with(0.01)
+        original.assert_called_once()
+        torch.testing.assert_close(result["kl"], torch.ones(5))
+
+    def test_delay_default(self):
+        """DELAY uses default of 10.0 seconds."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch.object(proxy, "_apply_delay") as mock_delay:
+            proxy()
+            mock_delay.assert_called_once_with(10.0)
+
+
+class TestWrongKLStrategy:
+    """Tests for WRONG_KL strategy."""
+
+    def test_wrong_kl_scales_values(self):
+        """WRONG_KL strategy scales KL values by factor."""
+        original_kl = torch.ones(5, 10) * 2
+        original = MagicMock(return_value={"kl": original_kl.clone()})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_KL,
+            trigger=trigger,
+            parameters={"scale_factor": 5.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        expected = torch.ones(5, 10) * 10  # 2 * 5 = 10
+        torch.testing.assert_close(result["kl"], expected)
+
+    def test_wrong_kl_default_scale(self):
+        """WRONG_KL uses default scale_factor of 10.0."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_KL,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], torch.ones(5) * 10)
+
+    def test_wrong_kl_with_kl_penalty_key(self):
+        """WRONG_KL also scales kl_penalty if present."""
+        original = MagicMock(return_value={
+            "kl": torch.ones(5),
+            "kl_penalty": torch.ones(5) * 2,
+        })
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_KL,
+            trigger=trigger,
+            parameters={"scale_factor": 3.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], torch.ones(5) * 3)
+        torch.testing.assert_close(result["kl_penalty"], torch.ones(5) * 6)
+
+    def test_wrong_kl_preserves_other_keys(self):
+        """WRONG_KL preserves non-KL keys."""
+        original = MagicMock(return_value={
+            "kl": torch.ones(5),
+            "other_data": "should_be_preserved",
+            "metadata": {"key": "value"},
+        })
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_KL,
+            trigger=trigger,
+            parameters={"scale_factor": 2.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["other_data"] == "should_be_preserved"
+        assert result["metadata"] == {"key": "value"}
+
+    def test_wrong_kl_scalar_float(self):
+        """WRONG_KL handles scalar float values."""
+        original = MagicMock(return_value={"kl": 1.5})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WRONG_KL,
+            trigger=trigger,
+            parameters={"scale_factor": 4.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["kl"] == 6.0
+        assert isinstance(result["kl"], float)
+
+
+class TestZeroKLStrategy:
+    """Tests for ZERO_KL strategy."""
+
+    def test_zero_kl_returns_zeros(self):
+        """ZERO_KL strategy replaces KL values with zeros."""
+        original = MagicMock(return_value={"kl": torch.ones(5, 10) * 5})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], torch.zeros(5, 10))
+
+    def test_zero_kl_with_kl_penalty(self):
+        """ZERO_KL also zeros kl_penalty if present."""
+        original = MagicMock(return_value={
+            "kl": torch.ones(5) * 3,
+            "kl_penalty": torch.ones(5) * 7,
+        })
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], torch.zeros(5))
+        torch.testing.assert_close(result["kl_penalty"], torch.zeros(5))
+
+    def test_zero_kl_preserves_shape(self):
+        """ZERO_KL preserves tensor shape."""
+        shapes = [(5,), (10, 20), (3, 4, 5)]
+        for shape in shapes:
+            original = MagicMock(return_value={"kl": torch.randn(*shape)})
+            proxy = KLPenaltyProxy(original)
+            trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+            config = FaultConfig(
+                id="test",
+                strategy=StrategyType.ZERO_KL,
+                trigger=trigger,
+            )
+            proxy.set_config(config)
+            proxy.set_step(0)
+
+            result = proxy()
+
+            assert result["kl"].shape == shape
+            torch.testing.assert_close(result["kl"], torch.zeros(*shape))
+
+    def test_zero_kl_preserves_dtype(self):
+        """ZERO_KL preserves tensor dtype."""
+        original = MagicMock(return_value={"kl": torch.ones(5, dtype=torch.float16)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["kl"].dtype == torch.float16
+
+    def test_zero_kl_scalar_values(self):
+        """ZERO_KL handles scalar int/float values."""
+        original = MagicMock(return_value={"kl": 5.5, "kl_penalty": 3})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["kl"] == 0.0
+        assert isinstance(result["kl"], float)
+        assert result["kl_penalty"] == 0
+        assert isinstance(result["kl_penalty"], int)
+
+
+class TestExtremeKLStrategy:
+    """Tests for EXTREME_KL strategy."""
+
+    def test_extreme_kl_returns_extreme_value(self):
+        """EXTREME_KL strategy replaces KL with extreme value."""
+        original = MagicMock(return_value={"kl": torch.ones(5, 10)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.EXTREME_KL,
+            trigger=trigger,
+            parameters={"extreme_value": 1e6},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        expected = torch.full((5, 10), 1e6)
+        torch.testing.assert_close(result["kl"], expected)
+
+    def test_extreme_kl_default_value(self):
+        """EXTREME_KL uses default extreme_value of 1e6."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.EXTREME_KL,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        expected = torch.full((5,), 1e6)
+        torch.testing.assert_close(result["kl"], expected)
+
+    def test_extreme_kl_custom_value(self):
+        """EXTREME_KL uses custom extreme value from config."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.EXTREME_KL,
+            trigger=trigger,
+            parameters={"extreme_value": 999.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], torch.full((5,), 999.0))
+
+    def test_extreme_kl_preserves_shape(self):
+        """EXTREME_KL preserves tensor shape."""
+        original = MagicMock(return_value={"kl": torch.ones(3, 4, 5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.EXTREME_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["kl"].shape == (3, 4, 5)
+
+    def test_extreme_kl_with_kl_penalty(self):
+        """EXTREME_KL also sets kl_penalty to extreme value."""
+        original = MagicMock(return_value={
+            "kl": torch.ones(5),
+            "kl_penalty": torch.ones(5) * 2,
+        })
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.EXTREME_KL,
+            trigger=trigger,
+            parameters={"extreme_value": 1e8},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], torch.full((5,), 1e8))
+        torch.testing.assert_close(result["kl_penalty"], torch.full((5,), 1e8))
+
+    def test_extreme_kl_scalar_values(self):
+        """EXTREME_KL handles scalar int/float values."""
+        original = MagicMock(return_value={"kl": 1.5})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.EXTREME_KL,
+            trigger=trigger,
+            parameters={"extreme_value": 1e6},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["kl"] == 1e6
+        assert isinstance(result["kl"], float)
+
+
+class TestNegativeKLStrategy:
+    """Tests for NEGATIVE_KL strategy."""
+
+    def test_negative_kl_negates_values(self):
+        """NEGATIVE_KL strategy negates all KL values."""
+        original_kl = torch.tensor([1.0, -2.0, 3.0, -4.0, 5.0])
+        original = MagicMock(return_value={"kl": original_kl.clone()})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.NEGATIVE_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        expected = torch.tensor([-1.0, 2.0, -3.0, 4.0, -5.0])
+        torch.testing.assert_close(result["kl"], expected)
+
+    def test_negative_kl_with_kl_penalty(self):
+        """NEGATIVE_KL also negates kl_penalty."""
+        original = MagicMock(return_value={
+            "kl": torch.tensor([1.0, 2.0]),
+            "kl_penalty": torch.tensor([3.0, 4.0]),
+        })
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.NEGATIVE_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], torch.tensor([-1.0, -2.0]))
+        torch.testing.assert_close(result["kl_penalty"], torch.tensor([-3.0, -4.0]))
+
+    def test_negative_kl_preserves_shape(self):
+        """NEGATIVE_KL preserves tensor shape."""
+        original = MagicMock(return_value={"kl": torch.ones(5, 10)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.NEGATIVE_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["kl"].shape == (5, 10)
+        torch.testing.assert_close(result["kl"], -torch.ones(5, 10))
+
+    def test_negative_kl_preserves_other_keys(self):
+        """NEGATIVE_KL preserves non-KL keys."""
+        original = MagicMock(return_value={
+            "kl": torch.ones(5),
+            "loss": torch.ones(5) * 2,
+            "metadata": "should_preserve",
+        })
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.NEGATIVE_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        torch.testing.assert_close(result["kl"], -torch.ones(5))
+        torch.testing.assert_close(result["loss"], torch.ones(5) * 2)  # Unchanged
+        assert result["metadata"] == "should_preserve"
+
+    def test_negative_kl_scalar_values(self):
+        """NEGATIVE_KL handles scalar int/float values."""
+        original = MagicMock(return_value={"kl": 5.5, "kl_penalty": -3})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.NEGATIVE_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert result["kl"] == -5.5
+        assert isinstance(result["kl"], float)
+        assert result["kl_penalty"] == 3
+        assert isinstance(result["kl_penalty"], int)
+
+
+class TestKLPenaltyProxyIntegration:
+    """Integration tests for KLPenaltyProxy."""
+
+    def test_step_based_trigger(self):
+        """Step-based trigger activates within range."""
+        original = MagicMock(return_value={"kl": torch.ones(5) * 10})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(
+            type=TriggerType.STEP_BASED,
+            start_step=5,
+            end_step=10,
+        )
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        # Before range - original
+        proxy.set_step(3)
+        result = proxy()
+        torch.testing.assert_close(result["kl"], torch.ones(5) * 10)
+
+        # In range - zeros
+        proxy.set_step(7)
+        result = proxy()
+        torch.testing.assert_close(result["kl"], torch.zeros(5))
+
+        # After range - original
+        proxy.set_step(12)
+        result = proxy()
+        torch.testing.assert_close(result["kl"], torch.ones(5) * 10)
+
+    def test_periodic_trigger(self):
+        """Periodic trigger activates every N steps."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(
+            type=TriggerType.PERIODIC,
+            every_n_steps=3,
+        )
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.NEGATIVE_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        # Step 0 - periodic triggers (0 % 3 == 0)
+        proxy.set_step(0)
+        result = proxy()
+        torch.testing.assert_close(result["kl"], -torch.ones(5))
+
+        # Step 1 - no trigger
+        proxy.set_step(1)
+        result = proxy()
+        torch.testing.assert_close(result["kl"], torch.ones(5))
+
+        # Step 2 - no trigger
+        proxy.set_step(2)
+        result = proxy()
+        torch.testing.assert_close(result["kl"], torch.ones(5))
+
+        # Step 3 - periodic triggers
+        proxy.set_step(3)
+        result = proxy()
+        torch.testing.assert_close(result["kl"], -torch.ones(5))
+
+    def test_collector_recording(self):
+        """Collector records fault injection events."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        collector = MagicMock()
+        collector.record_fault_injection = MagicMock(return_value="fault123")
+        collector.record_fault_outcome = MagicMock()
+
+        proxy = KLPenaltyProxy(original, collector=collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+            severity="high",
+            expected_behavior="Zero KL penalty",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy()
+
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args[1]
+        assert call_kwargs["fault_type"] == "zero_kl"
+        assert call_kwargs["target_layer"] == "Algorithm"
+        assert call_kwargs["severity"] == "high"
+        collector.record_fault_outcome.assert_called_once_with("fault123", "success", 0)
+
+    def test_failure_recording(self):
+        """Collector records failure when strategy raises exception."""
+        original = MagicMock(side_effect=RuntimeError("KL computation failed"))
+        collector = MagicMock()
+        collector.record_fault_injection = MagicMock(return_value="fault123")
+        collector.record_fault_outcome = MagicMock()
+
+        proxy = KLPenaltyProxy(original, collector=collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(RuntimeError, match="KL computation failed"):
+            proxy()
+
+        collector.record_fault_outcome.assert_called_once()
+        call_args = collector.record_fault_outcome.call_args[0]
+        assert call_args[0] == "fault123"
+        assert "exception" in call_args[1]
+        assert "RuntimeError" in call_args[1]
+
+    def test_tuple_output_handling(self):
+        """KLPenaltyProxy handles tuple outputs correctly."""
+        kl = torch.ones(5)
+        penalty = torch.ones(5) * 2
+        original = MagicMock(return_value=(kl.clone(), penalty.clone()))
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.NEGATIVE_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        torch.testing.assert_close(result[0], -kl)
+        torch.testing.assert_close(result[1], -penalty)
+
+    def test_list_output_handling(self):
+        """KLPenaltyProxy handles list outputs correctly."""
+        kl = torch.ones(5)
+        penalty = torch.ones(5) * 2
+        original = MagicMock(return_value=[kl.clone(), penalty.clone()])
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        assert isinstance(result, list)
+        assert len(result) == 2
+        torch.testing.assert_close(result[0], torch.zeros(5))
+        torch.testing.assert_close(result[1], torch.zeros(5))
+
+    def test_passes_args_to_original(self):
+        """KLPenaltyProxy passes arguments to original function."""
+        original = MagicMock(return_value={"kl": torch.ones(5)})
+        proxy = KLPenaltyProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.ZERO_KL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        policy_logprobs = torch.randn(5)
+        ref_logprobs = torch.randn(5)
+        proxy(policy_logprobs, ref_logprobs, kl_coef=0.1)
+
+        original.assert_called_once_with(policy_logprobs, ref_logprobs, kl_coef=0.1)

@@ -667,3 +667,32 @@
 - This unblocks: 9.2-kl-penalty-proxy, 11.3-grpo-proxy
 - Next priorities: 9.2-kl-penalty-proxy (Algorithm), 9.3-generate-proxy (Inference), 9.4-compute-values-proxy (Worker), 15.1-unit-tests
 
+
+[2026-01-24] 9.2-kl-penalty-proxy: COMPLETED
+- Added KLPenaltyProxy class to ralph/proxies/algorithm.py
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, WRONG_KL, ZERO_KL, EXTREME_KL, NEGATIVE_KL}
+- Implemented _get_layer() returning 'Algorithm'
+- Implemented strategy methods:
+  - _strategy_delay: Adds configurable delay before KL computation (default 10.0s)
+  - _strategy_wrong_kl: Scales KL penalty by configurable factor (default 10.0x)
+  - _strategy_zero_kl: Returns zero for all KL values (removes regularization)
+  - _strategy_extreme_kl: Sets KL to extreme value (default 1e6) simulating catastrophic divergence
+  - _strategy_negative_kl: Negates KL values, simulating sign bug that would encourage divergence
+- All strategies recognize KL-related keys: 'kl', 'kl_penalty', 'kl_divergence', 'kl_loss', 'kl_coef'
+- All strategies preserve non-KL keys unchanged
+- Supports tensor, dict, list, tuple, and scalar (int/float) results
+- Decorated with @ProxyRegistry.register('apply_kl_penalty')
+- Updated ralph/proxies/__init__.py to export KLPenaltyProxy
+- Created 45+ comprehensive unit tests in tests/ralph/test_algorithm_proxy.py:
+  - TestKLPenaltyProxyRegistration: Registration and supported strategies
+  - TestKLPenaltyProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestKLPenaltyDelayStrategy: Config usage, default delay
+  - TestWrongKLStrategy: Scaling values, default scale, kl_penalty key, other keys preserved, scalar
+  - TestZeroKLStrategy: Zero returns, kl_penalty, shape preservation, dtype preservation, scalars
+  - TestExtremeKLStrategy: Default value, custom value, shape preservation, kl_penalty, scalars
+  - TestNegativeKLStrategy: Negation, kl_penalty, shape preservation, other keys preserved, scalars
+  - TestKLPenaltyProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, tuple/list output, args passing
+- All syntax verified via py_compile
+- This unblocks: 11.3-grpo-proxy (which uses similar algorithm patterns)
+- Next priorities: 9.3-generate-proxy (Inference P1), 9.4-compute-values-proxy (Worker P1), 15.1-unit-tests
