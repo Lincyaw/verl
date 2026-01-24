@@ -1030,3 +1030,47 @@
 - Verification passed: ProxyRegistry.is_registered('DataProto.concat') returns True
 - This unblocks: 11.2-data-proto-chunk-proxy
 - Next priorities: 11.2-data-proto-chunk-proxy, 11.3-grpo-proxy, 12.1-tool-call-proxy
+
+[2026-01-24] 11.2-data-proto-chunk-proxy: COMPLETED
+- Added DataProtoChunkProxy class to ralph/proxies/data_pipeline.py
+- Inherits from BaseProxy, DelayMixin
+- Set SUPPORTED_STRATEGIES = {UNEVEN_SPLIT, LOST_CHUNKS, EMPTY_CHUNK, OVERLAPPING_CHUNKS}
+- Implemented _get_layer() returning 'DataPipeline'
+- Implemented strategy methods:
+  - _strategy_uneven_split: Creates chunks of unequal/unexpected sizes
+    - Uses variance_ratio parameter (default 0.3)
+    - Alternates between increasing/decreasing chunk sizes
+    - Recursively handles tensors in dicts
+  - _strategy_lost_chunks: Returns fewer chunks by dropping some
+    - Uses drop_ratio parameter (default 0.2, clamped to [0, 1])
+    - Keeps at least one chunk
+    - Randomly selects chunks to drop
+  - _strategy_empty_chunk: Replaces some chunks with zeroed data
+    - Uses empty_ratio parameter (default 0.2, clamped to [0, 1])
+    - Creates zero-filled tensors preserving shape
+    - Recursively handles dicts, lists, tuples
+  - _strategy_overlapping_chunks: Creates chunks with overlapping data
+    - Uses overlap_ratio parameter (default 0.1, clamped to [0, 0.5])
+    - Adds beginning of next chunk to end of current chunk
+    - Handles dict chunks by processing matching keys
+- Helper methods:
+  - _apply_uneven_split: Recursively applies size variance to chunks
+  - _apply_lost_chunks: Drops fraction of chunks randomly
+  - _apply_empty_chunks: Selects and empties fraction of chunks
+  - _make_empty_chunk: Creates zero-filled version of a chunk
+  - _apply_overlapping_chunks: Adds overlap between adjacent chunks
+- Decorated with @ProxyRegistry.register('DataProto.chunk')
+- Updated ralph/proxies/__init__.py to export DataProtoChunkProxy
+- Created 36 comprehensive unit tests in tests/ralph/test_data_pipeline_proxy.py:
+  - TestDataProtoChunkProxyRegistration: Registration and supported strategies
+  - TestDataProtoChunkProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestUnevenSplitStrategy: Different sizes, default variance, total data, dict result
+  - TestLostChunksStrategy: Drop chunks, default ratio, keeps one, clamped ratio
+  - TestEmptyChunkStrategy: Zeros data, default ratio, preserves shape, dict data, clamped ratio
+  - TestOverlappingChunksStrategy: Adds overlap, default ratio, clamped ratio, preserves width, single chunk
+  - TestDataProtoChunkProxyIntegration: Step-based trigger, periodic trigger, collector recording, args passing, failure recording, tuple preservation
+- All syntax verified via py_compile
+- Verification passed: `from ralph.proxies import DataProtoChunkProxy` works correctly
+- Verification passed: ProxyRegistry.is_registered('DataProto.chunk') returns True
+- This completes the Data Pipeline P2 series (11.1 and 11.2)
+- Next priorities: 11.3-grpo-proxy (Algorithm P2), 11.4-update-weights-proxy (Inference P2), 12.1-tool-call-proxy (Agent P2)

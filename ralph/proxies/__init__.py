@@ -75,9 +75,10 @@ except ImportError:
 
 # Data pipeline proxies - imported conditionally to handle missing torch
 try:
-    from ralph.proxies.data_pipeline import DataProtoConcatProxy
+    from ralph.proxies.data_pipeline import DataProtoChunkProxy, DataProtoConcatProxy
 except ImportError:
     DataProtoConcatProxy = None
+    DataProtoChunkProxy = None
 
 __all__ = [
     "BaseProxy",
@@ -101,4 +102,5 @@ __all__ = [
     "ComputeValuesProxy",
     "GPUMemoryInjector",
     "DataProtoConcatProxy",
+    "DataProtoChunkProxy",
 ]

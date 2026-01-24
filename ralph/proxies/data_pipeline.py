@@ -331,3 +331,381 @@ class DataProtoConcatProxy(BaseProxy, DelayMixin):
 
         # Fallback: pass as first positional arg
         return self._original(modified_items, **original_kwargs)
+
+
+@ProxyRegistry.register("DataProto.chunk")
+class DataProtoChunkProxy(BaseProxy, DelayMixin):
+    """
+    Proxy for DataProto.chunk() operations.
+
+    Supports fault injection at the data pipeline level for DataProto chunking.
+    This allows testing how the training pipeline handles corrupted or misaligned
+    data chunks, which is critical for distributed training scenarios.
+
+    Supported strategies:
+    - UNEVEN_SPLIT: Creates chunks of unequal/unexpected sizes
+    - LOST_CHUNKS: Returns fewer chunks than expected (drops some)
+    - EMPTY_CHUNK: Replaces some chunks with empty/zero data
+    - OVERLAPPING_CHUNKS: Creates chunks that overlap or duplicate data
+
+    Config parameters:
+    - UNEVEN_SPLIT: variance_ratio (float, default 0.3) - how much to vary chunk sizes
+    - LOST_CHUNKS: drop_ratio (float, default 0.2) - fraction of chunks to drop
+    - EMPTY_CHUNK: empty_ratio (float, default 0.2) - fraction of chunks to empty
+    - OVERLAPPING_CHUNKS: overlap_ratio (float, default 0.1) - fraction of data to overlap
+
+    Expected input/output:
+    - Input: DataProto or similar object with data to chunk
+    - Output: List of DataProto chunks or similar structure
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.UNEVEN_SPLIT,
+        StrategyType.LOST_CHUNKS,
+        StrategyType.EMPTY_CHUNK,
+        StrategyType.OVERLAPPING_CHUNKS,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "DataPipeline"
+
+    def _strategy_uneven_split(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Create chunks of unequal/unexpected sizes.
+
+        Calls the original chunk operation then modifies the resulting chunks
+        to have inconsistent sizes. This simulates scenarios where chunking
+        produces unexpected distributions.
+
+        Args:
+            *args: Positional arguments to pass to original chunk
+            **kwargs: Keyword arguments to pass to original chunk
+
+        Returns:
+            List of chunks with uneven sizes.
+
+        Config parameters:
+            variance_ratio (float): How much to vary chunk sizes (default 0.3).
+                Higher values produce more uneven distribution.
+        """
+        # Call original to get chunks
+        result = self._original(*args, **kwargs)
+
+        # Get variance ratio from config
+        variance_ratio = self._config.parameters.get("variance_ratio", 0.3)
+
+        # Apply uneven split to result
+        return self._apply_uneven_split(result, variance_ratio)
+
+    def _apply_uneven_split(self, chunks: Any, variance_ratio: float) -> Any:
+        """
+        Apply uneven sizing to chunks.
+
+        For a list of chunks, redistributes data between adjacent chunks
+        to create size variance.
+
+        Args:
+            chunks: Result chunks (list, tuple, or other iterable)
+            variance_ratio: How much to vary sizes (0.0 to 1.0)
+
+        Returns:
+            Modified chunks with uneven sizes
+        """
+        try:
+            import torch
+        except ImportError:
+            return chunks
+
+        if not isinstance(chunks, (list, tuple)):
+            return chunks
+
+        if len(chunks) <= 1:
+            return chunks
+
+        # Convert to list for modification
+        chunk_list = list(chunks)
+        modified_chunks = []
+
+        for i, chunk in enumerate(chunk_list):
+            if isinstance(chunk, torch.Tensor) and chunk.dim() > 0:
+                # Apply size variance to batch dimension
+                batch_size = chunk.shape[0]
+                # Alternate between increasing and decreasing
+                direction = 1 if i % 2 == 0 else -1
+                delta = int(batch_size * variance_ratio * direction)
+
+                if direction > 0 and delta > 0:
+                    # Increase size by duplicating some entries
+                    extra_indices = torch.randint(0, batch_size, (delta,))
+                    extra_data = chunk[extra_indices]
+                    modified_chunks.append(torch.cat([chunk, extra_data], dim=0))
+                elif direction < 0 and abs(delta) < batch_size:
+                    # Decrease size by removing entries
+                    new_size = batch_size + delta  # delta is negative
+                    modified_chunks.append(chunk[:new_size])
+                else:
+                    modified_chunks.append(chunk)
+            elif isinstance(chunk, dict):
+                # Recursively apply to dict values
+                modified_chunks.append(
+                    {k: self._apply_uneven_split([v], variance_ratio)[0] if isinstance(v, torch.Tensor) else v
+                     for k, v in chunk.items()}
+                )
+            else:
+                modified_chunks.append(chunk)
+
+        return type(chunks)(modified_chunks) if isinstance(chunks, tuple) else modified_chunks
+
+    def _strategy_lost_chunks(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Return fewer chunks than expected by dropping some.
+
+        Calls the original chunk operation then removes a fraction of the
+        resulting chunks. This simulates scenarios where some chunks are
+        lost during distribution.
+
+        Args:
+            *args: Positional arguments to pass to original chunk
+            **kwargs: Keyword arguments to pass to original chunk
+
+        Returns:
+            List of chunks with some dropped.
+
+        Config parameters:
+            drop_ratio (float): Fraction of chunks to drop (default 0.2).
+                Value between 0.0 and 1.0.
+        """
+        # Call original to get chunks
+        result = self._original(*args, **kwargs)
+
+        # Get drop ratio from config
+        drop_ratio = self._config.parameters.get("drop_ratio", 0.2)
+        drop_ratio = max(0.0, min(1.0, drop_ratio))  # Clamp to [0, 1]
+
+        # Apply chunk dropping
+        return self._apply_lost_chunks(result, drop_ratio)
+
+    def _apply_lost_chunks(self, chunks: Any, drop_ratio: float) -> Any:
+        """
+        Drop a fraction of chunks from the result.
+
+        Args:
+            chunks: Result chunks (list, tuple, or other iterable)
+            drop_ratio: Fraction of chunks to drop (0.0 to 1.0)
+
+        Returns:
+            Modified chunks with some dropped
+        """
+        if not isinstance(chunks, (list, tuple)):
+            return chunks
+
+        if len(chunks) == 0:
+            return chunks
+
+        # Calculate how many chunks to drop
+        num_to_drop = max(0, int(len(chunks) * drop_ratio))
+
+        # Don't drop everything - keep at least one
+        if num_to_drop >= len(chunks):
+            num_to_drop = len(chunks) - 1 if len(chunks) > 1 else 0
+
+        if num_to_drop > 0:
+            # Randomly select indices to keep
+            indices_to_keep = sorted(
+                random.sample(range(len(chunks)), len(chunks) - num_to_drop)
+            )
+            filtered_chunks = [chunks[i] for i in indices_to_keep]
+        else:
+            filtered_chunks = list(chunks)
+
+        return type(chunks)(filtered_chunks) if isinstance(chunks, tuple) else filtered_chunks
+
+    def _strategy_empty_chunk(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Replace some chunks with empty/zero data.
+
+        Calls the original chunk operation then replaces a fraction of the
+        resulting chunks with empty or zeroed data. This simulates scenarios
+        where chunk data is corrupted or lost but the chunk structure remains.
+
+        Args:
+            *args: Positional arguments to pass to original chunk
+            **kwargs: Keyword arguments to pass to original chunk
+
+        Returns:
+            List of chunks with some emptied.
+
+        Config parameters:
+            empty_ratio (float): Fraction of chunks to empty (default 0.2).
+                Value between 0.0 and 1.0.
+        """
+        # Call original to get chunks
+        result = self._original(*args, **kwargs)
+
+        # Get empty ratio from config
+        empty_ratio = self._config.parameters.get("empty_ratio", 0.2)
+        empty_ratio = max(0.0, min(1.0, empty_ratio))  # Clamp to [0, 1]
+
+        # Apply chunk emptying
+        return self._apply_empty_chunks(result, empty_ratio)
+
+    def _apply_empty_chunks(self, chunks: Any, empty_ratio: float) -> Any:
+        """
+        Replace a fraction of chunks with empty/zero data.
+
+        Args:
+            chunks: Result chunks (list, tuple, or other iterable)
+            empty_ratio: Fraction of chunks to empty (0.0 to 1.0)
+
+        Returns:
+            Modified chunks with some emptied
+        """
+        try:
+            import torch
+        except ImportError:
+            return chunks
+
+        if not isinstance(chunks, (list, tuple)):
+            return chunks
+
+        if len(chunks) == 0:
+            return chunks
+
+        # Calculate how many chunks to empty
+        num_to_empty = max(0, int(len(chunks) * empty_ratio))
+
+        if num_to_empty == 0:
+            return chunks
+
+        # Randomly select indices to empty
+        indices_to_empty = set(
+            random.sample(range(len(chunks)), min(num_to_empty, len(chunks)))
+        )
+
+        modified_chunks = []
+        for i, chunk in enumerate(chunks):
+            if i in indices_to_empty:
+                modified_chunks.append(self._make_empty_chunk(chunk))
+            else:
+                modified_chunks.append(chunk)
+
+        return type(chunks)(modified_chunks) if isinstance(chunks, tuple) else modified_chunks
+
+    def _make_empty_chunk(self, chunk: Any) -> Any:
+        """
+        Create an empty version of a chunk.
+
+        For tensors, creates a zero-filled tensor of same shape.
+        For dicts, recursively empties tensor values.
+
+        Args:
+            chunk: Original chunk to empty
+
+        Returns:
+            Empty version of the chunk
+        """
+        try:
+            import torch
+        except ImportError:
+            return chunk
+
+        if isinstance(chunk, torch.Tensor):
+            return torch.zeros_like(chunk)
+        elif isinstance(chunk, dict):
+            return {k: self._make_empty_chunk(v) for k, v in chunk.items()}
+        elif isinstance(chunk, list):
+            return [self._make_empty_chunk(item) for item in chunk]
+        elif isinstance(chunk, tuple):
+            return tuple(self._make_empty_chunk(item) for item in chunk)
+        else:
+            # For other objects, try to create an empty version
+            if hasattr(chunk, "zeros_like"):
+                return chunk.zeros_like()
+            return chunk
+
+    def _strategy_overlapping_chunks(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Create chunks that overlap or duplicate data.
+
+        Calls the original chunk operation then modifies adjacent chunks to
+        include overlapping data. This simulates scenarios where chunk
+        boundaries are miscalculated.
+
+        Args:
+            *args: Positional arguments to pass to original chunk
+            **kwargs: Keyword arguments to pass to original chunk
+
+        Returns:
+            List of chunks with overlapping data.
+
+        Config parameters:
+            overlap_ratio (float): Fraction of data to overlap (default 0.1).
+                Value between 0.0 and 0.5.
+        """
+        # Call original to get chunks
+        result = self._original(*args, **kwargs)
+
+        # Get overlap ratio from config
+        overlap_ratio = self._config.parameters.get("overlap_ratio", 0.1)
+        overlap_ratio = max(0.0, min(0.5, overlap_ratio))  # Clamp to [0, 0.5]
+
+        # Apply overlapping
+        return self._apply_overlapping_chunks(result, overlap_ratio)
+
+    def _apply_overlapping_chunks(self, chunks: Any, overlap_ratio: float) -> Any:
+        """
+        Create overlapping data between adjacent chunks.
+
+        For each pair of adjacent chunks, adds data from one to the other
+        to simulate boundary overlap.
+
+        Args:
+            chunks: Result chunks (list, tuple, or other iterable)
+            overlap_ratio: Fraction of data to overlap (0.0 to 0.5)
+
+        Returns:
+            Modified chunks with overlapping data
+        """
+        try:
+            import torch
+        except ImportError:
+            return chunks
+
+        if not isinstance(chunks, (list, tuple)):
+            return chunks
+
+        if len(chunks) <= 1:
+            return chunks
+
+        modified_chunks = list(chunks)
+
+        # For each pair of adjacent chunks, add overlap
+        for i in range(len(modified_chunks) - 1):
+            current_chunk = modified_chunks[i]
+            next_chunk = modified_chunks[i + 1]
+
+            if isinstance(current_chunk, torch.Tensor) and isinstance(next_chunk, torch.Tensor):
+                if current_chunk.dim() > 0 and next_chunk.dim() > 0:
+                    # Calculate overlap size based on smaller chunk
+                    min_size = min(current_chunk.shape[0], next_chunk.shape[0])
+                    overlap_size = max(1, int(min_size * overlap_ratio))
+
+                    # Add beginning of next chunk to end of current chunk
+                    overlap_data = next_chunk[:overlap_size]
+                    modified_chunks[i] = torch.cat([current_chunk, overlap_data], dim=0)
+
+            elif isinstance(current_chunk, dict) and isinstance(next_chunk, dict):
+                # Handle dict chunks by processing each matching key
+                for key in current_chunk:
+                    if key in next_chunk:
+                        curr_val = current_chunk[key]
+                        next_val = next_chunk[key]
+                        if isinstance(curr_val, torch.Tensor) and isinstance(next_val, torch.Tensor):
+                            if curr_val.dim() > 0 and next_val.dim() > 0:
+                                min_size = min(curr_val.shape[0], next_val.shape[0])
+                                overlap_size = max(1, int(min_size * overlap_ratio))
+                                overlap_data = next_val[:overlap_size]
+                                current_chunk[key] = torch.cat([curr_val, overlap_data], dim=0)
+
+        return type(chunks)(modified_chunks) if isinstance(chunks, tuple) else modified_chunks

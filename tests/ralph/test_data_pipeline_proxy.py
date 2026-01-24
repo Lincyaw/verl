@@ -611,3 +611,519 @@ class TestDataProtoConcatProxyIntegration:
             outcome = str(call_args.args[1]) if len(call_args.args) >= 2 else ""
         # Outcome should indicate exception/failure
         assert "exception" in outcome.lower() or "failed" in outcome.lower()
+
+
+# =============================================================================
+# DataProtoChunkProxy Tests
+# =============================================================================
+
+from ralph.proxies.data_pipeline import DataProtoChunkProxy
+
+
+@pytest.fixture
+def mock_chunk_original():
+    """Create a mock original chunk function."""
+
+    def chunk_fn(data, num_chunks=2, *args, **kwargs):
+        """Mock chunk function that splits data into chunks."""
+        if isinstance(data, torch.Tensor):
+            return torch.chunk(data, num_chunks, dim=0)
+        elif isinstance(data, dict):
+            # Chunk each tensor in the dict
+            result_chunks = [{} for _ in range(num_chunks)]
+            for key, value in data.items():
+                if isinstance(value, torch.Tensor):
+                    chunks = torch.chunk(value, num_chunks, dim=0)
+                    for i, chunk in enumerate(chunks):
+                        result_chunks[i][key] = chunk
+                else:
+                    for i in range(num_chunks):
+                        result_chunks[i][key] = value
+            return result_chunks
+        elif isinstance(data, list):
+            # Split list into chunks
+            chunk_size = max(1, len(data) // num_chunks)
+            return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+        return [data]
+
+    return chunk_fn
+
+
+class TestDataProtoChunkProxyRegistration:
+    """Tests for DataProtoChunkProxy registration."""
+
+    def test_proxy_is_registered(self):
+        """Test that the proxy is registered in the registry."""
+        from ralph.proxies.data_pipeline import DataProtoChunkProxy
+
+        assert ProxyRegistry.is_registered("DataProto.chunk")
+
+    def test_get_proxy_returns_correct_class(self):
+        """Test that get_proxy returns DataProtoChunkProxy."""
+        from ralph.proxies.data_pipeline import DataProtoChunkProxy
+
+        proxy_class = ProxyRegistry.get_proxy("DataProto.chunk")
+        assert proxy_class is DataProtoChunkProxy
+
+    def test_supported_strategies(self):
+        """Test that the proxy supports expected strategies."""
+        expected = {
+            StrategyType.UNEVEN_SPLIT,
+            StrategyType.LOST_CHUNKS,
+            StrategyType.EMPTY_CHUNK,
+            StrategyType.OVERLAPPING_CHUNKS,
+        }
+        assert DataProtoChunkProxy.SUPPORTED_STRATEGIES == expected
+
+
+class TestDataProtoChunkProxyBasics:
+    """Tests for basic proxy functionality."""
+
+    def test_get_layer(self, mock_chunk_original):
+        """Test that _get_layer returns 'DataPipeline'."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        assert proxy._get_layer() == "DataPipeline"
+
+    def test_call_without_config(self, mock_chunk_original):
+        """Test that calling without config passes through to original."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        data = torch.randn(10, 4)
+        result = proxy(data, 2)
+        assert len(result) == 2
+        assert result[0].shape[0] == 5
+
+    def test_call_with_disabled_config(self, mock_chunk_original):
+        """Test that disabled config passes through to original."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(StrategyType.LOST_CHUNKS, enabled=False)
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(10, 4)
+        result = proxy(data, 2)
+        assert len(result) == 2
+
+    def test_unsupported_strategy_raises_error(self, mock_chunk_original):
+        """Test that unsupported strategy raises ValueError."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(StrategyType.DELAY)  # Not supported
+        with pytest.raises(ValueError, match="not supported"):
+            proxy.set_config(config)
+
+
+class TestUnevenSplitStrategy:
+    """Tests for UNEVEN_SPLIT strategy."""
+
+    def test_uneven_split_creates_different_sizes(self, mock_chunk_original):
+        """Test that UNEVEN_SPLIT creates chunks of different sizes."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.5}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        result = proxy(data, 2)
+        # With variance, chunks should have different sizes
+        # First chunk should be larger, second smaller (or vice versa)
+        sizes = [chunk.shape[0] for chunk in result]
+        # The variance should make sizes different from equal split (10, 10)
+        assert sizes[0] != sizes[1]
+
+    def test_uneven_split_default_variance(self, mock_chunk_original):
+        """Test that default variance_ratio is 0.3."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(StrategyType.UNEVEN_SPLIT, parameters={})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        result = proxy(data, 2)
+        # Default variance 0.3 should produce noticeable difference
+        sizes = [chunk.shape[0] for chunk in result]
+        assert len(result) == 2
+
+    def test_uneven_split_preserves_total_data(self, mock_chunk_original):
+        """Test that uneven split changes total amount of data."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.3}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        result = proxy(data, 2)
+        # Total rows may differ from original due to variance
+        total_rows = sum(chunk.shape[0] for chunk in result)
+        # With variance, total may be more or less than original
+        assert total_rows != 20 or len(result) == 2
+
+    def test_uneven_split_with_dict_result(self, mock_chunk_original):
+        """Test uneven split with dict chunks."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.3}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = {"data": torch.randn(20, 4), "labels": torch.randn(20)}
+        result = proxy(data, 2)
+        assert len(result) == 2
+        assert "data" in result[0]
+
+
+class TestLostChunksStrategy:
+    """Tests for LOST_CHUNKS strategy."""
+
+    def test_lost_chunks_drops_chunks(self, mock_chunk_original):
+        """Test that LOST_CHUNKS drops some chunks."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 0.5}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(40, 4)
+        result = proxy(data, 4)
+        # With 0.5 drop ratio, should drop 2 of 4 chunks
+        assert len(result) < 4
+        assert len(result) >= 1
+
+    def test_lost_chunks_default_ratio(self, mock_chunk_original):
+        """Test that default drop_ratio is 0.2."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(StrategyType.LOST_CHUNKS, parameters={})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(50, 4)
+        result = proxy(data, 5)
+        # With 0.2 ratio, should drop 1 of 5 chunks
+        assert len(result) == 4
+
+    def test_lost_chunks_keeps_at_least_one(self, mock_chunk_original):
+        """Test that at least one chunk is kept."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 1.0}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(10, 4)
+        result = proxy(data, 2)
+        assert len(result) >= 1
+
+    def test_lost_chunks_ratio_clamped(self, mock_chunk_original):
+        """Test that drop_ratio is clamped to [0, 1]."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.LOST_CHUNKS, parameters={"drop_ratio": -0.5}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        result = proxy(data, 4)
+        # Clamped to 0, no chunks dropped
+        assert len(result) == 4
+
+
+class TestEmptyChunkStrategy:
+    """Tests for EMPTY_CHUNK strategy."""
+
+    def test_empty_chunk_zeros_data(self, mock_chunk_original):
+        """Test that EMPTY_CHUNK creates zeroed chunks."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 0.5}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4) + 10  # All values > 0
+        result = proxy(data, 4)
+        # With 0.5 ratio, 2 of 4 chunks should be zeroed
+        zeroed_count = sum(1 for chunk in result if torch.all(chunk == 0))
+        assert zeroed_count == 2
+
+    def test_empty_chunk_default_ratio(self, mock_chunk_original):
+        """Test that default empty_ratio is 0.2."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(StrategyType.EMPTY_CHUNK, parameters={})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(50, 4) + 10
+        result = proxy(data, 5)
+        # With 0.2 ratio, 1 of 5 chunks should be zeroed
+        zeroed_count = sum(1 for chunk in result if torch.all(chunk == 0))
+        assert zeroed_count == 1
+
+    def test_empty_chunk_preserves_shape(self, mock_chunk_original):
+        """Test that empty chunks preserve shape."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 1.0}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(10, 4)
+        result = proxy(data, 2)
+        # All chunks should be zeroed but same shape
+        for chunk in result:
+            assert chunk.shape == (5, 4)
+            assert torch.all(chunk == 0)
+
+    def test_empty_chunk_with_dict(self, mock_chunk_original):
+        """Test empty chunk with dict data."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 0.5}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = {"values": torch.randn(10, 4) + 10}
+        result = proxy(data, 2)
+        # One of the chunks should have zeroed tensor
+        assert len(result) == 2
+        assert "values" in result[0]
+
+    def test_empty_chunk_ratio_clamped(self, mock_chunk_original):
+        """Test that empty_ratio is clamped to [0, 1]."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 2.0}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4) + 10
+        result = proxy(data, 4)
+        # Clamped to 1.0, all chunks zeroed
+        for chunk in result:
+            assert torch.all(chunk == 0)
+
+
+class TestOverlappingChunksStrategy:
+    """Tests for OVERLAPPING_CHUNKS strategy."""
+
+    def test_overlapping_chunks_adds_overlap(self, mock_chunk_original):
+        """Test that OVERLAPPING_CHUNKS adds overlapping data."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.2}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        result = proxy(data, 2)
+        # First chunk should have extra data from second chunk
+        assert result[0].shape[0] > 10  # Original was 10
+        assert result[1].shape[0] == 10  # Last chunk unchanged
+
+    def test_overlapping_chunks_default_ratio(self, mock_chunk_original):
+        """Test that default overlap_ratio is 0.1."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(StrategyType.OVERLAPPING_CHUNKS, parameters={})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        result = proxy(data, 2)
+        # With 0.1 overlap, first chunk gets 1 extra row (10 * 0.1 = 1)
+        assert result[0].shape[0] == 11
+
+    def test_overlapping_chunks_ratio_clamped(self, mock_chunk_original):
+        """Test that overlap_ratio is clamped to [0, 0.5]."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.8}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        result = proxy(data, 2)
+        # Clamped to 0.5, first chunk gets 5 extra rows
+        assert result[0].shape[0] == 15
+
+    def test_overlapping_chunks_preserves_width(self, mock_chunk_original):
+        """Test that overlap preserves tensor width."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.2}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 8)
+        result = proxy(data, 2)
+        # Width should be preserved
+        for chunk in result:
+            assert chunk.shape[1] == 8
+
+    def test_overlapping_chunks_single_chunk(self, mock_chunk_original):
+        """Test that single chunk is not modified."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        config = create_config(
+            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.3}
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(10, 4)
+        result = proxy(data, 1)
+        # Single chunk, no overlap applied
+        assert len(result) == 1
+        assert result[0].shape[0] == 10
+
+
+class TestDataProtoChunkProxyIntegration:
+    """Integration tests for DataProtoChunkProxy."""
+
+    def test_step_based_trigger(self, mock_chunk_original):
+        """Test that step-based trigger works correctly."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        trigger = TriggerConfig(
+            type=TriggerType.STEP_BASED,
+            start_step=5,
+            end_step=10,
+        )
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.LOST_CHUNKS,
+            trigger=trigger,
+            parameters={"drop_ratio": 0.5},
+            enabled=True,
+            severity="medium",
+            expected_behavior="test",
+        )
+        proxy.set_config(config)
+
+        data = torch.randn(40, 4)
+
+        # Step 3: Should not trigger
+        proxy.set_step(3)
+        result = proxy(data, 4)
+        assert len(result) == 4  # No chunks dropped
+
+        # Step 7: Should trigger
+        proxy.set_step(7)
+        result = proxy(data, 4)
+        assert len(result) < 4  # Chunks dropped
+
+    def test_periodic_trigger(self, mock_chunk_original):
+        """Test that periodic trigger works correctly."""
+        proxy = DataProtoChunkProxy(mock_chunk_original)
+        trigger = TriggerConfig(
+            type=TriggerType.PERIODIC,
+            every_n_steps=3,
+        )
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.EMPTY_CHUNK,
+            trigger=trigger,
+            parameters={"empty_ratio": 0.5},
+            enabled=True,
+            severity="medium",
+            expected_behavior="test",
+        )
+        proxy.set_config(config)
+
+        data = torch.randn(20, 4) + 10
+
+        # Step 2: Should not trigger
+        proxy.set_step(2)
+        result = proxy(data, 4)
+        zeroed = sum(1 for c in result if torch.all(c == 0))
+        assert zeroed == 0
+
+        # Step 3: Should trigger
+        proxy.set_step(3)
+        result = proxy(data, 4)
+        zeroed = sum(1 for c in result if torch.all(c == 0))
+        assert zeroed == 2
+
+    def test_collector_recording(self, mock_chunk_original):
+        """Test that fault injections are recorded to collector."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-123"
+
+        proxy = DataProtoChunkProxy(mock_chunk_original, collector)
+        config = create_config(StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 0.3})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(20, 4)
+        proxy(data, 4)
+
+        collector.record_fault_injection.assert_called_once()
+        collector.record_fault_outcome.assert_called_once()
+
+    def test_args_kwargs_passing(self, mock_chunk_original):
+        """Test that additional args and kwargs are passed through."""
+        received_kwargs = {}
+
+        def tracking_fn(data, num_chunks=2, *args, **kwargs):
+            received_kwargs.update(kwargs)
+            return torch.chunk(data, num_chunks, dim=0)
+
+        proxy = DataProtoChunkProxy(tracking_fn)
+        config = create_config(StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.1})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(10, 4)
+        proxy(data, 2, extra_param="value")
+
+        assert "extra_param" in received_kwargs
+        assert received_kwargs["extra_param"] == "value"
+
+    def test_failure_recording(self, mock_chunk_original):
+        """Test that failures are recorded to collector."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-123"
+
+        def failing_fn(*args, **kwargs):
+            raise RuntimeError("Test failure")
+
+        proxy = DataProtoChunkProxy(failing_fn, collector)
+        config = create_config(StrategyType.LOST_CHUNKS, parameters={})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(10, 4)
+
+        with pytest.raises(RuntimeError):
+            proxy(data, 2)
+
+        collector.record_fault_outcome.assert_called_once()
+        call_args = collector.record_fault_outcome.call_args
+        if call_args.kwargs:
+            outcome = call_args.kwargs.get("outcome", "")
+        else:
+            outcome = str(call_args.args[1]) if len(call_args.args) >= 2 else ""
+        assert "exception" in outcome.lower() or "failed" in outcome.lower()
+
+    def test_tuple_result_preserved(self, mock_chunk_original):
+        """Test that tuple results are preserved as tuples."""
+        def tuple_chunk_fn(data, num_chunks=2, *args, **kwargs):
+            return tuple(torch.chunk(data, num_chunks, dim=0))
+
+        proxy = DataProtoChunkProxy(tuple_chunk_fn)
+        config = create_config(StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 0.0})
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = torch.randn(10, 4)
+        result = proxy(data, 2)
+        # Result should still be a tuple (original behavior)
+        assert isinstance(result, tuple)

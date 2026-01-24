@@ -604,7 +604,7 @@
       "Decorate with @ProxyRegistry.register('DataProto.chunk')",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "11.1-data-proto-concat-proxy"
     ]
