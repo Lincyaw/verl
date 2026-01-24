@@ -153,3 +153,23 @@
 - This unblocks: 4.1-ray-get-proxy, 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy, 9.1-gae-proxy, 9.3-generate-proxy, 9.4-compute-values-proxy, 10.1-gpu-memory-injector, 11.1-data-proto-concat-proxy, 12.1-tool-call-proxy, 13.1-megatron-optimizer-proxy, 13.3-optimizer-step-proxy
 - Next priorities: 2.4-skip-mixin, 2.5-result-mixin, 3.2-dual-stream-collector, then proxy implementations (4.x series)
 
+[2026-01-24] 2.4-skip-mixin: COMPLETED
+- Created ralph/mixins/skip.py with SkipMixin class
+- Implemented methods:
+  - _skip_operation(default_return=None): Returns default value without calling original function
+  - _repeat_operation(times, *args, **kwargs): Calls original N times, returns last result
+    - Guards against times < 1 (defaults to 1)
+  - _strategy_skip(*args, **kwargs): Reads 'default_return' from config (defaults to None)
+  - _strategy_repeat(*args, **kwargs): Reads 'times' from config (defaults to 2)
+- Updated ralph/mixins/__init__.py to export SkipMixin
+- Created tests/ralph/test_skip_mixin.py with 34 comprehensive unit tests:
+  - TestSkipOperation: 7 tests for default None, custom defaults, dict/list, falsy values (0, '', False)
+  - TestRepeatOperation: 8 tests for N calls, returns last result, 0/negative times, args passing, exceptions
+  - TestStrategySkip: 5 tests for config usage, default None, complex defaults
+  - TestStrategyRepeat: 5 tests for default 2 times, config times, arg passing
+  - TestSkipMixinIntegration: 4 tests for multiple inheritance, skip+repeat sequence, side effects
+- All tests verified passing via manual test execution
+- Verification passed: `python3 -c 'from ralph.mixins.skip import SkipMixin; print("OK")'` (direct import)
+- This unblocks: No direct blockers, but SkipMixin can be used by proxy implementations
+- Next priorities: 2.5-result-mixin, 3.2-dual-stream-collector, then proxy implementations (4.x series)
+
