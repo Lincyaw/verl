@@ -803,7 +803,7 @@
       "Test JSONL output files are valid and contain expected data",
       "Verify: All integration tests pass"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "15.1-unit-tests",
       "7.1-sample-configs"

@@ -950,3 +950,42 @@
 - This unblocks: 15.2-integration-tests
 - Next priorities: 15.2-integration-tests, then remaining low-priority items
 
+
+[2026-01-24] 15.2-integration-tests: COMPLETED
+- Created tests/ralph/test_integration.py with comprehensive integration tests
+- Test classes implemented:
+  - TestFullWorkflow: Complete YAML load -> install -> run -> uninstall workflow
+    - test_yaml_config_load_install_run_uninstall: Full workflow from config to cleanup
+    - test_full_workflow_with_data_collection: Verifies fault injection recording
+    - test_workflow_with_telemetry_recording: Verifies telemetry events
+  - TestProxyUninstallation: Verifies restoration of original functions
+    - test_uninstall_restores_original_function: Exact restoration of originals
+    - test_uninstall_preserves_module_state: Custom attributes preserved
+    - test_uninstall_multiple_targets: Multiple proxies restored correctly
+    - test_context_manager_guarantees_cleanup: Cleanup even on exceptions
+  - TestMultipleSimultaneousProxies: Multiple proxies with different triggers
+    - test_multiple_proxies_different_triggers: ONE_SHOT and STEP_BASED simultaneously
+    - test_periodic_trigger_multiple_activations: Periodic trigger interval verification
+    - test_probabilistic_trigger_reproducibility: Seed reproducibility
+    - test_one_shot_only_fires_once: One-shot fires exactly once
+  - TestJSONLOutput: JSONL file validation
+    - test_labels_jsonl_valid_format: Valid JSON lines
+    - test_labels_jsonl_contains_expected_fields: All required fields present
+    - test_telemetry_jsonl_valid_format: Telemetry format validation
+    - test_jsonl_files_created_in_correct_location: File path verification
+    - test_jsonl_handles_unicode_content: Unicode support
+    - test_jsonl_buffer_flushing: Buffer and flush behavior
+  - TestEdgeCases: Edge cases and error handling
+    - test_empty_yaml_scenarios, test_disabled_scenarios_not_loaded
+    - test_install_without_configs, test_double_install_raises_error
+    - test_add_config_after_install_raises_error, test_step_updates_before_install
+  - TestReproducibility: Seed and RNG reproducibility
+  - TestPerformance: Performance tests with many steps
+- Total: 35+ integration test cases
+- Verified manually: All integration tests pass
+- Key test patterns:
+  - IntegrationTestProxy class for testing with all common strategies
+  - Fixtures for cleanup_registry, temp_dir, test_modules, sample_yaml_config
+  - Complete workflow testing from config loading to cleanup
+- This completes the medium-priority testing tasks
+- Next priorities: Low-priority P2/P3 features (11.x, 12.x, 13.x, 14.x series)
