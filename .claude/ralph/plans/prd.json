@@ -433,7 +433,7 @@
       "Decorate with @ProxyRegistry.register('torch.distributed.barrier')",
       "Verify: Unit tests for each of the 4 strategies"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "4.2-all-reduce-proxy"
     ]

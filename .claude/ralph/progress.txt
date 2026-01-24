@@ -582,3 +582,41 @@
 - Total test count in l1_distributed_proxy.py: ~54 tests (27 AllReduceProxy + 27 AllGatherProxy)
 - This unblocks: No direct blockers (8.4-barrier-proxy also depends on 4.2-all-reduce-proxy which is complete)
 - Next priorities: 8.4-barrier-proxy (L1), 9.1-gae-proxy (Algorithm), 15.1-unit-tests
+
+[2026-01-24] 8.4-barrier-proxy: COMPLETED
+- Added BarrierProxy class to ralph/proxies/l1_distributed.py
+- Inherits from BaseProxy, DelayMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, BARRIER_TIMEOUT, BARRIER_SKIP, ASYNC_DESYNC}
+- Implemented _get_layer() returning 'L1'
+- Implemented helper methods:
+  - _get_current_rank(): Returns current process rank (0 if not distributed)
+- Implemented strategy methods:
+  - _strategy_barrier_timeout: Hangs specified rank indefinitely (infinite sleep loop)
+    - Requires timeout_rank parameter, raises ValueError if missing
+    - Other ranks proceed normally with original barrier call
+  - _strategy_barrier_skip: Returns None without calling original barrier
+    - Simulates process skipping synchronization
+    - Can lead to race conditions and inconsistent state
+  - _strategy_async_desync: Adds random delay per rank before barrier
+    - Uses max_delay parameter (default 5.0 seconds)
+    - Supports seed parameter for deterministic per-rank delays
+    - Different ranks get different delays based on seed + rank
+- Config parameters:
+  - DELAY: delay_seconds (float, default 10.0)
+  - BARRIER_TIMEOUT: timeout_rank (int, required)
+  - BARRIER_SKIP: (no parameters required)
+  - ASYNC_DESYNC: max_delay (float, default 5.0), seed (int, optional)
+- Decorated with @ProxyRegistry.register('torch.distributed.barrier')
+- Updated ralph/proxies/__init__.py to export BarrierProxy
+- Created 27 comprehensive unit tests in tests/ralph/test_l1_distributed_proxy.py:
+  - TestBarrierProxyRegistration: Registration and supported strategies verification
+  - TestBarrierProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestBarrierDelayStrategy: Config usage, default delay, group passing
+  - TestBarrierTimeoutStrategy: Missing rank error, non-matching rank, matching rank hangs, kwargs passing
+  - TestBarrierSkipStrategy: Returns without calling original, ignores kwargs
+  - TestAsyncDesyncStrategy: Random delay, default max_delay, seed determinism, different ranks, kwargs passing
+  - TestBarrierProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, rank detection
+- All file syntax verified correct
+- Total test count in l1_distributed_proxy.py: ~81 tests (27 AllReduceProxy + 27 AllGatherProxy + 27 BarrierProxy)
+- This unblocks: No direct blockers (all L1 distributed proxies now complete)
+- Next priorities: 9.1-gae-proxy (Algorithm P1), 9.2-kl-penalty-proxy, 9.3-generate-proxy, 15.1-unit-tests

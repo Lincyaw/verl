@@ -28,10 +28,11 @@ except ImportError:
 
 # L1 Distributed proxies - imported conditionally to handle missing torch
 try:
-    from ralph.proxies.l1_distributed import AllGatherProxy, AllReduceProxy
+    from ralph.proxies.l1_distributed import AllGatherProxy, AllReduceProxy, BarrierProxy
 except ImportError:
     AllReduceProxy = None
     AllGatherProxy = None
+    BarrierProxy = None
 
 # L2 verl proxies - imported conditionally to handle missing torch
 try:
@@ -51,6 +52,7 @@ __all__ = [
     "WorkerDeathError",
     "AllReduceProxy",
     "AllGatherProxy",
+    "BarrierProxy",
     "RewardManagerProxy",
     "CheckpointSaveProxy",
 ]

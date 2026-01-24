@@ -482,3 +482,180 @@ class AllGatherProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
 
         # Call original - this may raise an error due to shape mismatch
         return self._original(tensor_list, tensor, **call_kwargs)
+
+
+@ProxyRegistry.register("torch.distributed.barrier")
+class BarrierProxy(BaseProxy, DelayMixin):
+    """
+    Proxy for torch.distributed.barrier() operations.
+
+    Supports fault injection at the distributed communication level (L1).
+
+    Supported strategies:
+    - DELAY: Adds delay before calling original barrier
+    - BARRIER_TIMEOUT: Causes specified rank to hang indefinitely, simulating timeout
+    - BARRIER_SKIP: Skips the barrier call entirely, returning immediately
+    - ASYNC_DESYNC: Adds random delay per rank to desynchronize processes
+
+    Config parameters:
+    - DELAY: delay_seconds (float, default 10.0) - seconds to delay
+    - BARRIER_TIMEOUT: timeout_rank (int, required) - the rank to hang
+    - BARRIER_SKIP: (no parameters required)
+    - ASYNC_DESYNC: max_delay (float, default 5.0) - max random delay per rank
+                    seed (int, optional) - random seed for reproducibility
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.DELAY,
+        StrategyType.BARRIER_TIMEOUT,
+        StrategyType.BARRIER_SKIP,
+        StrategyType.ASYNC_DESYNC,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "L1"
+
+    def _get_current_rank(self) -> int:
+        """
+        Get the current process rank.
+
+        Returns:
+            The current rank if distributed is initialized, otherwise 0.
+        """
+        if HAS_DIST and dist.is_initialized():
+            return dist.get_rank()
+        return 0
+
+    def _strategy_barrier_timeout(
+        self,
+        group: Any = None,
+        async_op: bool = False,
+        device_ids: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Cause specified rank to hang indefinitely, simulating a barrier timeout.
+
+        The specified rank will enter an infinite sleep loop, while other ranks
+        will proceed normally. This creates a timeout situation where other ranks
+        wait indefinitely for the hanging rank at the barrier.
+
+        Args:
+            group: The process group to work on.
+            async_op: If True, returns a distributed request object.
+            device_ids: Device IDs for NCCL backend.
+            **kwargs: Additional keyword arguments for the original function.
+
+        Returns:
+            Never returns for the timeout rank.
+            Result of original barrier for other ranks.
+
+        Config parameters:
+            timeout_rank (int): The rank that should hang (required).
+
+        Raises:
+            ValueError: If timeout_rank is not specified in config parameters.
+        """
+        timeout_rank = self._config.parameters.get("timeout_rank")
+
+        if timeout_rank is None:
+            raise ValueError(
+                "timeout_rank must be specified in config parameters for BARRIER_TIMEOUT strategy"
+            )
+
+        current_rank = self._get_current_rank()
+
+        if current_rank == timeout_rank:
+            # This rank hangs forever
+            while True:
+                time.sleep(3600)  # Sleep for 1 hour in a loop
+
+        # Other ranks proceed normally
+        call_kwargs = dict(kwargs)
+        if group is not None:
+            call_kwargs["group"] = group
+        call_kwargs["async_op"] = async_op
+        if device_ids is not None:
+            call_kwargs["device_ids"] = device_ids
+
+        return self._original(**call_kwargs)
+
+    def _strategy_barrier_skip(
+        self,
+        group: Any = None,
+        async_op: bool = False,
+        device_ids: Any = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Skip the barrier call entirely, returning immediately.
+
+        This simulates a scenario where a process skips synchronization,
+        which can lead to race conditions and inconsistent state across processes.
+
+        Args:
+            group: The process group to work on.
+            async_op: If True, returns a distributed request object.
+            device_ids: Device IDs for NCCL backend.
+            **kwargs: Additional keyword arguments for the original function.
+
+        Returns:
+            None without calling the original barrier.
+        """
+        # Simply return without calling original
+        return None
+
+    def _strategy_async_desync(
+        self,
+        group: Any = None,
+        async_op: bool = False,
+        device_ids: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Add random delay per rank to desynchronize processes.
+
+        Each rank will experience a different random delay before the barrier,
+        simulating network jitter or varying process execution times.
+        This can help test how the system handles desynchronization.
+
+        Args:
+            group: The process group to work on.
+            async_op: If True, returns a distributed request object.
+            device_ids: Device IDs for NCCL backend.
+            **kwargs: Additional keyword arguments for the original function.
+
+        Returns:
+            Result of the original barrier after the random delay.
+
+        Config parameters:
+            max_delay (float): Maximum delay in seconds (default 5.0).
+            seed (int, optional): Random seed for reproducibility.
+        """
+        import random
+
+        max_delay = self._config.parameters.get("max_delay", 5.0)
+        seed = self._config.parameters.get("seed")
+
+        # Use current rank to create deterministic but different delays per rank
+        current_rank = self._get_current_rank()
+
+        if seed is not None:
+            # Use seed + rank for deterministic but rank-specific delays
+            rng = random.Random(seed + current_rank)
+        else:
+            rng = random.Random()
+
+        delay = rng.uniform(0, max_delay)
+        time.sleep(delay)
+
+        # Build kwargs for original call
+        call_kwargs = dict(kwargs)
+        if group is not None:
+            call_kwargs["group"] = group
+        call_kwargs["async_op"] = async_op
+        if device_ids is not None:
+            call_kwargs["device_ids"] = device_ids
+
+        return self._original(**call_kwargs)

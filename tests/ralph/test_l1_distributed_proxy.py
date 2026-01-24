@@ -1205,3 +1205,532 @@ class TestAllGatherProxyIntegration:
         proxy = AllGatherProxy(lambda tl, t: None)
         world_size = proxy._get_world_size()
         assert world_size == 1
+
+
+# =============================================================================
+# BarrierProxy Tests
+# =============================================================================
+
+from ralph.proxies.l1_distributed import BarrierProxy
+
+
+class TestBarrierProxyRegistration:
+    """Tests for BarrierProxy registration."""
+
+    def test_registered_with_barrier_target(self):
+        """BarrierProxy is registered for 'torch.distributed.barrier' target."""
+        assert ProxyRegistry.is_registered("torch.distributed.barrier")
+        assert ProxyRegistry.get_proxy("torch.distributed.barrier") is BarrierProxy
+
+    def test_supported_strategies(self):
+        """BarrierProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("torch.distributed.barrier")
+        expected = {
+            StrategyType.DELAY,
+            StrategyType.BARRIER_TIMEOUT,
+            StrategyType.BARRIER_SKIP,
+            StrategyType.ASYNC_DESYNC,
+        }
+        assert strategies == expected
+
+
+class TestBarrierProxyBasics:
+    """Tests for basic BarrierProxy functionality."""
+
+    def test_get_layer_returns_l1(self):
+        """_get_layer returns 'L1'."""
+        proxy = BarrierProxy(lambda: None)
+        assert proxy._get_layer() == "L1"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        result = proxy()
+        original.assert_called_once_with()
+        assert result is None
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        result = proxy()
+        original.assert_called_once_with()
+        assert result is None
+
+    def test_unsupported_strategy_raises_error(self):
+        """Unsupported strategy raises ValueError."""
+        proxy = BarrierProxy(lambda: None)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-unsupported",
+            strategy=StrategyType.CORRUPT_TENSOR,  # Not supported by BarrierProxy
+            trigger=trigger,
+        )
+        with pytest.raises(ValueError) as exc_info:
+            proxy.set_config(config)
+        assert "not supported" in str(exc_info.value).lower()
+
+
+class TestBarrierDelayStrategy:
+    """Tests for BarrierProxy DELAY strategy."""
+
+    def test_delay_strategy_with_config(self):
+        """DELAY strategy applies configured delay."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            result = proxy()
+            mock_sleep.assert_called_once_with(0.01)
+            assert result is None
+            original.assert_called_once()
+
+    def test_delay_strategy_default_delay(self):
+        """DELAY strategy uses default delay when not specified."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay-default",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={},  # No delay_seconds
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy()
+            mock_sleep.assert_called_once_with(10.0)  # Default is 10 seconds
+
+    def test_delay_strategy_passes_group(self):
+        """DELAY strategy passes group to original."""
+        mock_group = MagicMock()
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay-group",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep"):
+            proxy(group=mock_group, async_op=True)
+            original.assert_called_once()
+
+
+class TestBarrierTimeoutStrategy:
+    """Tests for BARRIER_TIMEOUT strategy."""
+
+    def test_barrier_timeout_raises_on_missing_rank(self):
+        """BARRIER_TIMEOUT raises ValueError if timeout_rank not specified."""
+        original = MagicMock()
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-timeout-no-rank",
+            strategy=StrategyType.BARRIER_TIMEOUT,
+            trigger=trigger,
+            parameters={},  # Missing timeout_rank
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy()
+        assert "timeout_rank must be specified" in str(exc_info.value)
+
+    def test_barrier_timeout_non_matching_rank_calls_original(self):
+        """BARRIER_TIMEOUT with non-matching rank calls original."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-timeout-other",
+            strategy=StrategyType.BARRIER_TIMEOUT,
+            trigger=trigger,
+            parameters={"timeout_rank": 99},  # Different from current rank (0)
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Mock _get_current_rank to return 0
+        proxy._get_current_rank = MagicMock(return_value=0)
+
+        result = proxy()
+        original.assert_called_once()
+        assert result is None
+
+    def test_barrier_timeout_matching_rank_hangs(self):
+        """BARRIER_TIMEOUT with matching rank enters infinite loop."""
+        original = MagicMock()
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-timeout-match",
+            strategy=StrategyType.BARRIER_TIMEOUT,
+            trigger=trigger,
+            parameters={"timeout_rank": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Mock _get_current_rank to return 0 (matching)
+        proxy._get_current_rank = MagicMock(return_value=0)
+
+        # Mock time.sleep to raise an exception after first call
+        # to break out of the infinite loop
+        with patch("time.sleep", side_effect=InterruptedError("Test break")):
+            with pytest.raises(InterruptedError):
+                proxy()
+
+        # Original should not be called for timeout rank
+        original.assert_not_called()
+
+    def test_barrier_timeout_passes_kwargs_to_non_timeout_rank(self):
+        """BARRIER_TIMEOUT passes kwargs to original for non-timeout ranks."""
+        mock_group = MagicMock()
+        mock_device_ids = [0, 1]
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-timeout-kwargs",
+            strategy=StrategyType.BARRIER_TIMEOUT,
+            trigger=trigger,
+            parameters={"timeout_rank": 99},  # Not current rank
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy._get_current_rank = MagicMock(return_value=0)
+
+        proxy(group=mock_group, async_op=True, device_ids=mock_device_ids)
+        call_kwargs = original.call_args[1]
+        assert call_kwargs["group"] is mock_group
+        assert call_kwargs["async_op"] is True
+        assert call_kwargs["device_ids"] is mock_device_ids
+
+
+class TestBarrierSkipStrategy:
+    """Tests for BARRIER_SKIP strategy."""
+
+    def test_barrier_skip_returns_without_calling_original(self):
+        """BARRIER_SKIP returns None without calling original."""
+        original = MagicMock()
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip",
+            strategy=StrategyType.BARRIER_SKIP,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy()
+
+        original.assert_not_called()
+        assert result is None
+
+    def test_barrier_skip_ignores_all_kwargs(self):
+        """BARRIER_SKIP ignores all kwargs and returns None."""
+        mock_group = MagicMock()
+        original = MagicMock()
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip-kwargs",
+            strategy=StrategyType.BARRIER_SKIP,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy(group=mock_group, async_op=True, device_ids=[0])
+
+        original.assert_not_called()
+        assert result is None
+
+
+class TestAsyncDesyncStrategy:
+    """Tests for ASYNC_DESYNC strategy."""
+
+    def test_async_desync_adds_random_delay(self):
+        """ASYNC_DESYNC adds a random delay before calling original."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-desync",
+            strategy=StrategyType.ASYNC_DESYNC,
+            trigger=trigger,
+            parameters={"max_delay": 1.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy()
+            mock_sleep.assert_called_once()
+            # Delay should be between 0 and max_delay
+            delay_arg = mock_sleep.call_args[0][0]
+            assert 0 <= delay_arg <= 1.0
+            original.assert_called_once()
+
+    def test_async_desync_default_max_delay(self):
+        """ASYNC_DESYNC uses default max_delay of 5.0."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-desync-default",
+            strategy=StrategyType.ASYNC_DESYNC,
+            trigger=trigger,
+            parameters={},  # No max_delay
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy()
+            mock_sleep.assert_called_once()
+            delay_arg = mock_sleep.call_args[0][0]
+            assert 0 <= delay_arg <= 5.0  # Default max is 5.0
+
+    def test_async_desync_with_seed_is_deterministic(self):
+        """ASYNC_DESYNC with seed produces deterministic delays per rank."""
+        original = MagicMock(return_value=None)
+
+        # First call with seed
+        proxy1 = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config1 = FaultConfig(
+            id="test-desync-seed1",
+            strategy=StrategyType.ASYNC_DESYNC,
+            trigger=trigger,
+            parameters={"max_delay": 10.0, "seed": 42},
+        )
+        proxy1.set_config(config1)
+        proxy1.set_step(0)
+        proxy1._get_current_rank = MagicMock(return_value=0)
+
+        with patch("time.sleep") as mock_sleep1:
+            proxy1()
+            delay1 = mock_sleep1.call_args[0][0]
+
+        # Second call with same seed should give same delay
+        proxy2 = BarrierProxy(original)
+        config2 = FaultConfig(
+            id="test-desync-seed2",
+            strategy=StrategyType.ASYNC_DESYNC,
+            trigger=trigger,
+            parameters={"max_delay": 10.0, "seed": 42},
+        )
+        proxy2.set_config(config2)
+        proxy2.set_step(0)
+        proxy2._get_current_rank = MagicMock(return_value=0)
+
+        with patch("time.sleep") as mock_sleep2:
+            proxy2()
+            delay2 = mock_sleep2.call_args[0][0]
+
+        assert delay1 == delay2
+
+    def test_async_desync_different_ranks_get_different_delays(self):
+        """ASYNC_DESYNC produces different delays for different ranks with same seed."""
+        original = MagicMock(return_value=None)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+
+        # Rank 0
+        proxy1 = BarrierProxy(original)
+        config1 = FaultConfig(
+            id="test-desync-rank0",
+            strategy=StrategyType.ASYNC_DESYNC,
+            trigger=trigger,
+            parameters={"max_delay": 10.0, "seed": 100},
+        )
+        proxy1.set_config(config1)
+        proxy1.set_step(0)
+        proxy1._get_current_rank = MagicMock(return_value=0)
+
+        with patch("time.sleep") as mock_sleep1:
+            proxy1()
+            delay_rank0 = mock_sleep1.call_args[0][0]
+
+        # Rank 1
+        proxy2 = BarrierProxy(original)
+        config2 = FaultConfig(
+            id="test-desync-rank1",
+            strategy=StrategyType.ASYNC_DESYNC,
+            trigger=trigger,
+            parameters={"max_delay": 10.0, "seed": 100},
+        )
+        proxy2.set_config(config2)
+        proxy2.set_step(0)
+        proxy2._get_current_rank = MagicMock(return_value=1)
+
+        with patch("time.sleep") as mock_sleep2:
+            proxy2()
+            delay_rank1 = mock_sleep2.call_args[0][0]
+
+        # Different ranks should get different delays
+        assert delay_rank0 != delay_rank1
+
+    def test_async_desync_passes_kwargs(self):
+        """ASYNC_DESYNC passes kwargs to original."""
+        mock_group = MagicMock()
+        mock_device_ids = [0]
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-desync-kwargs",
+            strategy=StrategyType.ASYNC_DESYNC,
+            trigger=trigger,
+            parameters={"max_delay": 0.0},  # No delay for fast test
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep"):
+            proxy(group=mock_group, async_op=True, device_ids=mock_device_ids)
+            call_kwargs = original.call_args[1]
+            assert call_kwargs["group"] is mock_group
+            assert call_kwargs["async_op"] is True
+            assert call_kwargs["device_ids"] is mock_device_ids
+
+
+class TestBarrierProxyIntegration:
+    """Integration tests for BarrierProxy."""
+
+    def test_step_based_triggering(self):
+        """Strategy only triggers within configured step range."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.STEP_BASED, start_step=5, end_step=7)
+        config = FaultConfig(
+            id="test-step-based",
+            strategy=StrategyType.BARRIER_SKIP,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+
+        skipped_steps = []
+        for step in range(10):
+            proxy.set_step(step)
+            original.reset_mock()
+            proxy()
+            if not original.called:
+                skipped_steps.append(step)
+
+        assert skipped_steps == [5, 6, 7]
+
+    def test_periodic_triggering(self):
+        """Periodic trigger triggers at intervals."""
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original)
+        trigger = TriggerConfig(type=TriggerType.PERIODIC, every_n_steps=3)
+        config = FaultConfig(
+            id="test-periodic",
+            strategy=StrategyType.BARRIER_SKIP,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+
+        skipped_steps = []
+        for step in range(10):
+            proxy.set_step(step)
+            original.reset_mock()
+            proxy()
+            if not original.called:
+                skipped_steps.append(step)
+
+        assert skipped_steps == [0, 3, 6, 9]
+
+    def test_collector_records_injection(self):
+        """Collector records fault injection when provided."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-barrier"
+        original = MagicMock(return_value=None)
+        proxy = BarrierProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-recording",
+            strategy=StrategyType.BARRIER_SKIP,
+            trigger=trigger,
+            parameters={},
+            severity="high",
+            expected_behavior="Should skip barrier synchronization",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy()
+
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args[1]
+        assert call_kwargs["fault_type"] == "barrier_skip"
+        assert call_kwargs["target_layer"] == "L1"
+        assert call_kwargs["severity"] == "high"
+
+        collector.record_fault_outcome.assert_called_once()
+        assert collector.record_fault_outcome.call_args[0][0] == "fault-barrier"
+        assert collector.record_fault_outcome.call_args[0][1] == "success"
+
+    def test_collector_records_failure(self):
+        """Collector records failure when strategy raises exception."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-err"
+        original = MagicMock()
+        proxy = BarrierProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-failure-recording",
+            strategy=StrategyType.BARRIER_TIMEOUT,
+            trigger=trigger,
+            parameters={},  # Missing required 'timeout_rank'
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError):
+            proxy()
+
+        # Should record failure
+        collector.record_fault_outcome.assert_called_once()
+        assert collector.record_fault_outcome.call_args[0][0] == "fault-err"
+        assert collector.record_fault_outcome.call_args[0][1] == "failure"
+
+    def test_get_current_rank_without_distributed(self):
+        """_get_current_rank returns 0 when distributed not initialized."""
+        proxy = BarrierProxy(lambda: None)
+        rank = proxy._get_current_rank()
+        assert rank == 0
