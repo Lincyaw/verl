@@ -259,3 +259,36 @@
 - This unblocks: 8.1-ray-put-proxy, 8.2-execute-all-proxy, 5.1-injection-engine (partial)
 - Next priorities: 4.2-all-reduce-proxy, 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy
 
+
+
+[2026-01-24] 4.2-all-reduce-proxy: COMPLETED
+- Created ralph/proxies/l1_distributed.py with AllReduceProxy class
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, CORRUPT_TENSOR, INJECT_NAN, INJECT_INF, DEADLOCK}
+- Implemented _get_layer() returning 'L1'
+- Implemented _get_current_rank() helper to get current process rank (returns 0 if not distributed)
+- Implemented strategy methods (all modify tensor in-place before calling original):
+  - _strategy_corrupt_tensor: Adds Gaussian noise to tensor before all_reduce
+  - _strategy_inject_nan: Injects NaN values into tensor before all_reduce
+  - _strategy_inject_inf: Injects +/-Inf values into tensor before all_reduce
+  - _strategy_deadlock: Hangs specified rank in infinite sleep loop
+- Config parameters:
+  - CORRUPT_TENSOR: noise_scale (float, default 0.1)
+  - INJECT_NAN: nan_ratio (float, default 0.001)
+  - INJECT_INF: inf_ratio (float, default 0.001), positive (bool, default True)
+  - DEADLOCK: deadlock_rank (int, required) - raises ValueError if missing
+- Decorated with @ProxyRegistry.register('torch.distributed.all_reduce')
+- Updated ralph/proxies/__init__.py to export AllReduceProxy (with conditional import)
+- Created tests/ralph/test_l1_distributed_proxy.py with 27 comprehensive unit tests:
+  - TestAllReduceProxyRegistration: Registration and supported strategies verification
+  - TestAllReduceProxyBasics: _get_layer, call without config, disabled config
+  - TestDelayStrategy: Config usage, default delay, kwargs passing
+  - TestCorruptTensorStrategy: Modifies input, default noise scale, kwargs passing
+  - TestInjectNanStrategy: NaN injection, default ratio, kwargs passing
+  - TestInjectInfStrategy: Positive/negative Inf injection, default ratio, kwargs passing
+  - TestDeadlockStrategy: Missing rank error, non-matching rank calls original, matching rank hangs
+  - TestAllReduceProxyIntegration: Step-based triggering, periodic trigger, collector recording, rank detection
+- All 27 tests pass
+- This unblocks: 8.3-all-gather-proxy, 8.4-barrier-proxy, 5.1-injection-engine (partial)
+- Next priorities: 4.3-reward-manager-proxy, 4.4-checkpoint-save-proxy, 5.1-injection-engine
+

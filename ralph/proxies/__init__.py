@@ -13,4 +13,10 @@ except ImportError:
     RayGetProxy = None
     ObjectLostError = None
 
-__all__ = ["BaseProxy", "RayGetProxy", "ObjectLostError"]
+# L1 Distributed proxies - imported conditionally to handle missing torch
+try:
+    from ralph.proxies.l1_distributed import AllReduceProxy
+except ImportError:
+    AllReduceProxy = None
+
+__all__ = ["BaseProxy", "RayGetProxy", "ObjectLostError", "AllReduceProxy"]
