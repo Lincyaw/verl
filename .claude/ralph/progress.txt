@@ -476,3 +476,37 @@
   - checkpoint_resilience.yaml: 9 scenarios (4 enabled)
 - This unblocks: 15.2-integration-tests (which requires sample configs)
 - Next priorities: 8.1-ray-put-proxy, 8.2-execute-all-proxy, 9.1-gae-proxy, 15.1-unit-tests
+
+[2026-01-24] 8.1-ray-put-proxy: COMPLETED
+- Added RayPutProxy class to ralph/proxies/l0_ray.py
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin
+- Set SUPPORTED_STRATEGIES = {DELAY, CORRUPT_TENSOR, STORE_FULL, SILENT_DROP}
+- Implemented _get_layer() returning 'L0'
+- Implemented strategy methods:
+  - _strategy_corrupt_tensor: Corrupts tensor data BEFORE storing (differs from RayGetProxy which corrupts on retrieval)
+  - _strategy_store_full: Raises ObjectStoreFullError simulating object store out of space
+  - _strategy_silent_drop: Returns DummyObjectRef without storing data (simulates silent data loss)
+  - DELAY: Inherited from DelayMixin, works out of the box
+- Created supporting classes:
+  - ObjectStoreFullError: Fallback exception when Ray not installed
+  - DummyObjectRef: Fake ObjectRef for silent drop simulation (hashable, comparable)
+- Config parameters:
+  - DELAY: delay_seconds (float, default 10.0)
+  - CORRUPT_TENSOR: noise_scale (float, default 0.1)
+  - STORE_FULL: message (str, optional) - custom error message
+  - SILENT_DROP: object_id (str, optional) - custom object ID for dummy ref
+- Decorated with @ProxyRegistry.register('ray.put')
+- Updated ralph/proxies/__init__.py to export RayPutProxy, ObjectStoreFullError, DummyObjectRef
+- Created 20 comprehensive unit tests in tests/ralph/test_l0_ray_proxy.py:
+  - TestRayPutProxyRegistration: Registration and supported strategies verification
+  - TestRayPutProxyBasics: _get_layer, call without config, disabled config
+  - TestRayPutDelayStrategy: Config usage, default delay
+  - TestRayPutCorruptTensorStrategy: Corrupt before store, dict values, default scale
+  - TestStoreFulStrategy: Raises error, custom message, error attributes
+  - TestSilentDropStrategy: Returns dummy ref, custom/default object_id
+  - TestDummyObjectRef: repr, hash, equality, default id
+  - TestRayPutProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording
+- Syntax verification passed for all files
+- Total test count: 47 tests (27 RayGetProxy + 20 RayPutProxy)
+- This unblocks: No direct blockers
+- Next priorities: 8.2-execute-all-proxy, 8.3-all-gather-proxy, 9.1-gae-proxy, 15.1-unit-tests

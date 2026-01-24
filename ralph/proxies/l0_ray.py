@@ -178,3 +178,157 @@ class RayGetProxy(BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin):
                 results[i] = None
 
         return results
+
+
+class ObjectStoreFullError(Exception):
+    """
+    Fallback exception for when Ray is not installed.
+
+    Mimics ray.exceptions.ObjectStoreFullError for testing purposes.
+    """
+
+    def __init__(self, message: str = "Object store is full"):
+        self.message = message
+        super().__init__(message)
+
+
+class DummyObjectRef:
+    """
+    A dummy ObjectRef for simulating silent drops.
+
+    This class mimics a Ray ObjectRef but contains no actual data.
+    When ray.get() is called on this, it will fail or return unexpected results.
+    """
+
+    def __init__(self, object_id: str = "dummy"):
+        self._object_id = object_id
+
+    def __repr__(self) -> str:
+        return f"DummyObjectRef({self._object_id})"
+
+    def __hash__(self) -> int:
+        return hash(self._object_id)
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, DummyObjectRef):
+            return self._object_id == other._object_id
+        return False
+
+
+@ProxyRegistry.register("ray.put")
+class RayPutProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin):
+    """
+    Proxy for ray.put() operations.
+
+    Supports fault injection at the Ray object store level (L0).
+
+    Supported strategies:
+    - DELAY: Adds delay before calling original ray.put
+    - CORRUPT_TENSOR: Corrupts tensor data before storing
+    - STORE_FULL: Raises ObjectStoreFullError simulating storage full
+    - SILENT_DROP: Returns dummy ObjectRef without storing data
+
+    Config parameters:
+    - DELAY: delay_seconds (float, default 10.0) - seconds to delay
+    - CORRUPT_TENSOR: noise_scale (float, default 0.1)
+    - STORE_FULL: message (str, optional) - custom error message
+    - SILENT_DROP: object_id (str, optional) - custom object ID for dummy ref
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.DELAY,
+        StrategyType.CORRUPT_TENSOR,
+        StrategyType.STORE_FULL,
+        StrategyType.SILENT_DROP,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "L0"
+
+    def _strategy_corrupt_tensor(
+        self,
+        value: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Corrupt tensor data before storing.
+
+        Modifies tensor values before putting them in the object store.
+        This differs from RayGetProxy's corruption which corrupts on retrieval.
+
+        Args:
+            value: The value to store (tensor or container with tensors)
+            *args: Additional positional arguments to pass to original
+            **kwargs: Additional keyword arguments to pass to original
+
+        Returns:
+            ObjectRef pointing to corrupted data
+        """
+        noise_scale = self._config.parameters.get("noise_scale", 0.1)
+        corrupted_value = self._corrupt_result_tensors(value, noise_scale)
+        return self._original(corrupted_value, *args, **kwargs)
+
+    def _strategy_store_full(
+        self,
+        value: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Simulate ray ObjectStoreFullError.
+
+        Raises ObjectStoreFullError as if the object store ran out of space.
+        The original function is never called.
+
+        Args:
+            value: The value to store (ignored)
+            *args: Additional positional arguments (ignored)
+            **kwargs: Additional keyword arguments (ignored)
+
+        Raises:
+            ray.exceptions.ObjectStoreFullError: If Ray is installed
+            ObjectStoreFullError: If Ray is not installed (fallback)
+        """
+        # Get custom message from config if provided
+        message = self._config.parameters.get(
+            "message", "Object store full: cannot store object"
+        )
+
+        if HAS_RAY:
+            # Ray's ObjectStoreFullError may have different signature
+            try:
+                raise ray.exceptions.ObjectStoreFullError(message)
+            except (AttributeError, TypeError):
+                # Fallback if the exception class has different signature
+                raise ObjectStoreFullError(message)
+        else:
+            raise ObjectStoreFullError(message)
+
+    def _strategy_silent_drop(
+        self,
+        value: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Silently drop the object and return a dummy ObjectRef.
+
+        Instead of storing the actual object, returns a dummy reference
+        that will fail when ray.get() is called on it. This simulates
+        a silent data loss scenario.
+
+        Args:
+            value: The value to store (ignored, not actually stored)
+            *args: Additional positional arguments (ignored)
+            **kwargs: Additional keyword arguments (ignored)
+
+        Returns:
+            DummyObjectRef: A fake ObjectRef that contains no data
+        """
+        # Get custom object_id from config if provided
+        object_id = self._config.parameters.get(
+            "object_id", f"dropped_{id(value)}"
+        )
+        return DummyObjectRef(object_id)

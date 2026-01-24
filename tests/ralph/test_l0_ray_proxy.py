@@ -454,3 +454,427 @@ class TestRayGetProxyIntegration:
         collector.record_fault_outcome.assert_called_once()
         assert collector.record_fault_outcome.call_args[0][0] == "fault-123"
         assert collector.record_fault_outcome.call_args[0][1] == "success"
+
+
+# =============================================================================
+# RayPutProxy Tests
+# =============================================================================
+
+from ralph.proxies.l0_ray import DummyObjectRef, ObjectStoreFullError, RayPutProxy
+
+
+class TestRayPutProxyRegistration:
+    """Tests for RayPutProxy registration."""
+
+    def test_registered_with_ray_put_target(self):
+        """RayPutProxy is registered for 'ray.put' target."""
+        assert ProxyRegistry.is_registered("ray.put")
+        assert ProxyRegistry.get_proxy("ray.put") is RayPutProxy
+
+    def test_supported_strategies(self):
+        """RayPutProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("ray.put")
+        expected = {
+            StrategyType.DELAY,
+            StrategyType.CORRUPT_TENSOR,
+            StrategyType.STORE_FULL,
+            StrategyType.SILENT_DROP,
+        }
+        assert strategies == expected
+
+
+class TestRayPutProxyBasics:
+    """Tests for basic RayPutProxy functionality."""
+
+    def test_get_layer_returns_l0(self):
+        """_get_layer returns 'L0'."""
+        proxy = RayPutProxy(lambda x: x)
+        assert proxy._get_layer() == "L0"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        original = MagicMock(return_value="object_ref")
+        proxy = RayPutProxy(original)
+        result = proxy("value", kwarg="extra")
+        original.assert_called_once_with("value", kwarg="extra")
+        assert result == "object_ref"
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        original = MagicMock(return_value="object_ref")
+        proxy = RayPutProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            enabled=False,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        result = proxy("value")
+        original.assert_called_once_with("value")
+        assert result == "object_ref"
+
+
+class TestRayPutDelayStrategy:
+    """Tests for RayPutProxy DELAY strategy."""
+
+    def test_delay_strategy_with_config(self):
+        """DELAY strategy applies configured delay."""
+        original = MagicMock(return_value="delayed_ref")
+        proxy = RayPutProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            result = proxy("data")
+            mock_sleep.assert_called_once_with(0.01)
+            assert result == "delayed_ref"
+
+    def test_delay_strategy_default_delay(self):
+        """DELAY strategy uses default delay when not specified."""
+        original = MagicMock(return_value="ref")
+        proxy = RayPutProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-delay",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy("data")
+            mock_sleep.assert_called_once_with(10.0)
+
+
+class TestRayPutCorruptTensorStrategy:
+    """Tests for RayPutProxy CORRUPT_TENSOR strategy."""
+
+    def test_corrupt_tensor_before_put(self):
+        """CORRUPT_TENSOR strategy corrupts tensor before storing."""
+        tensor = torch.ones(10, 10)
+        stored_value = None
+
+        def capture_put(value):
+            nonlocal stored_value
+            stored_value = value.clone() if isinstance(value, torch.Tensor) else value
+            return "ref"
+
+        proxy = RayPutProxy(capture_put)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-corrupt",
+            strategy=StrategyType.CORRUPT_TENSOR,
+            trigger=trigger,
+            parameters={"noise_scale": 1.0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy(tensor.clone())
+        assert result == "ref"
+        # Stored value should be corrupted (different from original)
+        assert stored_value is not None
+        assert not torch.equal(stored_value, tensor)
+        assert stored_value.shape == tensor.shape
+
+    def test_corrupt_tensor_dict_value(self):
+        """CORRUPT_TENSOR strategy corrupts tensors in dict values."""
+        value = {"tensor": torch.ones(5), "string": "hello"}
+        stored_value = None
+
+        def capture_put(v):
+            nonlocal stored_value
+            stored_value = v
+            return "ref"
+
+        proxy = RayPutProxy(capture_put)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-corrupt-dict",
+            strategy=StrategyType.CORRUPT_TENSOR,
+            trigger=trigger,
+            parameters={"noise_scale": 0.5},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy({"tensor": torch.ones(5), "string": "hello"})
+        assert stored_value["string"] == "hello"  # Non-tensor preserved
+        assert stored_value["tensor"].shape == torch.ones(5).shape
+
+    def test_corrupt_tensor_default_noise_scale(self):
+        """CORRUPT_TENSOR strategy uses default noise scale."""
+        tensor = torch.zeros(100)
+        stored_value = None
+
+        def capture_put(v):
+            nonlocal stored_value
+            stored_value = v.clone() if isinstance(v, torch.Tensor) else v
+            return "ref"
+
+        proxy = RayPutProxy(capture_put)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-default",
+            strategy=StrategyType.CORRUPT_TENSOR,
+            trigger=trigger,
+            parameters={},  # Default noise_scale = 0.1
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy(tensor.clone())
+        # With default 0.1 noise scale, values should be small but non-zero
+        assert not torch.equal(stored_value, tensor)
+
+
+class TestStoreFulStrategy:
+    """Tests for RayPutProxy STORE_FULL strategy."""
+
+    def test_store_full_raises_error(self):
+        """STORE_FULL strategy raises ObjectStoreFullError."""
+        original = MagicMock()
+        proxy = RayPutProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-store-full",
+            strategy=StrategyType.STORE_FULL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ObjectStoreFullError) as exc_info:
+            proxy("data_to_store")
+        assert "Object store full" in str(exc_info.value)
+        original.assert_not_called()
+
+    def test_store_full_custom_message(self):
+        """STORE_FULL strategy uses custom message."""
+        proxy = RayPutProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-custom-msg",
+            strategy=StrategyType.STORE_FULL,
+            trigger=trigger,
+            parameters={"message": "Custom error: storage exhausted"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ObjectStoreFullError) as exc_info:
+            proxy("data")
+        assert "Custom error: storage exhausted" in str(exc_info.value)
+
+    def test_store_full_error_attributes(self):
+        """ObjectStoreFullError has correct attributes."""
+        error = ObjectStoreFullError("test message")
+        assert error.message == "test message"
+        assert str(error) == "test message"
+
+
+class TestSilentDropStrategy:
+    """Tests for RayPutProxy SILENT_DROP strategy."""
+
+    def test_silent_drop_returns_dummy_ref(self):
+        """SILENT_DROP strategy returns DummyObjectRef."""
+        original = MagicMock()
+        proxy = RayPutProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-silent-drop",
+            strategy=StrategyType.SILENT_DROP,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("data_to_drop")
+        assert isinstance(result, DummyObjectRef)
+        original.assert_not_called()
+
+    def test_silent_drop_custom_object_id(self):
+        """SILENT_DROP strategy uses custom object_id."""
+        proxy = RayPutProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-custom-id",
+            strategy=StrategyType.SILENT_DROP,
+            trigger=trigger,
+            parameters={"object_id": "custom_id_123"},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("data")
+        assert isinstance(result, DummyObjectRef)
+        assert result._object_id == "custom_id_123"
+
+    def test_silent_drop_default_object_id(self):
+        """SILENT_DROP uses unique default object_id based on value id."""
+        proxy = RayPutProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-default-id",
+            strategy=StrategyType.SILENT_DROP,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        data = "my_data"
+        result = proxy(data)
+        assert isinstance(result, DummyObjectRef)
+        assert result._object_id.startswith("dropped_")
+
+
+class TestDummyObjectRef:
+    """Tests for DummyObjectRef class."""
+
+    def test_dummy_ref_repr(self):
+        """DummyObjectRef has correct repr."""
+        ref = DummyObjectRef("test_id")
+        assert repr(ref) == "DummyObjectRef(test_id)"
+
+    def test_dummy_ref_hash(self):
+        """DummyObjectRef is hashable."""
+        ref1 = DummyObjectRef("id1")
+        ref2 = DummyObjectRef("id1")
+        ref3 = DummyObjectRef("id2")
+        assert hash(ref1) == hash(ref2)
+        assert hash(ref1) != hash(ref3)
+
+    def test_dummy_ref_equality(self):
+        """DummyObjectRef equality works correctly."""
+        ref1 = DummyObjectRef("id1")
+        ref2 = DummyObjectRef("id1")
+        ref3 = DummyObjectRef("id2")
+        assert ref1 == ref2
+        assert ref1 != ref3
+        assert ref1 != "id1"  # Not equal to non-DummyObjectRef
+
+    def test_dummy_ref_default_id(self):
+        """DummyObjectRef uses default id if not provided."""
+        ref = DummyObjectRef()
+        assert ref._object_id == "dummy"
+
+
+class TestRayPutProxyIntegration:
+    """Integration tests for RayPutProxy."""
+
+    def test_strategy_only_triggers_at_configured_step(self):
+        """Strategy only triggers at configured step."""
+        original = MagicMock(return_value="ref")
+        proxy = RayPutProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=5)
+        config = FaultConfig(
+            id="test-step",
+            strategy=StrategyType.STORE_FULL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        # Steps 0-4 should work
+        for step in range(5):
+            proxy.set_step(step)
+            result = proxy("data")
+            assert result == "ref"
+
+        # Step 5 should raise
+        proxy.set_step(5)
+        with pytest.raises(ObjectStoreFullError):
+            proxy("data")
+
+        # Step 6 should work again (one-shot)
+        proxy.set_step(6)
+        result = proxy("data")
+        assert result == "ref"
+
+    def test_periodic_trigger(self):
+        """Periodic trigger triggers at intervals."""
+        original = MagicMock(return_value="ref")
+        proxy = RayPutProxy(original)
+        trigger = TriggerConfig(type=TriggerType.PERIODIC, every_n_steps=3)
+        config = FaultConfig(
+            id="test-periodic",
+            strategy=StrategyType.STORE_FULL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+
+        # Steps 0, 3, 6 should trigger (step % 3 == 0)
+        trigger_steps = []
+        for step in range(10):
+            proxy.set_step(step)
+            try:
+                proxy("data")
+            except ObjectStoreFullError:
+                trigger_steps.append(step)
+
+        assert trigger_steps == [0, 3, 6, 9]
+
+    def test_collector_records_injection(self):
+        """Collector records fault injection when provided."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-456"
+        original = MagicMock(return_value="ref")
+        proxy = RayPutProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-recording",
+            strategy=StrategyType.DELAY,
+            trigger=trigger,
+            parameters={"delay_seconds": 0.0},
+            severity="medium",
+            expected_behavior="Should delay put operation",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep"):
+            proxy("data")
+
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args
+        assert call_kwargs[1]["fault_type"] == "delay"
+        assert call_kwargs[1]["target_layer"] == "L0"
+        assert call_kwargs[1]["severity"] == "medium"
+
+        collector.record_fault_outcome.assert_called_once()
+        assert collector.record_fault_outcome.call_args[0][0] == "fault-456"
+        assert collector.record_fault_outcome.call_args[0][1] == "success"
+
+    def test_collector_records_failure(self):
+        """Collector records failure when strategy raises exception."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-789"
+        proxy = RayPutProxy(MagicMock(), collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-failure",
+            strategy=StrategyType.STORE_FULL,
+            trigger=trigger,
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ObjectStoreFullError):
+            proxy("data")
+
+        collector.record_fault_injection.assert_called_once()
+        collector.record_fault_outcome.assert_called_once()
+        # Check outcome is "raised" for exception
+        assert collector.record_fault_outcome.call_args[0][1] == "raised"
