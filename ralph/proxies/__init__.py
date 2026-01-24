@@ -10,17 +10,21 @@ from ralph.proxies.base import BaseProxy
 try:
     from ralph.proxies.l0_ray import (
         DummyObjectRef,
+        ExecuteAllProxy,
         ObjectLostError,
         ObjectStoreFullError,
         RayGetProxy,
         RayPutProxy,
+        WorkerDeathError,
     )
 except ImportError:
     RayGetProxy = None
     RayPutProxy = None
+    ExecuteAllProxy = None
     ObjectLostError = None
     ObjectStoreFullError = None
     DummyObjectRef = None
+    WorkerDeathError = None
 
 # L1 Distributed proxies - imported conditionally to handle missing torch
 try:
@@ -39,9 +43,11 @@ __all__ = [
     "BaseProxy",
     "RayGetProxy",
     "RayPutProxy",
+    "ExecuteAllProxy",
     "ObjectLostError",
     "ObjectStoreFullError",
     "DummyObjectRef",
+    "WorkerDeathError",
     "AllReduceProxy",
     "RewardManagerProxy",
     "CheckpointSaveProxy",

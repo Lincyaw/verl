@@ -510,3 +510,35 @@
 - Total test count: 47 tests (27 RayGetProxy + 20 RayPutProxy)
 - This unblocks: No direct blockers
 - Next priorities: 8.2-execute-all-proxy, 8.3-all-gather-proxy, 9.1-gae-proxy, 15.1-unit-tests
+
+[2026-01-24] 8.2-execute-all-proxy: COMPLETED
+- Added ExecuteAllProxy class to ralph/proxies/l0_ray.py
+- Inherits from BaseProxy, DelayMixin
+- Set SUPPORTED_STRATEGIES = {WORKER_DEATH, STRAGGLER, SKIP_WORKER, DUPLICATE_CALL}
+- Implemented _get_layer() returning 'L0'
+- Implemented strategy methods:
+  - _strategy_worker_death: Kills specified worker using ray.kill (raises WorkerDeathError fallback without Ray)
+  - _strategy_straggler: Adds delay to simulate slow worker (default 60s)
+  - _strategy_skip_worker: Removes result at specified index from results list
+  - _strategy_duplicate_call: Duplicates result at specified index in results list
+- Config parameters:
+  - WORKER_DEATH: kill_worker_idx (int, required) - index of worker to kill
+  - STRAGGLER: straggler_idx (int, required), delay_seconds (float, default 60.0)
+  - SKIP_WORKER: skip_idx (int, required) - index of worker to skip
+  - DUPLICATE_CALL: duplicate_idx (int, required) - index of worker to duplicate
+- Created WorkerDeathError exception class with worker_index and message attributes
+- Decorated with @ProxyRegistry.register('execute_all_sync')
+- Updated ralph/proxies/__init__.py to export ExecuteAllProxy, WorkerDeathError
+- Created 27 comprehensive unit tests in tests/ralph/test_l0_ray_proxy.py:
+  - TestExecuteAllProxyRegistration: Registration and supported strategies verification
+  - TestExecuteAllProxyBasics: _get_layer, call without config, disabled config, unsupported strategy
+  - TestWorkerDeathStrategy: Raises error, requires parameter
+  - TestStragglerStrategy: Adds delay, requires parameter, default delay
+  - TestSkipWorkerStrategy: Removes result, first/last index, requires parameter, out of range
+  - TestDuplicateCallStrategy: Duplicates result, first/last index, requires parameter, out of range
+  - TestWorkerDeathErrorClass: Error attributes, default message
+  - TestExecuteAllProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording
+- Syntax verification passed for all files
+- Total test count in l0_ray_proxy: 74 tests (27 RayGetProxy + 20 RayPutProxy + 27 ExecuteAllProxy)
+- This unblocks: No direct blockers
+- Next priorities: 8.3-all-gather-proxy, 8.4-barrier-proxy, 9.1-gae-proxy, 15.1-unit-tests

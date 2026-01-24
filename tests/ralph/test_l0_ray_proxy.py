@@ -878,3 +878,488 @@ class TestRayPutProxyIntegration:
         collector.record_fault_outcome.assert_called_once()
         # Check outcome is "raised" for exception
         assert collector.record_fault_outcome.call_args[0][1] == "raised"
+
+
+# =============================================================================
+# ExecuteAllProxy Tests
+# =============================================================================
+
+from ralph.proxies.l0_ray import ExecuteAllProxy, WorkerDeathError
+
+
+class TestExecuteAllProxyRegistration:
+    """Tests for ExecuteAllProxy registration."""
+
+    def test_registered_with_execute_all_sync_target(self):
+        """ExecuteAllProxy is registered for 'execute_all_sync' target."""
+        assert ProxyRegistry.is_registered("execute_all_sync")
+        assert ProxyRegistry.get_proxy("execute_all_sync") is ExecuteAllProxy
+
+    def test_supported_strategies(self):
+        """ExecuteAllProxy declares correct supported strategies."""
+        strategies = ProxyRegistry.get_supported_strategies("execute_all_sync")
+        expected = {
+            StrategyType.WORKER_DEATH,
+            StrategyType.STRAGGLER,
+            StrategyType.SKIP_WORKER,
+            StrategyType.DUPLICATE_CALL,
+        }
+        assert strategies == expected
+
+
+class TestExecuteAllProxyBasics:
+    """Tests for basic ExecuteAllProxy functionality."""
+
+    def test_get_layer_returns_l0(self):
+        """_get_layer returns 'L0'."""
+        proxy = ExecuteAllProxy(lambda method, *args: [])
+        assert proxy._get_layer() == "L0"
+
+    def test_call_without_config_calls_original(self):
+        """Proxy calls original when no config is set."""
+        original = MagicMock(return_value=["result1", "result2"])
+        proxy = ExecuteAllProxy(original)
+        result = proxy("test_method", arg1="value")
+        original.assert_called_once_with("test_method", arg1="value")
+        assert result == ["result1", "result2"]
+
+    def test_call_with_disabled_config_calls_original(self):
+        """Proxy calls original when config is disabled."""
+        original = MagicMock(return_value=["result"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.WORKER_DEATH,
+            trigger=trigger,
+            enabled=False,
+            parameters={"kill_worker_idx": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+        result = proxy("method")
+        original.assert_called_once_with("method")
+        assert result == ["result"]
+
+    def test_unsupported_strategy_raises_error(self):
+        """Setting unsupported strategy raises ValueError."""
+        proxy = ExecuteAllProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test",
+            strategy=StrategyType.DELAY,  # Not supported by ExecuteAllProxy
+            trigger=trigger,
+        )
+        with pytest.raises(ValueError) as exc_info:
+            proxy.set_config(config)
+        assert "not supported" in str(exc_info.value)
+
+
+class TestWorkerDeathStrategy:
+    """Tests for WORKER_DEATH strategy."""
+
+    def test_worker_death_raises_error_without_ray(self):
+        """WORKER_DEATH strategy raises WorkerDeathError when Ray not available."""
+        original = MagicMock()
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-worker-death",
+            strategy=StrategyType.WORKER_DEATH,
+            trigger=trigger,
+            parameters={"kill_worker_idx": 1},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        # Without actual Ray, it raises WorkerDeathError
+        with pytest.raises(WorkerDeathError) as exc_info:
+            proxy("generate_sequences")
+        assert exc_info.value.worker_index == 1
+        assert "Worker 1 death" in str(exc_info.value)
+
+    def test_worker_death_requires_kill_worker_idx(self):
+        """WORKER_DEATH strategy requires kill_worker_idx parameter."""
+        proxy = ExecuteAllProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-idx",
+            strategy=StrategyType.WORKER_DEATH,
+            trigger=trigger,
+            parameters={},  # Missing kill_worker_idx
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy("method")
+        assert "kill_worker_idx" in str(exc_info.value)
+
+
+class TestStragglerStrategy:
+    """Tests for STRAGGLER strategy."""
+
+    def test_straggler_adds_delay(self):
+        """STRAGGLER strategy adds delay before execution."""
+        original = MagicMock(return_value=["result1", "result2"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-straggler",
+            strategy=StrategyType.STRAGGLER,
+            trigger=trigger,
+            parameters={"straggler_idx": 0, "delay_seconds": 0.01},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            result = proxy("method")
+            mock_sleep.assert_called_once_with(0.01)
+            assert result == ["result1", "result2"]
+
+    def test_straggler_requires_straggler_idx(self):
+        """STRAGGLER strategy requires straggler_idx parameter."""
+        proxy = ExecuteAllProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-idx",
+            strategy=StrategyType.STRAGGLER,
+            trigger=trigger,
+            parameters={"delay_seconds": 10},  # Missing straggler_idx
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy("method")
+        assert "straggler_idx" in str(exc_info.value)
+
+    def test_straggler_default_delay(self):
+        """STRAGGLER strategy uses default 60s delay."""
+        original = MagicMock(return_value=["result"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-default-delay",
+            strategy=StrategyType.STRAGGLER,
+            trigger=trigger,
+            parameters={"straggler_idx": 0},  # No delay_seconds
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with patch("time.sleep") as mock_sleep:
+            proxy("method")
+            mock_sleep.assert_called_once_with(60.0)
+
+
+class TestSkipWorkerStrategy:
+    """Tests for SKIP_WORKER strategy."""
+
+    def test_skip_worker_removes_result(self):
+        """SKIP_WORKER strategy removes result at specified index."""
+        original = MagicMock(return_value=["r0", "r1", "r2", "r3"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip",
+            strategy=StrategyType.SKIP_WORKER,
+            trigger=trigger,
+            parameters={"skip_idx": 2},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        # Result at index 2 ("r2") should be removed
+        assert result == ["r0", "r1", "r3"]
+        assert len(result) == 3
+
+    def test_skip_worker_first_index(self):
+        """SKIP_WORKER can skip first worker (index 0)."""
+        original = MagicMock(return_value=["first", "second", "third"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip-first",
+            strategy=StrategyType.SKIP_WORKER,
+            trigger=trigger,
+            parameters={"skip_idx": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        assert result == ["second", "third"]
+
+    def test_skip_worker_last_index(self):
+        """SKIP_WORKER can skip last worker."""
+        original = MagicMock(return_value=["first", "second", "third"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-skip-last",
+            strategy=StrategyType.SKIP_WORKER,
+            trigger=trigger,
+            parameters={"skip_idx": 2},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        assert result == ["first", "second"]
+
+    def test_skip_worker_requires_skip_idx(self):
+        """SKIP_WORKER strategy requires skip_idx parameter."""
+        proxy = ExecuteAllProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-idx",
+            strategy=StrategyType.SKIP_WORKER,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy("method")
+        assert "skip_idx" in str(exc_info.value)
+
+    def test_skip_worker_out_of_range_does_nothing(self):
+        """SKIP_WORKER with out of range index leaves results unchanged."""
+        original = MagicMock(return_value=["r0", "r1"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-out-of-range",
+            strategy=StrategyType.SKIP_WORKER,
+            trigger=trigger,
+            parameters={"skip_idx": 10},  # Out of range
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        assert result == ["r0", "r1"]  # Unchanged
+
+
+class TestDuplicateCallStrategy:
+    """Tests for DUPLICATE_CALL strategy."""
+
+    def test_duplicate_call_duplicates_result(self):
+        """DUPLICATE_CALL strategy duplicates result at specified index."""
+        original = MagicMock(return_value=["r0", "r1", "r2"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-duplicate",
+            strategy=StrategyType.DUPLICATE_CALL,
+            trigger=trigger,
+            parameters={"duplicate_idx": 1},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        # Result at index 1 should be duplicated
+        assert result == ["r0", "r1", "r1", "r2"]
+        assert len(result) == 4
+
+    def test_duplicate_call_first_index(self):
+        """DUPLICATE_CALL can duplicate first worker result."""
+        original = MagicMock(return_value=["first", "second"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-dup-first",
+            strategy=StrategyType.DUPLICATE_CALL,
+            trigger=trigger,
+            parameters={"duplicate_idx": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        assert result == ["first", "first", "second"]
+
+    def test_duplicate_call_last_index(self):
+        """DUPLICATE_CALL can duplicate last worker result."""
+        original = MagicMock(return_value=["first", "second", "third"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-dup-last",
+            strategy=StrategyType.DUPLICATE_CALL,
+            trigger=trigger,
+            parameters={"duplicate_idx": 2},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        assert result == ["first", "second", "third", "third"]
+
+    def test_duplicate_call_requires_duplicate_idx(self):
+        """DUPLICATE_CALL strategy requires duplicate_idx parameter."""
+        proxy = ExecuteAllProxy(MagicMock())
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-missing-idx",
+            strategy=StrategyType.DUPLICATE_CALL,
+            trigger=trigger,
+            parameters={},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(ValueError) as exc_info:
+            proxy("method")
+        assert "duplicate_idx" in str(exc_info.value)
+
+    def test_duplicate_call_out_of_range_does_nothing(self):
+        """DUPLICATE_CALL with out of range index leaves results unchanged."""
+        original = MagicMock(return_value=["r0", "r1"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-out-of-range",
+            strategy=StrategyType.DUPLICATE_CALL,
+            trigger=trigger,
+            parameters={"duplicate_idx": 10},  # Out of range
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        result = proxy("method")
+        assert result == ["r0", "r1"]  # Unchanged
+
+
+class TestWorkerDeathErrorClass:
+    """Tests for WorkerDeathError exception class."""
+
+    def test_error_attributes(self):
+        """WorkerDeathError has correct attributes."""
+        error = WorkerDeathError(worker_index=2, message="Test kill")
+        assert error.worker_index == 2
+        assert error.message == "Test kill"
+        assert "Worker 2 death" in str(error)
+
+    def test_error_default_message(self):
+        """WorkerDeathError uses default message."""
+        error = WorkerDeathError(worker_index=0)
+        assert error.worker_index == 0
+        assert "fault injection" in error.message
+
+
+class TestExecuteAllProxyIntegration:
+    """Integration tests for ExecuteAllProxy."""
+
+    def test_strategy_only_triggers_at_configured_step(self):
+        """Strategy only triggers at configured step."""
+        original = MagicMock(return_value=["r0", "r1", "r2"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=5)
+        config = FaultConfig(
+            id="test-step",
+            strategy=StrategyType.SKIP_WORKER,
+            trigger=trigger,
+            parameters={"skip_idx": 1},
+        )
+        proxy.set_config(config)
+
+        # Steps 0-4 should return full results
+        for step in range(5):
+            proxy.set_step(step)
+            result = proxy("method")
+            assert result == ["r0", "r1", "r2"]
+
+        # Step 5 should skip worker
+        proxy.set_step(5)
+        result = proxy("method")
+        assert result == ["r0", "r2"]  # r1 skipped
+
+        # Step 6 should return full results again (one-shot)
+        proxy.set_step(6)
+        result = proxy("method")
+        assert result == ["r0", "r1", "r2"]
+
+    def test_periodic_trigger(self):
+        """Periodic trigger triggers at intervals."""
+        original = MagicMock(return_value=["r0", "r1", "r2"])
+        proxy = ExecuteAllProxy(original)
+        trigger = TriggerConfig(type=TriggerType.PERIODIC, every_n_steps=3)
+        config = FaultConfig(
+            id="test-periodic",
+            strategy=StrategyType.DUPLICATE_CALL,
+            trigger=trigger,
+            parameters={"duplicate_idx": 0},
+        )
+        proxy.set_config(config)
+
+        # Collect results at different steps
+        results = {}
+        for step in range(10):
+            proxy.set_step(step)
+            results[step] = proxy("method")
+
+        # Steps 0, 3, 6, 9 should have duplicate (4 items)
+        for step in [0, 3, 6, 9]:
+            assert len(results[step]) == 4, f"Step {step} should have duplicated result"
+
+        # Other steps should have normal results (3 items)
+        for step in [1, 2, 4, 5, 7, 8]:
+            assert len(results[step]) == 3, f"Step {step} should have normal result"
+
+    def test_collector_records_injection(self):
+        """Collector records fault injection when provided."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-exec-123"
+        original = MagicMock(return_value=["r0", "r1"])
+        proxy = ExecuteAllProxy(original, collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-recording",
+            strategy=StrategyType.SKIP_WORKER,
+            trigger=trigger,
+            parameters={"skip_idx": 0},
+            severity="high",
+            expected_behavior="Should skip first worker",
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        proxy("test_method")
+
+        collector.record_fault_injection.assert_called_once()
+        call_kwargs = collector.record_fault_injection.call_args
+        assert call_kwargs[1]["fault_type"] == "skip_worker"
+        assert call_kwargs[1]["target_layer"] == "L0"
+        assert call_kwargs[1]["severity"] == "high"
+
+        collector.record_fault_outcome.assert_called_once()
+        assert collector.record_fault_outcome.call_args[0][0] == "fault-exec-123"
+        assert collector.record_fault_outcome.call_args[0][1] == "success"
+
+    def test_collector_records_failure(self):
+        """Collector records failure when strategy raises exception."""
+        collector = MagicMock()
+        collector.record_fault_injection.return_value = "fault-exec-456"
+        proxy = ExecuteAllProxy(MagicMock(), collector)
+        trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
+        config = FaultConfig(
+            id="test-failure",
+            strategy=StrategyType.WORKER_DEATH,
+            trigger=trigger,
+            parameters={"kill_worker_idx": 0},
+        )
+        proxy.set_config(config)
+        proxy.set_step(0)
+
+        with pytest.raises(WorkerDeathError):
+            proxy("method")
+
+        collector.record_fault_injection.assert_called_once()
+        collector.record_fault_outcome.assert_called_once()
+        assert collector.record_fault_outcome.call_args[0][1] == "raised"

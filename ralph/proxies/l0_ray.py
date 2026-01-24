@@ -215,6 +215,24 @@ class DummyObjectRef:
         return False
 
 
+class WorkerDeathError(Exception):
+    """
+    Exception raised when a worker death is simulated.
+
+    This exception simulates a Ray actor death scenario where a worker
+    is killed during execution.
+    """
+
+    def __init__(
+        self,
+        worker_index: int,
+        message: str = "Worker killed by fault injection",
+    ):
+        self.worker_index = worker_index
+        self.message = message
+        super().__init__(f"Worker {worker_index} death: {message}")
+
+
 @ProxyRegistry.register("ray.put")
 class RayPutProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin):
     """
@@ -332,3 +350,222 @@ class RayPutProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin):
             "object_id", f"dropped_{id(value)}"
         )
         return DummyObjectRef(object_id)
+
+
+@ProxyRegistry.register("execute_all_sync")
+class ExecuteAllProxy(BaseProxy, DelayMixin):
+    """
+    Proxy for execute_all_sync() operations.
+
+    Supports fault injection at the Ray worker execution level (L0).
+    This proxy intercepts batch execution calls that run a method across
+    all workers in a worker group.
+
+    Supported strategies:
+    - WORKER_DEATH: Simulates killing a specific worker using ray.kill
+    - STRAGGLER: Adds delay to a specific worker's execution
+    - SKIP_WORKER: Skips execution on a specific worker (removes from result)
+    - DUPLICATE_CALL: Duplicates the call to a specific worker
+
+    Config parameters:
+    - WORKER_DEATH: kill_worker_idx (int, required) - index of worker to kill
+    - STRAGGLER: straggler_idx (int, required) - index of worker to delay
+                 delay_seconds (float, default 60.0) - delay amount
+    - SKIP_WORKER: skip_idx (int, required) - index of worker to skip
+    - DUPLICATE_CALL: duplicate_idx (int, required) - index of worker to duplicate
+    """
+
+    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+        StrategyType.WORKER_DEATH,
+        StrategyType.STRAGGLER,
+        StrategyType.SKIP_WORKER,
+        StrategyType.DUPLICATE_CALL,
+    }
+
+    def _get_layer(self) -> str:
+        """Return the layer this proxy belongs to."""
+        return "L0"
+
+    def _strategy_worker_death(
+        self,
+        method_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Simulate worker death by killing a specific worker.
+
+        Uses ray.kill() to terminate the worker at the specified index.
+        If Ray is not available, raises WorkerDeathError instead.
+
+        Args:
+            method_name: The method name to execute on workers
+            *args: Additional positional arguments to pass to execute_all_sync
+            **kwargs: Additional keyword arguments to pass to execute_all_sync
+
+        Raises:
+            ValueError: If kill_worker_idx is not specified in config
+            WorkerDeathError: If Ray is not available (fallback)
+            ray.exceptions.RayActorError: After killing the worker (if Ray available)
+
+        Config parameters:
+            kill_worker_idx (int): Index of the worker to kill (required)
+        """
+        kill_worker_idx = self._config.parameters.get("kill_worker_idx")
+        if kill_worker_idx is None:
+            raise ValueError(
+                "worker_death strategy requires 'kill_worker_idx' parameter"
+            )
+
+        # Get the workers attribute from the object this method is bound to
+        # In verl, execute_all_sync is typically a method on a WorkerGroup
+        # that has a 'workers' attribute containing the Ray actors
+        workers = getattr(self, "_workers", None)
+
+        if workers is not None and HAS_RAY:
+            if 0 <= kill_worker_idx < len(workers):
+                worker = workers[kill_worker_idx]
+                try:
+                    ray.kill(worker)
+                except Exception:
+                    # If kill fails, continue anyway - the fault was attempted
+                    pass
+
+        # For testing without actual workers or Ray, raise a descriptive error
+        if not HAS_RAY:
+            raise WorkerDeathError(
+                worker_index=kill_worker_idx,
+                message="Worker killed by fault injection (Ray not available)",
+            )
+
+        # Call original - this should now fail because the worker is dead
+        return self._original(method_name, *args, **kwargs)
+
+    def _strategy_straggler(
+        self,
+        method_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Simulate a straggler worker by adding delay.
+
+        Adds artificial delay before executing the method, simulating
+        a slow worker that holds up the entire batch operation.
+
+        Note: In a real implementation, this would need to intercept
+        the individual worker calls. For now, this delays the entire
+        execute_all_sync call to simulate the observable effect.
+
+        Args:
+            method_name: The method name to execute on workers
+            *args: Additional positional arguments to pass to execute_all_sync
+            **kwargs: Additional keyword arguments to pass to execute_all_sync
+
+        Returns:
+            Results from the original execute_all_sync call
+
+        Config parameters:
+            straggler_idx (int): Index of the worker to slow down (required for validation)
+            delay_seconds (float): Delay in seconds (default: 60.0)
+        """
+        import time
+
+        straggler_idx = self._config.parameters.get("straggler_idx")
+        if straggler_idx is None:
+            raise ValueError(
+                "straggler strategy requires 'straggler_idx' parameter"
+            )
+
+        delay_seconds = self._config.parameters.get("delay_seconds", 60.0)
+
+        # Apply delay to simulate straggler effect
+        if delay_seconds > 0:
+            time.sleep(delay_seconds)
+
+        return self._original(method_name, *args, **kwargs)
+
+    def _strategy_skip_worker(
+        self,
+        method_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Skip execution on a specific worker.
+
+        Calls the original execute_all_sync, then removes the result
+        at the specified index from the results list. This simulates
+        a worker that silently failed to execute or return its result.
+
+        Args:
+            method_name: The method name to execute on workers
+            *args: Additional positional arguments to pass to execute_all_sync
+            **kwargs: Additional keyword arguments to pass to execute_all_sync
+
+        Returns:
+            Results list with the skipped worker's result removed
+
+        Config parameters:
+            skip_idx (int): Index of the worker to skip (required)
+        """
+        skip_idx = self._config.parameters.get("skip_idx")
+        if skip_idx is None:
+            raise ValueError(
+                "skip_worker strategy requires 'skip_idx' parameter"
+            )
+
+        # Call original to get all results
+        results = self._original(method_name, *args, **kwargs)
+
+        # Remove the result at the specified index
+        if isinstance(results, list):
+            if 0 <= skip_idx < len(results):
+                results = results[:skip_idx] + results[skip_idx + 1:]
+
+        return results
+
+    def _strategy_duplicate_call(
+        self,
+        method_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Duplicate the call to a specific worker.
+
+        Calls the original execute_all_sync, then duplicates the result
+        at the specified index. This simulates a scenario where a worker's
+        method is called twice, potentially causing state inconsistencies.
+
+        Args:
+            method_name: The method name to execute on workers
+            *args: Additional positional arguments to pass to execute_all_sync
+            **kwargs: Additional keyword arguments to pass to execute_all_sync
+
+        Returns:
+            Results list with the specified worker's result duplicated
+
+        Config parameters:
+            duplicate_idx (int): Index of the worker to duplicate (required)
+        """
+        duplicate_idx = self._config.parameters.get("duplicate_idx")
+        if duplicate_idx is None:
+            raise ValueError(
+                "duplicate_call strategy requires 'duplicate_idx' parameter"
+            )
+
+        # Call original to get all results
+        results = self._original(method_name, *args, **kwargs)
+
+        # Duplicate the result at the specified index
+        if isinstance(results, list):
+            if 0 <= duplicate_idx < len(results):
+                duplicated_result = results[duplicate_idx]
+                results = (
+                    results[:duplicate_idx + 1] +
+                    [duplicated_result] +
+                    results[duplicate_idx + 1:]
+                )
+
+        return results

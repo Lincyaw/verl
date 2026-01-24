@@ -397,7 +397,7 @@
       "Decorate with @ProxyRegistry.register('execute_all_sync')",
       "Verify: Unit tests for each of the 4 strategies"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "4.1-ray-get-proxy"
     ]
