@@ -1354,3 +1354,49 @@
 - Verification passed: Registration and strategy declarations correct
 - This unblocks: 13.2-parallelism-proxy
 - Next priorities: 13.2-parallelism-proxy, 14.1-log-parser, 14.2-metrics-hook
+
+[2026-01-24] 13.2-parallelism-proxy: COMPLETED
+- Added ParallelismProxy class to ralph/proxies/megatron.py
+- Inherits from BaseProxy, DelayMixin, TensorCorruptionMixin
+- Set SUPPORTED_STRATEGIES = {PP_STAGE_FAILURE, TP_DESYNC, WRONG_MICRO_BATCH_ROUTING, ACTIVATION_CORRUPTION}
+- Implemented _get_layer() returning 'Megatron'
+- Implemented strategy methods:
+  - _strategy_pp_stage_failure: Simulates pipeline parallel stage failure
+    - Supports failure_type: "hang", "crash", "silent"
+    - hang_duration parameter for hang type (default 300.0s)
+    - Only affects specified fail_stage (required parameter)
+  - _strategy_tp_desync: Causes tensor parallel desynchronization
+    - Supports desync_type: "delay", "skip", "duplicate"
+    - delay_seconds parameter (default 5.0s)
+    - desync_rank parameter (optional, random if not set)
+  - _strategy_wrong_micro_batch_routing: Routes micro-batches incorrectly
+    - swap_stages parameter for swapping pipeline stages
+    - drop_ratio parameter for dropping micro-batches
+    - duplicate_ratio parameter for duplicating micro-batches
+  - _strategy_activation_corruption: Corrupts activations during forward/backward pass
+    - corrupt_type: "noise", "nan", "zero", "scale" (default "noise")
+    - noise_scale parameter (default 0.01)
+    - corrupt_ratio parameter (default 0.1)
+    - target_layers parameter for targeting specific layers
+- Helper methods implemented:
+  - _get_current_rank: Returns current process rank
+  - _get_pipeline_stage: Returns pipeline parallel stage
+  - _get_tensor_parallel_rank: Returns tensor parallel rank
+  - _get_parallel_context: Gets parallel context from bound method or attribute
+  - _apply_activation_corruption: Recursively corrupts activations in results
+  - _corrupt_single_activation: Corrupts a single tensor
+- Decorated with @ProxyRegistry.register('megatron.parallelism')
+- Updated ralph/proxies/__init__.py to export ParallelismProxy
+- Created 45+ comprehensive unit tests in tests/ralph/test_megatron_proxy.py:
+  - TestParallelismProxyRegistration: Registration and supported strategies
+  - TestParallelismProxyBasics: _get_layer, no config, disabled config, unsupported strategy
+  - TestPPStageFailureStrategy: Requires fail_stage, non-matching stage, crash, silent, hang
+  - TestTPDesyncStrategy: delay, skip, duplicate, non-matching rank, default delay
+  - TestWrongMicroBatchRoutingStrategy: No modification, drop, duplicate, swap stages
+  - TestActivationCorruptionStrategy: noise, zero, scale, dict result, target_layers, defaults
+  - TestParallelismProxyIntegration: Step-based trigger, periodic trigger, collector recording, failure recording, args/kwargs passing
+  - TestParallelismProxyHelperMethods: _get_current_rank, _get_pipeline_stage, _get_tensor_parallel_rank, _get_parallel_context
+- All syntax verified via py_compile
+- Verification passed: Registration and strategy declarations correct
+- This completes the Megatron P3 series (MegatronOptimizerProxy and ParallelismProxy)
+- Remaining incomplete items: 14.1-log-parser, 14.2-metrics-hook (both low priority data collection)

@@ -702,7 +702,7 @@
       "Implement each strategy manipulating parallel execution",
       "Verify: Unit tests for each strategy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": [
       "13.1-megatron-optimizer-proxy"
     ]

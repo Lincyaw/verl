@@ -98,9 +98,10 @@ except ImportError:
 
 # Megatron proxies - imported conditionally to handle missing torch
 try:
-    from ralph.proxies.megatron import MegatronOptimizerProxy
+    from ralph.proxies.megatron import MegatronOptimizerProxy, ParallelismProxy
 except ImportError:
     MegatronOptimizerProxy = None
+    ParallelismProxy = None
 
 __all__ = [
     "BaseProxy",
@@ -132,4 +133,5 @@ __all__ = [
     "OptimizerStepProxy",
     "LRSchedulerProxy",
     "MegatronOptimizerProxy",
+    "ParallelismProxy",
 ]
