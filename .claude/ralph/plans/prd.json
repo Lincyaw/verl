@@ -65,7 +65,7 @@
       "Support PERIODIC: trigger every N steps",
       "Verify: Unit test for each trigger type passes"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["1.1-config-classes"]
   },
   {

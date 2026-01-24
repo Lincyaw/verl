@@ -33,3 +33,31 @@
 - Verification passed: `python3 -c 'from ralph.core.registry import ProxyRegistry; print(ProxyRegistry.list_targets())'` returns []
 - This unblocks: 3.1-base-proxy (which unblocks all proxy implementations)
 - Next priorities: 3.1-base-proxy (critical path), 1.3-scheduler, 2.x-mixins, 3.2-dual-stream-collector
+
+[2026-01-24] 1.3-scheduler: COMPLETED
+- Created ralph/core/scheduler.py with TriggerScheduler class
+- Implemented methods:
+  - __init__(seed): Initialize with optional random seed for reproducibility
+  - add_config(config): Add FaultConfig to scheduler (raises ValueError on duplicate)
+  - remove_config(config_id): Remove config (raises KeyError if not found)
+  - get_config(config_id): Retrieve config by ID
+  - list_configs(): List all registered config IDs (sorted)
+  - update_step(step): Update the current training step
+  - get_step(): Get current step
+  - should_trigger(config_id): Check if a specific fault should trigger
+  - get_active_faults(): Get all faults that should trigger at current step
+  - reset_one_shot(config_id): Reset a one-shot trigger to fire again
+  - reset_all_one_shots(): Reset all one-shot triggers
+  - clear(): Clear all configs and reset state
+  - set_seed(seed): Set random seed for probabilistic triggers
+- Trigger type support:
+  - ONE_SHOT: Triggers exactly at specified step, only fires once (tracked in _triggered_one_shots)
+  - STEP_BASED: Triggers within [start_step, end_step] range (inclusive)
+  - PROBABILISTIC: Uses seeded RNG for reproducible probabilistic triggering
+  - PERIODIC: Triggers when current_step % every_n_steps == 0
+- Updated ralph/core/__init__.py to export TriggerScheduler
+- Created tests/ralph/test_scheduler.py with comprehensive unit tests
+- All trigger types verified working via manual testing
+- Verification passed: `python3 -c 'from ralph.core.scheduler import TriggerScheduler; print("OK")'`
+- This unblocks: No direct blockers, but scheduler is used by InjectionEngine
+- Next priorities: 3.1-base-proxy (critical path), 2.x-mixins, 3.2-dual-stream-collector
