@@ -9,7 +9,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional
 
 try:
     import torch
@@ -25,9 +25,9 @@ class MetricSample:
     step: int
     name: str
     value: float
-    tags: Dict[str, str] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "timestamp": self.timestamp,
@@ -51,7 +51,7 @@ class MetricsSummary:
     first_step: int
     last_step: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "metric_name": self.metric_name,
@@ -102,7 +102,7 @@ class VerlMetricsHook:
 
     def __init__(
         self,
-        metric_filter: Optional[List[str]] = None,
+        metric_filter: Optional[list[str]] = None,
         step_interval: int = 1,
         buffer_size: int = 10000,
     ):
@@ -124,8 +124,8 @@ class VerlMetricsHook:
         self._capture_start_step: Optional[int] = None
 
         # Metrics storage
-        self._samples: List[MetricSample] = []
-        self._metrics_by_name: Dict[str, List[MetricSample]] = {}
+        self._samples: list[MetricSample] = []
+        self._metrics_by_name: dict[str, list[MetricSample]] = {}
 
         # Thread safety
         self._lock = threading.Lock()
@@ -185,7 +185,7 @@ class VerlMetricsHook:
         name: str,
         value: float,
         step: Optional[int] = None,
-        tags: Optional[Dict[str, str]] = None,
+        tags: Optional[dict[str, str]] = None,
     ) -> bool:
         """
         Record a single metric value.
@@ -242,9 +242,9 @@ class VerlMetricsHook:
 
     def record_metrics(
         self,
-        data: Dict[str, Union[float, int]],
+        data: dict[str, float | int],
         step: Optional[int] = None,
-        tags: Optional[Dict[str, str]] = None,
+        tags: Optional[dict[str, str]] = None,
     ) -> int:
         """
         Record multiple metrics at once.
@@ -269,7 +269,7 @@ class VerlMetricsHook:
                         recorded += 1
         return recorded
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """
         Get all captured metrics.
 
@@ -309,7 +309,7 @@ class VerlMetricsHook:
                 "capture_info": capture_info,
             }
 
-    def get_metric_values(self, name: str) -> List[float]:
+    def get_metric_values(self, name: str) -> list[float]:
         """
         Get all values for a specific metric.
 
@@ -324,7 +324,7 @@ class VerlMetricsHook:
                 return [s.value for s in self._metrics_by_name[name]]
             return []
 
-    def get_metric_summary(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_metric_summary(self, name: str) -> Optional[dict[str, Any]]:
         """
         Get summary statistics for a specific metric.
 
@@ -339,7 +339,7 @@ class VerlMetricsHook:
                 return self._compute_summary(name, self._metrics_by_name[name]).to_dict()
             return None
 
-    def get_latest_metrics(self) -> Dict[str, float]:
+    def get_latest_metrics(self) -> dict[str, float]:
         """
         Get the most recent value for each metric.
 
@@ -407,7 +407,7 @@ class VerlMetricsHook:
                             return True
         return False
 
-    def _compute_summary(self, name: str, samples: List[MetricSample]) -> MetricsSummary:
+    def _compute_summary(self, name: str, samples: list[MetricSample]) -> MetricsSummary:
         """Compute summary statistics for a list of samples."""
         values = [s.value for s in samples]
         steps = [s.step for s in samples]
@@ -461,7 +461,7 @@ class ThroughputTracker:
         self._start_time: Optional[float] = None
         self._total_tokens: int = 0
         self._total_samples: int = 0
-        self._batch_times: List[float] = []
+        self._batch_times: list[float] = []
         self._lock = threading.Lock()
 
     def start(self) -> None:
@@ -492,7 +492,7 @@ class ThroughputTracker:
             if batch_time is not None:
                 self._batch_times.append(batch_time)
 
-    def get_throughput(self) -> Dict[str, float]:
+    def get_throughput(self) -> dict[str, float]:
         """
         Get current throughput metrics.
 
@@ -548,7 +548,7 @@ class GradientNormTracker:
         Args:
             max_history: Maximum number of gradient norms to store.
         """
-        self._history: List[tuple] = []  # (step, norm)
+        self._history: list[tuple] = []  # (step, norm)
         self._max_history = max_history
         self._lock = threading.Lock()
 
@@ -608,7 +608,7 @@ class GradientNormTracker:
             if len(self._history) > self._max_history:
                 self._history.pop(0)
 
-    def get_history(self) -> List[tuple]:
+    def get_history(self) -> list[tuple]:
         """Get the gradient norm history as list of (step, norm) tuples."""
         with self._lock:
             return list(self._history)

@@ -8,8 +8,9 @@ This mixin enables proxies to corrupt tensor data in various ways:
 - Scaling tensor values
 - Recursively corrupting tensors in nested structures (dict/list/tuple)
 """
+from typing import Any
+
 import torch
-from typing import Any, Union
 
 
 class TensorCorruptionMixin:

@@ -7,7 +7,7 @@ DataProto-based data flow.
 """
 
 import random
-from typing import Any, List, Optional, Set
+from typing import Any, Optional
 
 from ralph.core.config import StrategyType
 from ralph.core.registry import ProxyRegistry
@@ -41,7 +41,7 @@ class DataProtoConcatProxy(BaseProxy, DelayMixin):
     - Output: Concatenated DataProto or similar structure
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DATA_MISMATCH,
         StrategyType.LOST_ITEMS,
         StrategyType.DUPLICATE_ITEMS,
@@ -168,9 +168,7 @@ class DataProtoConcatProxy(BaseProxy, DelayMixin):
 
         if num_to_drop > 0:
             # Randomly select indices to keep
-            indices_to_keep = sorted(
-                random.sample(range(len(items)), len(items) - num_to_drop)
-            )
+            indices_to_keep = sorted(random.sample(range(len(items)), len(items) - num_to_drop))
             filtered_items = [items[i] for i in indices_to_keep]
         else:
             filtered_items = list(items)
@@ -212,9 +210,7 @@ class DataProtoConcatProxy(BaseProxy, DelayMixin):
 
         if num_to_duplicate > 0:
             # Randomly select indices to duplicate
-            indices_to_duplicate = random.sample(
-                range(len(items)), min(num_to_duplicate, len(items))
-            )
+            indices_to_duplicate = random.sample(range(len(items)), min(num_to_duplicate, len(items)))
             duplicated_items = list(items)
             for idx in indices_to_duplicate:
                 duplicated_items.append(items[idx])
@@ -262,7 +258,7 @@ class DataProtoConcatProxy(BaseProxy, DelayMixin):
         # Call original with shuffled items
         return self._call_with_modified_items(args, kwargs, shuffled_items)
 
-    def _extract_items(self, args: tuple, kwargs: dict) -> Optional[List[Any]]:
+    def _extract_items(self, args: tuple, kwargs: dict) -> Optional[list[Any]]:
         """
         Extract the list of items to concatenate from arguments.
 
@@ -296,9 +292,7 @@ class DataProtoConcatProxy(BaseProxy, DelayMixin):
 
         return None
 
-    def _call_with_modified_items(
-        self, original_args: tuple, original_kwargs: dict, modified_items: List[Any]
-    ) -> Any:
+    def _call_with_modified_items(self, original_args: tuple, original_kwargs: dict, modified_items: list[Any]) -> Any:
         """
         Call the original function with modified items.
 
@@ -359,7 +353,7 @@ class DataProtoChunkProxy(BaseProxy, DelayMixin):
     - Output: List of DataProto chunks or similar structure
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.UNEVEN_SPLIT,
         StrategyType.LOST_CHUNKS,
         StrategyType.EMPTY_CHUNK,
@@ -449,8 +443,10 @@ class DataProtoChunkProxy(BaseProxy, DelayMixin):
             elif isinstance(chunk, dict):
                 # Recursively apply to dict values
                 modified_chunks.append(
-                    {k: self._apply_uneven_split([v], variance_ratio)[0] if isinstance(v, torch.Tensor) else v
-                     for k, v in chunk.items()}
+                    {
+                        k: self._apply_uneven_split([v], variance_ratio)[0] if isinstance(v, torch.Tensor) else v
+                        for k, v in chunk.items()
+                    }
                 )
             else:
                 modified_chunks.append(chunk)
@@ -512,9 +508,7 @@ class DataProtoChunkProxy(BaseProxy, DelayMixin):
 
         if num_to_drop > 0:
             # Randomly select indices to keep
-            indices_to_keep = sorted(
-                random.sample(range(len(chunks)), len(chunks) - num_to_drop)
-            )
+            indices_to_keep = sorted(random.sample(range(len(chunks)), len(chunks) - num_to_drop))
             filtered_chunks = [chunks[i] for i in indices_to_keep]
         else:
             filtered_chunks = list(chunks)
@@ -562,7 +556,7 @@ class DataProtoChunkProxy(BaseProxy, DelayMixin):
             Modified chunks with some emptied
         """
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             return chunks
 
@@ -579,9 +573,7 @@ class DataProtoChunkProxy(BaseProxy, DelayMixin):
             return chunks
 
         # Randomly select indices to empty
-        indices_to_empty = set(
-            random.sample(range(len(chunks)), min(num_to_empty, len(chunks)))
-        )
+        indices_to_empty = set(random.sample(range(len(chunks)), min(num_to_empty, len(chunks))))
 
         modified_chunks = []
         for i, chunk in enumerate(chunks):

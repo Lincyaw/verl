@@ -5,7 +5,7 @@ Contains proxy classes for agent-level operations like tool calling
 in agentic AI workflows.
 """
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 from ralph.core.config import StrategyType
 from ralph.core.registry import ProxyRegistry
@@ -44,7 +44,7 @@ class CallToolProxy(BaseProxy, DelayMixin, ExceptionMixin):
     - Output: Tool execution result (varies by tool)
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.TOOL_TIMEOUT,
         StrategyType.TOOL_EXCEPTION,
@@ -614,7 +614,7 @@ class ToolParserProxy(BaseProxy, DelayMixin):
     - Output: Parsed tool call(s) with name and arguments
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.PARSE_FAILURE,
         StrategyType.WRONG_TOOL_NAME,
         StrategyType.WRONG_ARGUMENTS,
@@ -993,7 +993,7 @@ class ToolParserProxy(BaseProxy, DelayMixin):
                 keys = list(modified.keys())
                 values = list(modified.values())
                 random.shuffle(values)
-                modified = dict(zip(keys, values))
+                modified = dict(zip(keys, values, strict=False))
 
             return modified
 
@@ -1105,7 +1105,7 @@ class ToolParserProxy(BaseProxy, DelayMixin):
 
         return self._add_extra_tool_calls(result, extra_tools, position)
 
-    def _generate_extra_tool_calls(self, count: int) -> List[Dict[str, Any]]:
+    def _generate_extra_tool_calls(self, count: int) -> list[dict[str, Any]]:
         """
         Generate spurious extra tool calls.
 
@@ -1129,7 +1129,7 @@ class ToolParserProxy(BaseProxy, DelayMixin):
         import random
         return random.sample(fake_tools, min(count, len(fake_tools)))
 
-    def _add_extra_tool_calls(self, result: Any, extra_tools: List, position: str) -> Any:
+    def _add_extra_tool_calls(self, result: Any, extra_tools: list, position: str) -> Any:
         """
         Add extra tool calls to the result.
 

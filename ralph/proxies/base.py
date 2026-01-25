@@ -5,7 +5,7 @@ Contains the abstract BaseProxy class that all proxy implementations inherit fro
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from ralph.core.config import FaultConfig, StrategyType
 
@@ -33,7 +33,7 @@ class BaseProxy(ABC):
     """
 
     # Subclasses must declare which strategies they support
-    SUPPORTED_STRATEGIES: Set[StrategyType] = set()
+    SUPPORTED_STRATEGIES: set[StrategyType] = set()
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class BaseProxy(ABC):
         self._rng = None  # Random number generator for probabilistic triggers
 
         # Build strategy method mapping
-        self._strategy_methods: Dict[StrategyType, Callable] = {}
+        self._strategy_methods: dict[StrategyType, Callable] = {}
         self._build_strategy_map()
 
     def _build_strategy_map(self) -> None:

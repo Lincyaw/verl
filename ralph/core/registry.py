@@ -4,7 +4,7 @@ Proxy registry for Ralph fault injection framework.
 Contains ProxyRegistry class for registering and retrieving proxy classes.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Set, Type
+from typing import TYPE_CHECKING
 
 from ralph.core.config import StrategyType
 
@@ -30,7 +30,7 @@ class ProxyRegistry:
         strategies = ProxyRegistry.get_supported_strategies('ray.get')
     """
 
-    _registry: Dict[str, Type["BaseProxy"]] = {}
+    _registry: dict[str, type["BaseProxy"]] = {}
 
     @classmethod
     def register(cls, target: str):
@@ -50,7 +50,7 @@ class ProxyRegistry:
                 ...
         """
 
-        def decorator(proxy_class: Type["BaseProxy"]) -> Type["BaseProxy"]:
+        def decorator(proxy_class: type["BaseProxy"]) -> type["BaseProxy"]:
             if target in cls._registry:
                 raise ValueError(
                     f"Target '{target}' is already registered to {cls._registry[target].__name__}"
@@ -61,7 +61,7 @@ class ProxyRegistry:
         return decorator
 
     @classmethod
-    def get_proxy(cls, target: str) -> Type["BaseProxy"]:
+    def get_proxy(cls, target: str) -> type["BaseProxy"]:
         """
         Get the proxy class registered for a target function.
 
@@ -82,7 +82,7 @@ class ProxyRegistry:
         return cls._registry[target]
 
     @classmethod
-    def get_supported_strategies(cls, target: str) -> Set[StrategyType]:
+    def get_supported_strategies(cls, target: str) -> set[StrategyType]:
         """
         Get the set of strategies supported by the proxy for a target.
 
@@ -99,7 +99,7 @@ class ProxyRegistry:
         return getattr(proxy_class, "SUPPORTED_STRATEGIES", set())
 
     @classmethod
-    def list_targets(cls) -> List[str]:
+    def list_targets(cls) -> list[str]:
         """
         List all registered target function names.
 
@@ -148,7 +148,7 @@ class ProxyRegistry:
         cls._registry.clear()
 
     @classmethod
-    def get_all_registrations(cls) -> Dict[str, Type["BaseProxy"]]:
+    def get_all_registrations(cls) -> dict[str, type["BaseProxy"]]:
         """
         Get a copy of all current registrations.
 

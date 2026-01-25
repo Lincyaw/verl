@@ -5,7 +5,7 @@ Contains proxy classes for worker-level operations like value computation
 in the critic worker.
 """
 
-from typing import Any, Set
+from typing import Any
 
 import torch
 
@@ -45,7 +45,7 @@ class ComputeValuesProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultMod
     - Output: Value tensor or dict containing 'values', 'value', 'v' keys
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.WRONG_VALUES,
         StrategyType.CONSTANT_VALUES,

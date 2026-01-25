@@ -4,7 +4,7 @@ Optimizer proxies for Ralph fault injection framework.
 Contains proxy classes for PyTorch optimizer operations like optimizer.step() and lr_scheduler.step().
 """
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Optional
 
 import torch
 
@@ -44,7 +44,7 @@ class OptimizerStepProxy(BaseProxy, DelayMixin, SkipMixin, TensorCorruptionMixin
         or accessed via self._optimizer attribute if available.
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.SKIP,
         StrategyType.REPEAT,
         StrategyType.CORRUPTED_MOMENTUM,
@@ -223,7 +223,7 @@ class LRSchedulerProxy(BaseProxy, DelayMixin, SkipMixin):
     - Output: None (typically)
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.SKIP,
         StrategyType.WRONG_LR,
         StrategyType.LR_SPIKE,

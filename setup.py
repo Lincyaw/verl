@@ -45,7 +45,7 @@ install_requires = [
 ]
 
 TEST_REQUIRES = ["pytest", "pre-commit", "py-spy", "pytest-asyncio", "pytest-rerunfailures"]
-PRIME_REQUIRES = ["pyext"]
+PRIME_REQUIRES = []  # pyext is not compatible with Python 3.11+
 GEO_REQUIRES = ["mathruler", "torchvision", "qwen_vl_utils"]
 GPU_REQUIRES = ["liger-kernel", "flash-attn"]
 MATH_REQUIRES = ["math-verify"]  # Add math-verify as an optional dependency

@@ -5,12 +5,10 @@ Extracts structured events from system logs for correlation with
 fault injection labels.
 """
 
-import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Optional
 
 
 @dataclass
@@ -23,9 +21,9 @@ class LogEvent:
     source_file: str = ""
     line_number: int = 0
     level: str = "INFO"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "timestamp": self.timestamp,
@@ -172,14 +170,14 @@ class RayLogParser:
             return "WARNING" if level == "WARN" else level
         return "INFO"
 
-    def _classify_event(self, line: str) -> Tuple[str, Dict[str, Any]]:
+    def _classify_event(self, line: str) -> tuple[str, dict[str, Any]]:
         """
         Classify a log line into an event type.
 
         Returns:
             Tuple of (event_type, metadata_dict)
         """
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
 
         # Check specific patterns in priority order
         if self.PATTERNS["object_lost"].search(line):
@@ -257,7 +255,7 @@ class RayLogParser:
             metadata=metadata,
         )
 
-    def parse_file(self, file_path: Union[str, Path]) -> List[LogEvent]:
+    def parse_file(self, file_path: str | Path) -> list[LogEvent]:
         """
         Parse a log file and extract structured events.
 
@@ -268,13 +266,13 @@ class RayLogParser:
             List of LogEvent objects
         """
         file_path = Path(file_path)
-        events: List[LogEvent] = []
+        events: list[LogEvent] = []
 
         if not file_path.exists():
             return events
 
         try:
-            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(file_path, encoding="utf-8", errors="replace") as f:
                 for line_num, line in enumerate(f, start=1):
                     event = self.parse_line(
                         line,
@@ -283,12 +281,12 @@ class RayLogParser:
                     )
                     if event:
                         events.append(event)
-        except (IOError, OSError):
+        except OSError:
             pass
 
         return events
 
-    def parse_ray_logs(self, log_dir: Union[str, Path]) -> List[Dict[str, Any]]:
+    def parse_ray_logs(self, log_dir: str | Path) -> list[dict[str, Any]]:
         """
         Parse all Ray logs in a directory and extract structured events.
 
@@ -302,13 +300,13 @@ class RayLogParser:
             List of event dictionaries with timestamp, type, and message
         """
         log_dir = Path(log_dir)
-        all_events: List[LogEvent] = []
+        all_events: list[LogEvent] = []
 
         if not log_dir.exists():
             return []
 
         # Find Ray log files
-        log_files: List[Path] = []
+        log_files: list[Path] = []
 
         # Check for log files matching Ray patterns
         for pattern in self.RAY_LOG_PATTERNS:
@@ -321,7 +319,7 @@ class RayLogParser:
 
         # Remove duplicates while preserving order
         seen: set = set()
-        unique_files: List[Path] = []
+        unique_files: list[Path] = []
         for f in log_files:
             if f not in seen:
                 seen.add(f)
@@ -490,14 +488,14 @@ class NCCLLogParser:
                     return int(group)
         return None
 
-    def _classify_event(self, line: str) -> Tuple[str, Dict[str, Any]]:
+    def _classify_event(self, line: str) -> tuple[str, dict[str, Any]]:
         """
         Classify a log line into an event type.
 
         Returns:
             Tuple of (event_type, metadata_dict)
         """
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
 
         # Extract rank if present
         rank = self._extract_rank(line)
@@ -572,7 +570,7 @@ class NCCLLogParser:
             metadata=metadata,
         )
 
-    def parse_nccl_logs(self, log_content: str) -> List[Dict[str, Any]]:
+    def parse_nccl_logs(self, log_content: str) -> list[dict[str, Any]]:
         """
         Parse NCCL log content and extract structured events.
 
@@ -586,7 +584,7 @@ class NCCLLogParser:
         Returns:
             List of event dictionaries with timestamp, type, and message
         """
-        events: List[LogEvent] = []
+        events: list[LogEvent] = []
 
         for line_num, line in enumerate(log_content.splitlines(), start=1):
             event = self.parse_line(line, line_number=line_num)
@@ -598,7 +596,7 @@ class NCCLLogParser:
 
         return [event.to_dict() for event in events]
 
-    def parse_file(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+    def parse_file(self, file_path: str | Path) -> list[dict[str, Any]]:
         """
         Parse an NCCL log file and extract structured events.
 
@@ -614,14 +612,14 @@ class NCCLLogParser:
             return []
 
         try:
-            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(file_path, encoding="utf-8", errors="replace") as f:
                 content = f.read()
             return self.parse_nccl_logs(content)
-        except (IOError, OSError):
+        except OSError:
             return []
 
 
-def parse_ray_logs(log_dir: Union[str, Path]) -> List[Dict[str, Any]]:
+def parse_ray_logs(log_dir: str | Path) -> list[dict[str, Any]]:
     """
     Convenience function to parse Ray logs from a directory.
 
@@ -635,7 +633,7 @@ def parse_ray_logs(log_dir: Union[str, Path]) -> List[Dict[str, Any]]:
     return parser.parse_ray_logs(log_dir)
 
 
-def parse_nccl_logs(log_content: str) -> List[Dict[str, Any]]:
+def parse_nccl_logs(log_content: str) -> list[dict[str, Any]]:
     """
     Convenience function to parse NCCL log content.
 

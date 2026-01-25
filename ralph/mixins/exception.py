@@ -4,11 +4,10 @@ ExceptionMixin provides exception raising capabilities for fault injection proxi
 This mixin enables proxies to raise configurable exceptions, simulating various
 error conditions like IOError, RuntimeError, TimeoutError, etc.
 """
-from typing import Any, Dict, Type
-
+from typing import Any
 
 # Map of exception type names to their corresponding Python exception classes
-EXCEPTION_MAP: Dict[str, Type[Exception]] = {
+EXCEPTION_MAP: dict[str, type[Exception]] = {
     "IOError": IOError,
     "RuntimeError": RuntimeError,
     "ValueError": ValueError,

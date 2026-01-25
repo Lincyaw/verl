@@ -5,7 +5,7 @@ Contains proxy classes for algorithm-level operations like GAE computation,
 KL penalty calculation, and GRPO advantage estimation.
 """
 
-from typing import Any, Set
+from typing import Any
 
 import torch
 
@@ -45,7 +45,7 @@ class GAEProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModificationM
     - Output: Dict with 'advantages' and 'returns' tensors or similar structure
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.WRONG_ADVANTAGE,
         StrategyType.ZERO_ADVANTAGE,
         StrategyType.INVERTED_ADVANTAGE,
@@ -343,7 +343,7 @@ class KLPenaltyProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModific
     - Output: KL penalty tensor or dict containing 'kl', 'kl_penalty' keys
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.WRONG_KL,
         StrategyType.ZERO_KL,
@@ -614,7 +614,7 @@ class GRPOProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModification
     - Output: Tuple of (advantages, returns) tensors, both shape (bs, response_length)
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.WRONG_GROUPING,
         StrategyType.WRONG_NORMALIZATION,
         StrategyType.SKIP_NORMALIZATION,
@@ -644,8 +644,9 @@ class GRPOProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModification
             shuffle_seed (int, optional): Seed for reproducible shuffling.
             randomize (bool, default False): If True, use completely random indices.
         """
-        import numpy as np
         import random
+
+        import numpy as np
 
         # Extract index from args or kwargs
         # Signature: (token_level_rewards, response_mask, index, epsilon, norm_adv_by_std_in_grpo)

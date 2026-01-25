@@ -4,7 +4,7 @@ L2 verl proxies for Ralph fault injection framework.
 Contains proxy classes for verl-specific operations like RewardManager, FSDPCheckpointManager, etc.
 """
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Optional
 
 import torch
 
@@ -42,7 +42,7 @@ class RewardManagerProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultMod
     - Output: Typically returns dict with 'rewards' tensor or similar structure
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.CORRUPT_TENSOR,
         StrategyType.REWARD_FLIP,
@@ -179,7 +179,7 @@ class CheckpointSaveProxy(BaseProxy, DelayMixin, ExceptionMixin):
     - Output: None or dict with checkpoint metadata
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.RAISE_EXCEPTION,
     }
@@ -258,7 +258,7 @@ class CheckpointLoadProxy(BaseProxy, TensorCorruptionMixin, ExceptionMixin):
     - Output: Typically returns dict with state_dict or loaded model state
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.RAISE_EXCEPTION,
         StrategyType.FILE_NOT_FOUND,
         StrategyType.CORRUPT_STATE_DICT,
@@ -414,7 +414,6 @@ class CheckpointLoadProxy(BaseProxy, TensorCorruptionMixin, ExceptionMixin):
             drop_keys (list): Specific key names to drop (optional).
                 If provided, drop_ratio is ignored.
         """
-        import random
 
         # Call original to get results
         result = self._original(checkpoint_path, *args, **kwargs)
@@ -499,7 +498,7 @@ class UpdateActorProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, SkipMixin):
     - Output: Typically returns dict with update metrics (loss, grad_norm, etc.)
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.NAN_INPUT,
         StrategyType.EXPLODING_GRADIENTS,

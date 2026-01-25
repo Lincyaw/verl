@@ -5,7 +5,7 @@ Contains proxy classes for Ray-level operations like ray.get, ray.put, etc.
 """
 
 import random
-from typing import Any, List, Optional, Set, Union
+from typing import Any, Optional
 
 from ralph.core.config import StrategyType
 from ralph.core.registry import ProxyRegistry
@@ -13,7 +13,6 @@ from ralph.mixins.delay import DelayMixin
 from ralph.mixins.exception import ExceptionMixin
 from ralph.mixins.tensor import TensorCorruptionMixin
 from ralph.proxies.base import BaseProxy
-
 
 # Attempt to import ray exceptions, falling back to custom exceptions if not available
 try:
@@ -41,9 +40,7 @@ class ObjectLostError(Exception):
         self.object_ref = object_ref
         self.owner_address = owner_address
         self.call_site = call_site
-        super().__init__(
-            f"Object lost: ref={object_ref}, owner={owner_address}, call_site={call_site}"
-        )
+        super().__init__(f"Object lost: ref={object_ref}, owner={owner_address}, call_site={call_site}")
 
 
 @ProxyRegistry.register("ray.get")
@@ -68,7 +65,7 @@ class RayGetProxy(BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin):
     - PARTIAL_FAILURE: fail_ratio (float, default 0.5) - ratio of results to set to None
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.RAISE_EXCEPTION,
         StrategyType.CORRUPT_TENSOR,
@@ -82,7 +79,7 @@ class RayGetProxy(BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin):
 
     def _strategy_object_lost(
         self,
-        object_refs: Union[Any, List[Any]],
+        object_refs: Any | list[Any],
         *args: Any,
         timeout: Optional[float] = None,
         **kwargs: Any,
@@ -121,7 +118,7 @@ class RayGetProxy(BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin):
 
     def _strategy_partial_failure(
         self,
-        object_refs: Union[Any, List[Any]],
+        object_refs: Any | list[Any],
         *args: Any,
         timeout: Optional[float] = None,
         **kwargs: Any,
@@ -253,7 +250,7 @@ class RayPutProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin):
     - SILENT_DROP: object_id (str, optional) - custom object ID for dummy ref
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.CORRUPT_TENSOR,
         StrategyType.STORE_FULL,
@@ -310,17 +307,15 @@ class RayPutProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin):
             ObjectStoreFullError: If Ray is not installed (fallback)
         """
         # Get custom message from config if provided
-        message = self._config.parameters.get(
-            "message", "Object store full: cannot store object"
-        )
+        message = self._config.parameters.get("message", "Object store full: cannot store object")
 
         if HAS_RAY:
             # Ray's ObjectStoreFullError may have different signature
             try:
                 raise ray.exceptions.ObjectStoreFullError(message)
-            except (AttributeError, TypeError):
+            except (AttributeError, TypeError) as e:
                 # Fallback if the exception class has different signature
-                raise ObjectStoreFullError(message)
+                raise ObjectStoreFullError(message) from e
         else:
             raise ObjectStoreFullError(message)
 
@@ -346,9 +341,7 @@ class RayPutProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ExceptionMixin):
             DummyObjectRef: A fake ObjectRef that contains no data
         """
         # Get custom object_id from config if provided
-        object_id = self._config.parameters.get(
-            "object_id", f"dropped_{id(value)}"
-        )
+        object_id = self._config.parameters.get("object_id", f"dropped_{id(value)}")
         return DummyObjectRef(object_id)
 
 
@@ -375,7 +368,7 @@ class ExecuteAllProxy(BaseProxy, DelayMixin):
     - DUPLICATE_CALL: duplicate_idx (int, required) - index of worker to duplicate
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.WORKER_DEATH,
         StrategyType.STRAGGLER,
         StrategyType.SKIP_WORKER,
@@ -413,9 +406,7 @@ class ExecuteAllProxy(BaseProxy, DelayMixin):
         """
         kill_worker_idx = self._config.parameters.get("kill_worker_idx")
         if kill_worker_idx is None:
-            raise ValueError(
-                "worker_death strategy requires 'kill_worker_idx' parameter"
-            )
+            raise ValueError("worker_death strategy requires 'kill_worker_idx' parameter")
 
         # Get the workers attribute from the object this method is bound to
         # In verl, execute_all_sync is typically a method on a WorkerGroup
@@ -473,9 +464,7 @@ class ExecuteAllProxy(BaseProxy, DelayMixin):
 
         straggler_idx = self._config.parameters.get("straggler_idx")
         if straggler_idx is None:
-            raise ValueError(
-                "straggler strategy requires 'straggler_idx' parameter"
-            )
+            raise ValueError("straggler strategy requires 'straggler_idx' parameter")
 
         delay_seconds = self._config.parameters.get("delay_seconds", 60.0)
 
@@ -511,9 +500,7 @@ class ExecuteAllProxy(BaseProxy, DelayMixin):
         """
         skip_idx = self._config.parameters.get("skip_idx")
         if skip_idx is None:
-            raise ValueError(
-                "skip_worker strategy requires 'skip_idx' parameter"
-            )
+            raise ValueError("skip_worker strategy requires 'skip_idx' parameter")
 
         # Call original to get all results
         results = self._original(method_name, *args, **kwargs)
@@ -521,7 +508,7 @@ class ExecuteAllProxy(BaseProxy, DelayMixin):
         # Remove the result at the specified index
         if isinstance(results, list):
             if 0 <= skip_idx < len(results):
-                results = results[:skip_idx] + results[skip_idx + 1:]
+                results = results[:skip_idx] + results[skip_idx + 1 :]
 
         return results
 
@@ -551,9 +538,7 @@ class ExecuteAllProxy(BaseProxy, DelayMixin):
         """
         duplicate_idx = self._config.parameters.get("duplicate_idx")
         if duplicate_idx is None:
-            raise ValueError(
-                "duplicate_call strategy requires 'duplicate_idx' parameter"
-            )
+            raise ValueError("duplicate_call strategy requires 'duplicate_idx' parameter")
 
         # Call original to get all results
         results = self._original(method_name, *args, **kwargs)
@@ -562,10 +547,6 @@ class ExecuteAllProxy(BaseProxy, DelayMixin):
         if isinstance(results, list):
             if 0 <= duplicate_idx < len(results):
                 duplicated_result = results[duplicate_idx]
-                results = (
-                    results[:duplicate_idx + 1] +
-                    [duplicated_result] +
-                    results[duplicate_idx + 1:]
-                )
+                results = results[: duplicate_idx + 1] + [duplicated_result] + results[duplicate_idx + 1 :]
 
         return results

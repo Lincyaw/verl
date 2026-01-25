@@ -9,7 +9,7 @@ The InjectionEngine is the central orchestrator that:
 
 import importlib
 import random
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from ralph.core.config import FaultConfig
 from ralph.core.registry import ProxyRegistry
@@ -77,16 +77,16 @@ class InjectionEngine:
         self._collector = collector
 
         # Configuration: target -> FaultConfig
-        self._configs: Dict[str, FaultConfig] = {}
+        self._configs: dict[str, FaultConfig] = {}
 
         # Proxy instances: target -> proxy instance
-        self._proxies: Dict[str, "BaseProxy"] = {}
+        self._proxies: dict[str, BaseProxy] = {}
 
         # Original functions: target -> original function reference
-        self._originals: Dict[str, Callable] = {}
+        self._originals: dict[str, Callable] = {}
 
         # Monkey-patch references: target -> (module, attr_name)
-        self._patch_refs: Dict[str, tuple] = {}
+        self._patch_refs: dict[str, tuple] = {}
 
         # Scheduler for trigger coordination
         self._scheduler = TriggerScheduler(seed=seed)
@@ -122,8 +122,7 @@ class InjectionEngine:
         # Validate target has a registered proxy
         if not ProxyRegistry.is_registered(target):
             raise KeyError(
-                f"No proxy registered for target '{target}'. "
-                f"Available targets: {ProxyRegistry.list_targets()}"
+                f"No proxy registered for target '{target}'. Available targets: {ProxyRegistry.list_targets()}"
             )
 
         # Validate strategy is supported
@@ -131,8 +130,7 @@ class InjectionEngine:
         if config.strategy not in supported:
             supported_str = ", ".join(s.value for s in sorted(supported, key=lambda x: x.value))
             raise ValueError(
-                f"Strategy '{config.strategy.value}' not supported for target '{target}'. "
-                f"Supported: [{supported_str}]"
+                f"Strategy '{config.strategy.value}' not supported for target '{target}'. Supported: [{supported_str}]"
             )
 
         self._configs[target] = config
@@ -150,10 +148,7 @@ class InjectionEngine:
             RuntimeError: If proxies are already installed
         """
         if self._installed:
-            raise RuntimeError(
-                "Cannot remove config after proxies are installed. "
-                "Call uninstall_proxies() first."
-            )
+            raise RuntimeError("Cannot remove config after proxies are installed. Call uninstall_proxies() first.")
 
         if target not in self._configs:
             raise KeyError(f"No config for target '{target}'")
@@ -173,7 +168,7 @@ class InjectionEngine:
         """
         return self._configs.get(target)
 
-    def list_targets(self) -> List[str]:
+    def list_targets(self) -> list[str]:
         """
         List all configured targets.
 
@@ -202,23 +197,17 @@ class InjectionEngine:
             implemented. For now, use add_config() to add configurations directly.
         """
         if self._installed:
-            raise RuntimeError(
-                "Cannot load config after proxies are installed. "
-                "Call uninstall_proxies() first."
-            )
+            raise RuntimeError("Cannot load config after proxies are installed. Call uninstall_proxies() first.")
 
         # Import yaml here to avoid hard dependency
         try:
             import yaml
         except ImportError:
-            raise ImportError(
-                "pyyaml is required for YAML config loading. "
-                "Install with: pip install pyyaml"
-            )
+            raise ImportError("pyyaml is required for YAML config loading. Install with: pip install pyyaml") from None
 
         from ralph.core.config import StrategyType, TriggerConfig, TriggerType
 
-        with open(yaml_path, "r") as f:
+        with open(yaml_path) as f:
             data = yaml.safe_load(f)
 
         if not data:
@@ -237,9 +226,7 @@ class InjectionEngine:
             required_fields = ["id", "target", "fault_type", "trigger"]
             for field in required_fields:
                 if field not in scenario:
-                    raise ValueError(
-                        f"Scenario missing required field '{field}': {scenario}"
-                    )
+                    raise ValueError(f"Scenario missing required field '{field}': {scenario}")
 
             # Parse trigger config
             trigger_data = scenario["trigger"]
@@ -278,9 +265,7 @@ class InjectionEngine:
             target = scenario["target"]
             self.add_config(target, config)
 
-    def _substitute_variables(
-        self, obj: Any, variables: Dict[str, Any]
-    ) -> Any:
+    def _substitute_variables(self, obj: Any, variables: dict[str, Any]) -> Any:
         """
         Recursively substitute ${var} references in config objects.
 
@@ -294,7 +279,8 @@ class InjectionEngine:
         if isinstance(obj, str):
             # Handle ${global.key} or ${key} patterns
             import re
-            pattern = r'\$\{(?:global\.)?(\w+)\}'
+
+            pattern = r"\$\{(?:global\.)?(\w+)\}"
 
             def replacer(match):
                 key = match.group(1)
@@ -373,9 +359,7 @@ class InjectionEngine:
             parts = target.rsplit(".", 1)
 
         if len(parts) == 1:
-            raise ValueError(
-                f"Target '{target}' must be fully qualified (e.g., 'module.function')"
-            )
+            raise ValueError(f"Target '{target}' must be fully qualified (e.g., 'module.function')")
 
         module_path, attr_name = parts
 
@@ -391,19 +375,13 @@ class InjectionEngine:
                     parent_module = importlib.import_module(parent_module_path)
                     module = getattr(parent_module, class_name)
                 except (ImportError, AttributeError) as e:
-                    raise ImportError(
-                        f"Cannot import target '{target}': {e}"
-                    ) from e
+                    raise ImportError(f"Cannot import target '{target}': {e}") from e
             else:
-                raise ImportError(
-                    f"Cannot import module '{module_path}' for target '{target}'"
-                )
+                raise ImportError(f"Cannot import module '{module_path}' for target '{target}'") from None
 
         # Get the original function
         if not hasattr(module, attr_name):
-            raise AttributeError(
-                f"Module '{module_path}' has no attribute '{attr_name}'"
-            )
+            raise AttributeError(f"Module '{module_path}' has no attribute '{attr_name}'")
 
         original_fn = getattr(module, attr_name)
         return original_fn, module, attr_name
@@ -464,7 +442,7 @@ class InjectionEngine:
         """
         return self._installed
 
-    def get_active_faults(self) -> List[str]:
+    def get_active_faults(self) -> list[str]:
         """
         Get list of faults that would trigger at the current step.
 
@@ -534,9 +512,4 @@ class InjectionEngine:
     def __repr__(self) -> str:
         """String representation of the engine state."""
         targets = self.list_targets()
-        return (
-            f"InjectionEngine("
-            f"targets={targets}, "
-            f"installed={self._installed}, "
-            f"step={self._current_step})"
-        )
+        return f"InjectionEngine(targets={targets}, installed={self._installed}, step={self._current_step})"

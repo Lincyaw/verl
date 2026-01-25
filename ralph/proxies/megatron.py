@@ -8,7 +8,7 @@ These proxies target Megatron-specific behavior for distributed training fault i
 
 import random
 import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 import torch
 
@@ -49,7 +49,7 @@ class MegatronOptimizerProxy(BaseProxy, DelayMixin, SkipMixin, TensorCorruptionM
         optimizer synchronization.
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.SKIP,
         StrategyType.GRADIENT_OVERFLOW,
         StrategyType.NAN_PARAMS,
@@ -156,7 +156,7 @@ class MegatronOptimizerProxy(BaseProxy, DelayMixin, SkipMixin, TensorCorruptionM
 
         # Try to access the optimizer and scale LR
         engine = self._get_megatron_engine()
-        original_lrs: Optional[Dict[int, float]] = None
+        original_lrs: Optional[dict[int, float]] = None
 
         if engine is not None:
             original_lrs = self._scale_megatron_lr(engine, lr_factor)
@@ -282,7 +282,7 @@ class MegatronOptimizerProxy(BaseProxy, DelayMixin, SkipMixin, TensorCorruptionM
         self,
         engine: Any,
         factor: float,
-    ) -> Dict[int, float]:
+    ) -> dict[int, float]:
         """
         Scale learning rate in Megatron optimizer.
 
@@ -293,7 +293,7 @@ class MegatronOptimizerProxy(BaseProxy, DelayMixin, SkipMixin, TensorCorruptionM
         Returns:
             Dictionary mapping param group index to original LR values.
         """
-        original_lrs: Dict[int, float] = {}
+        original_lrs: dict[int, float] = {}
 
         optimizer = getattr(engine, "optimizer", None)
         if optimizer is None:
@@ -315,7 +315,7 @@ class MegatronOptimizerProxy(BaseProxy, DelayMixin, SkipMixin, TensorCorruptionM
     def _restore_megatron_lr(
         self,
         engine: Any,
-        original_lrs: Dict[int, float],
+        original_lrs: dict[int, float],
     ) -> None:
         """
         Restore original learning rates in Megatron optimizer.
@@ -376,7 +376,7 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         parallelism (PP) and tensor parallelism (TP) operations.
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.PP_STAGE_FAILURE,
         StrategyType.TP_DESYNC,
         StrategyType.WRONG_MICRO_BATCH_ROUTING,
@@ -605,7 +605,7 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
             drop_ratio (float): Ratio of micro-batches to drop (default 0.0).
             duplicate_ratio (float): Ratio of micro-batches to duplicate (default 0.0).
         """
-        swap_stages: List[List[int]] = self._config.parameters.get("swap_stages", [])
+        swap_stages: list[list[int]] = self._config.parameters.get("swap_stages", [])
         drop_ratio = self._config.parameters.get("drop_ratio", 0.0)
         duplicate_ratio = self._config.parameters.get("duplicate_ratio", 0.0)
 
@@ -691,7 +691,7 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         """
         noise_scale = self._config.parameters.get("noise_scale", 0.01)
         corrupt_ratio = self._config.parameters.get("corrupt_ratio", 0.1)
-        target_layers: Optional[List[str]] = self._config.parameters.get(
+        target_layers: Optional[list[str]] = self._config.parameters.get(
             "target_layers", None
         )
         corrupt_type = self._config.parameters.get("corrupt_type", "noise")
@@ -709,7 +709,7 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         result: Any,
         noise_scale: float,
         corrupt_ratio: float,
-        target_layers: Optional[List[str]],
+        target_layers: Optional[list[str]],
         corrupt_type: str,
     ) -> Any:
         """
@@ -770,7 +770,7 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         """
         # Determine which elements to corrupt
         seed = self._current_step if hasattr(self, "_current_step") else 0
-        rng = random.Random(seed)
+        random.Random(seed)
 
         # Create corruption mask
         numel = tensor.numel()

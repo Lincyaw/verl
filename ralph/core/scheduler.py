@@ -6,9 +6,9 @@ and their trigger scheduling across training steps.
 """
 
 import random
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
-from .config import FaultConfig, TriggerConfig, TriggerType
+from .config import FaultConfig, TriggerType
 
 
 class TriggerScheduler:
@@ -27,9 +27,9 @@ class TriggerScheduler:
         Args:
             seed: Optional random seed for reproducible probabilistic triggers.
         """
-        self._configs: Dict[str, FaultConfig] = {}
+        self._configs: dict[str, FaultConfig] = {}
         self._current_step: int = 0
-        self._triggered_one_shots: Set[str] = set()
+        self._triggered_one_shots: set[str] = set()
         self._rng = random.Random(seed)
 
     def add_config(self, config: FaultConfig) -> None:
@@ -78,7 +78,7 @@ class TriggerScheduler:
             raise KeyError(f"No config with id '{config_id}'")
         return self._configs[config_id]
 
-    def list_configs(self) -> List[str]:
+    def list_configs(self) -> list[str]:
         """
         List all registered config IDs.
 
@@ -121,7 +121,7 @@ class TriggerScheduler:
         config = self.get_config(config_id)
         return self._check_trigger(config)
 
-    def get_active_faults(self) -> List[str]:
+    def get_active_faults(self) -> list[str]:
         """
         Get all fault IDs that should trigger at the current step.
 

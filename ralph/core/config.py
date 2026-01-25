@@ -6,7 +6,7 @@ Contains TriggerType, StrategyType enums and TriggerConfig, FaultConfig dataclas
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class TriggerType(Enum):
@@ -209,7 +209,7 @@ class FaultConfig:
     id: str  # Unique identifier for this fault config
     strategy: StrategyType  # Type of fault injection strategy
     trigger: TriggerConfig  # Trigger conditions
-    parameters: Dict[str, Any] = field(default_factory=dict)  # Strategy-specific parameters
+    parameters: dict[str, Any] = field(default_factory=dict)  # Strategy-specific parameters
     enabled: bool = True  # Whether this fault is enabled
     severity: str = "medium"  # Severity level: low, medium, high, critical
     expected_behavior: str = ""  # Description of expected behavior when fault is triggered
@@ -254,10 +254,10 @@ class RalphConfig:
     global_config: GlobalConfig
     data_collection: DataCollectionConfig
     scenarios: list  # List of FaultConfig objects
-    raw_data: Dict[str, Any] = field(default_factory=dict)  # Original parsed YAML
+    raw_data: dict[str, Any] = field(default_factory=dict)  # Original parsed YAML
 
 
-def _substitute_variables(obj: Any, variables: Dict[str, Any]) -> Any:
+def _substitute_variables(obj: Any, variables: dict[str, Any]) -> Any:
     """
     Recursively substitute ${var} references in config objects.
 
@@ -279,7 +279,7 @@ def _substitute_variables(obj: Any, variables: Dict[str, Any]) -> Any:
 
     if isinstance(obj, str):
         # Handle ${global.key} or ${key} patterns
-        pattern = r'\$\{(?:global\.)?(\w+)\}'
+        pattern = r"\$\{(?:global\.)?(\w+)\}"
 
         def replacer(match):
             key = match.group(1)
@@ -294,7 +294,7 @@ def _substitute_variables(obj: Any, variables: Dict[str, Any]) -> Any:
         return obj
 
 
-def _parse_trigger_config(trigger_data: Dict[str, Any]) -> TriggerConfig:
+def _parse_trigger_config(trigger_data: dict[str, Any]) -> TriggerConfig:
     """
     Parse a trigger dictionary into a TriggerConfig object.
 
@@ -313,10 +313,7 @@ def _parse_trigger_config(trigger_data: Dict[str, Any]) -> TriggerConfig:
         trigger_type = TriggerType(trigger_type_str)
     except ValueError:
         valid_types = [t.value for t in TriggerType]
-        raise ValueError(
-            f"Invalid trigger type '{trigger_type_str}'. "
-            f"Valid types: {valid_types}"
-        )
+        raise ValueError(f"Invalid trigger type '{trigger_type_str}'. Valid types: {valid_types}") from None
 
     return TriggerConfig(
         type=trigger_type,
@@ -328,10 +325,7 @@ def _parse_trigger_config(trigger_data: Dict[str, Any]) -> TriggerConfig:
     )
 
 
-def _parse_fault_config(
-    scenario: Dict[str, Any],
-    global_vars: Dict[str, Any]
-) -> FaultConfig:
+def _parse_fault_config(scenario: dict[str, Any], global_vars: dict[str, Any]) -> FaultConfig:
     """
     Parse a scenario dictionary into a FaultConfig object.
 
@@ -349,9 +343,7 @@ def _parse_fault_config(
     required_fields = ["id", "layer", "target", "fault_type", "trigger", "expected_behavior"]
     missing = [f for f in required_fields if f not in scenario]
     if missing:
-        raise ValueError(
-            f"Scenario '{scenario.get('id', 'unknown')}' missing required fields: {missing}"
-        )
+        raise ValueError(f"Scenario '{scenario.get('id', 'unknown')}' missing required fields: {missing}")
 
     # Parse trigger config
     trigger_config = _parse_trigger_config(scenario["trigger"])
@@ -373,10 +365,7 @@ def _parse_fault_config(
             strategy = strategy_aliases[strategy_str]
         else:
             valid_strategies = [s.value for s in StrategyType]
-            raise ValueError(
-                f"Invalid fault_type '{strategy_str}'. "
-                f"Valid types: {valid_strategies}"
-            )
+            raise ValueError(f"Invalid fault_type '{strategy_str}'. Valid types: {valid_strategies}") from None
 
     # Parse parameters with variable substitution
     parameters = scenario.get("parameters", {})
@@ -427,17 +416,14 @@ def load_yaml_config(yaml_path: str) -> RalphConfig:
     try:
         import yaml
     except ImportError:
-        raise ImportError(
-            "pyyaml is required for YAML config loading. "
-            "Install with: pip install pyyaml"
-        )
+        raise ImportError("pyyaml is required for YAML config loading. Install with: pip install pyyaml") from None
 
     # Check file exists
     if not os.path.exists(yaml_path):
         raise FileNotFoundError(f"Configuration file not found: {yaml_path}")
 
     # Load YAML
-    with open(yaml_path, "r", encoding="utf-8") as f:
+    with open(yaml_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not data:
@@ -537,7 +523,7 @@ def validate_yaml_config(yaml_path: str) -> tuple:
 
     # Load YAML
     try:
-        with open(yaml_path, "r", encoding="utf-8") as f:
+        with open(yaml_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         return False, [f"YAML syntax error: {e}"]

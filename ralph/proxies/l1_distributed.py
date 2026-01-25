@@ -5,7 +5,7 @@ Contains proxy classes for torch.distributed operations like all_reduce, all_gat
 """
 
 import time
-from typing import Any, Optional, Set
+from typing import Any
 
 import torch
 
@@ -14,7 +14,6 @@ from ralph.core.registry import ProxyRegistry
 from ralph.mixins.delay import DelayMixin
 from ralph.mixins.tensor import TensorCorruptionMixin
 from ralph.proxies.base import BaseProxy
-
 
 # Attempt to import torch.distributed for rank detection
 try:
@@ -47,7 +46,7 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
     - DEADLOCK: deadlock_rank (int, required) - the rank to hang
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.CORRUPT_TENSOR,
         StrategyType.INJECT_NAN,
@@ -278,7 +277,7 @@ class AllGatherProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
     - SHAPE_MISMATCH: size_delta (int, default 1) - how much to change size
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.CORRUPT_GATHERED,
         StrategyType.MISSING_RANK,
@@ -505,7 +504,7 @@ class BarrierProxy(BaseProxy, DelayMixin):
                     seed (int, optional) - random seed for reproducibility
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.BARRIER_TIMEOUT,
         StrategyType.BARRIER_SKIP,

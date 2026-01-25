@@ -7,10 +7,12 @@ This mixin enables proxies to modify function results in various ways:
 - Set results to constant values
 - Handle nested structures (dict/list/tuple) recursively
 """
-import torch
-from typing import Any, Callable, Union
 
-Number = Union[int, float]
+from typing import Any, Callable
+
+import torch
+
+Number = int | float
 
 
 class ResultModificationMixin:

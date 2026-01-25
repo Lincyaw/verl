@@ -4,9 +4,9 @@ L3 Resource Layer proxies for Ralph fault injection framework.
 Contains injectors for GPU memory, CPU, and other resource-related fault injection.
 """
 
-from typing import TYPE_CHECKING, Any, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Optional
 
-from ralph.core.config import FaultConfig, StrategyType
+from ralph.core.config import StrategyType
 from ralph.core.registry import ProxyRegistry
 from ralph.proxies.base import BaseProxy
 
@@ -46,7 +46,7 @@ class GPUMemoryInjector(BaseProxy):
         injector.release()  # Free allocated memory
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.MEMORY_PRESSURE,
         StrategyType.OOM_SIMULATION,
         StrategyType.MEMORY_FRAGMENTATION,
@@ -71,9 +71,9 @@ class GPUMemoryInjector(BaseProxy):
         super().__init__(original_fn or (lambda: None), collector)
 
         # Track allocated tensors for cleanup
-        self._allocated_tensors: List[Any] = []
-        self._leak_tensors: List[Any] = []
-        self._fragmentation_tensors: List[Any] = []
+        self._allocated_tensors: list[Any] = []
+        self._leak_tensors: list[Any] = []
+        self._fragmentation_tensors: list[Any] = []
 
         # Memory leak state
         self._leak_rate_mb: float = 0.0
@@ -240,7 +240,7 @@ class GPUMemoryInjector(BaseProxy):
                     self._allocated_tensors.append(tensor)
                 except RuntimeError as e:
                     if "out of memory" in str(e).lower():
-                        raise RuntimeError(f"CUDA out of memory (simulated OOM): {e}")
+                        raise RuntimeError(f"CUDA out of memory (simulated OOM): {e}") from e
                     raise
 
     def cause_fragmentation(self, count: int) -> int:

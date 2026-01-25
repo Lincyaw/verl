@@ -5,7 +5,7 @@ Contains proxy classes for inference-level operations like text generation
 from vLLM/SGLang engines.
 """
 
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Optional
 
 import torch
 
@@ -43,7 +43,7 @@ class GenerateProxy(BaseProxy, DelayMixin):
     - Output: Generated sequences (list of token IDs or strings)
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.GENERATION_TIMEOUT,
         StrategyType.EMPTY_RESPONSE,
@@ -418,7 +418,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
     - Output: Updated weights (potentially modified)
     """
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.WEIGHT_MISMATCH,
         StrategyType.PARTIAL_UPDATE,
@@ -436,7 +436,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
         """
         super().__init__(original_fn, collector)
         # Store historical weights for OLD_WEIGHTS strategy
-        self._weight_history: List[Any] = []
+        self._weight_history: list[Any] = []
         self._max_history_size = 10
 
     def _get_layer(self) -> str:
@@ -560,7 +560,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
         return self._apply_partial_update(result, update_ratio, keys_to_skip)
 
     def _apply_partial_update(
-        self, result: Any, update_ratio: float, keys_to_skip: Optional[List[str]] = None
+        self, result: Any, update_ratio: float, keys_to_skip: Optional[list[str]] = None
     ) -> Any:
         """
         Recursively apply partial update to weights.

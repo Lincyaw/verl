@@ -9,14 +9,12 @@ Both streams are written to JSONL format for easy processing.
 """
 
 import json
-import os
 import threading
-import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -29,7 +27,7 @@ class FaultInjectionRecord:
     target_layer: str
     target_function: str
     severity: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     expected_behavior: str
 
 
@@ -50,7 +48,7 @@ class TelemetryRecord:
     event_id: str
     timestamp: str
     event_type: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
 
 class DualStreamCollector:
@@ -89,11 +87,11 @@ class DualStreamCollector:
         self._auto_flush = auto_flush
 
         # Buffers for pending records
-        self._telemetry_buffer: List[TelemetryRecord] = []
-        self._labels_buffer: List[Dict[str, Any]] = []
+        self._telemetry_buffer: list[TelemetryRecord] = []
+        self._labels_buffer: list[dict[str, Any]] = []
 
         # Track active fault injections (fault_id -> FaultInjectionRecord)
-        self._active_faults: Dict[str, FaultInjectionRecord] = {}
+        self._active_faults: dict[str, FaultInjectionRecord] = {}
 
         # Thread lock for concurrent access
         self._lock = threading.Lock()
@@ -126,7 +124,7 @@ class DualStreamCollector:
         target_layer: str,
         target_function: str,
         severity: str,
-        parameters: Dict[str, Any],
+        parameters: dict[str, Any],
         expected_behavior: str,
     ) -> str:
         """
@@ -226,7 +224,7 @@ class DualStreamCollector:
     def record_telemetry(
         self,
         event_type: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> str:
         """
         Record a telemetry event.
@@ -325,7 +323,7 @@ class DualStreamCollector:
         with self._lock:
             return len(self._active_faults)
 
-    def get_buffer_sizes(self) -> Dict[str, int]:
+    def get_buffer_sizes(self) -> dict[str, int]:
         """Get current buffer sizes."""
         with self._lock:
             return {
