@@ -106,7 +106,7 @@ class TestDelayStrategy:
         proxy.set_step(0)
 
         with patch("time.sleep") as mock_sleep:
-            result = proxy()
+            proxy()
             mock_sleep.assert_called_once_with(0.01)
             original.assert_called_once()
 
@@ -147,7 +147,7 @@ class TestGenerationTimeoutStrategy:
         proxy.set_step(0)
 
         with patch("time.sleep") as mock_sleep:
-            result = proxy()
+            proxy()
             mock_sleep.assert_called_once_with(60.0)
             original.assert_called_once()
 
@@ -211,10 +211,14 @@ class TestEmptyResponseStrategy:
 
     def test_empty_response_list(self):
         """EMPTY_RESPONSE returns empty items for list output."""
-        original = MagicMock(return_value={"outputs": [
-            torch.ones(10, dtype=torch.long),
-            torch.ones(15, dtype=torch.long),
-        ]})
+        original = MagicMock(
+            return_value={
+                "outputs": [
+                    torch.ones(10, dtype=torch.long),
+                    torch.ones(15, dtype=torch.long),
+                ]
+            }
+        )
         proxy = GenerateProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -233,11 +237,13 @@ class TestEmptyResponseStrategy:
 
     def test_empty_response_preserves_other_keys(self):
         """EMPTY_RESPONSE preserves non-output keys."""
-        original = MagicMock(return_value={
-            "sequences": torch.ones(2, 10),
-            "attention_mask": torch.ones(2, 10),
-            "prompt_length": 5,
-        })
+        original = MagicMock(
+            return_value={
+                "sequences": torch.ones(2, 10),
+                "attention_mask": torch.ones(2, 10),
+                "prompt_length": 5,
+            }
+        )
         proxy = GenerateProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -406,6 +412,7 @@ class TestGarbageOutputStrategy:
     def test_garbage_output_list_of_tokens(self):
         """GARBAGE_OUTPUT replaces list of token IDs with random tokens."""
         import random
+
         random.seed(42)
         original = MagicMock(return_value={"token_ids": [1, 2, 3, 4, 5]})
         proxy = GenerateProxy(original)
@@ -429,6 +436,7 @@ class TestGarbageOutputStrategy:
     def test_garbage_output_string(self):
         """GARBAGE_OUTPUT replaces string with random text."""
         import random
+
         random.seed(42)
         original = MagicMock(return_value={"generated_text": "Hello, world!"})
         proxy = GenerateProxy(original)
@@ -471,11 +479,13 @@ class TestGarbageOutputStrategy:
     def test_garbage_output_preserves_other_keys(self):
         """GARBAGE_OUTPUT preserves non-output keys."""
         torch.manual_seed(42)
-        original = MagicMock(return_value={
-            "sequences": torch.ones(10, dtype=torch.long),
-            "attention_mask": torch.ones(10),
-            "prompt_length": 5,
-        })
+        original = MagicMock(
+            return_value={
+                "sequences": torch.ones(10, dtype=torch.long),
+                "attention_mask": torch.ones(10),
+                "prompt_length": 5,
+            }
+        )
         proxy = GenerateProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -643,6 +653,7 @@ class TestUpdateWeightsProxyRegistration:
         """UpdateWeightsProxy is registered for 'rollout.update_weights' target."""
         assert ProxyRegistry.is_registered("rollout.update_weights")
         from ralph.proxies.inference import UpdateWeightsProxy
+
         assert ProxyRegistry.get_proxy("rollout.update_weights") is UpdateWeightsProxy
 
     def test_supported_strategies(self):
@@ -664,12 +675,14 @@ class TestUpdateWeightsProxyBasics:
     def test_get_layer_returns_inference(self):
         """_get_layer returns 'Inference'."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         proxy = UpdateWeightsProxy(lambda: None)
         assert proxy._get_layer() == "Inference"
 
     def test_call_without_config_calls_original(self):
         """Proxy calls original when no config is set."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {"layer1.weight": torch.ones(10, 10)}
         original = MagicMock(return_value=original_weights)
         proxy = UpdateWeightsProxy(original)
@@ -680,6 +693,7 @@ class TestUpdateWeightsProxyBasics:
     def test_call_with_disabled_config_calls_original(self):
         """Proxy calls original when config is disabled."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {"layer1.weight": torch.ones(10, 10)}
         original = MagicMock(return_value=original_weights)
         proxy = UpdateWeightsProxy(original)
@@ -699,6 +713,7 @@ class TestUpdateWeightsProxyBasics:
     def test_unsupported_strategy_raises_error(self):
         """Setting an unsupported strategy raises ValueError."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         proxy = UpdateWeightsProxy(lambda: None)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -717,6 +732,7 @@ class TestUpdateWeightsDelayStrategy:
     def test_delay_strategy_with_config(self):
         """DELAY strategy uses delay_seconds from config."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original = MagicMock(return_value={"weight": torch.ones(10)})
         proxy = UpdateWeightsProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
@@ -730,13 +746,14 @@ class TestUpdateWeightsDelayStrategy:
         proxy.set_step(0)
 
         with patch("time.sleep") as mock_sleep:
-            result = proxy()
+            proxy()
             mock_sleep.assert_called_once_with(0.01)
             original.assert_called_once()
 
     def test_delay_strategy_default_delay(self):
         """DELAY strategy uses default delay_seconds of 10.0."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original = MagicMock(return_value={"weight": torch.ones(10)})
         proxy = UpdateWeightsProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
@@ -760,6 +777,7 @@ class TestWeightMismatchStrategy:
     def test_weight_mismatch_alters_shape(self):
         """WEIGHT_MISMATCH alters tensor shape."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {"layer.weight": torch.ones(100, 100)}
         original = MagicMock(return_value=original_weights)
         proxy = UpdateWeightsProxy(original)
@@ -781,6 +799,7 @@ class TestWeightMismatchStrategy:
     def test_weight_mismatch_default_ratio(self):
         """WEIGHT_MISMATCH uses default mismatch_ratio of 0.1."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {"layer.weight": torch.ones(100, 100)}
         original = MagicMock(return_value=original_weights)
         proxy = UpdateWeightsProxy(original)
@@ -804,6 +823,7 @@ class TestWeightMismatchStrategy:
     def test_weight_mismatch_handles_dict(self):
         """WEIGHT_MISMATCH handles dict of weights."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {
             "layer1.weight": torch.ones(50, 50),
             "layer2.weight": torch.ones(100, 100),
@@ -833,6 +853,7 @@ class TestPartialUpdateStrategy:
     def test_partial_update_zeros_some_weights(self):
         """PARTIAL_UPDATE zeros out some weights."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {
             "layer1.weight": torch.ones(10, 10),
             "layer2.weight": torch.ones(10, 10),
@@ -862,6 +883,7 @@ class TestPartialUpdateStrategy:
     def test_partial_update_default_ratio(self):
         """PARTIAL_UPDATE uses default update_ratio of 0.5."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {f"layer{i}.weight": torch.ones(10, 10) for i in range(10)}
         original = MagicMock(return_value=original_weights)
         proxy = UpdateWeightsProxy(original)
@@ -884,6 +906,7 @@ class TestPartialUpdateStrategy:
     def test_partial_update_specific_keys(self):
         """PARTIAL_UPDATE can skip specific keys."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original_weights = {
             "layer1.weight": torch.ones(10, 10),
             "layer2.weight": torch.ones(10, 10),
@@ -916,6 +939,7 @@ class TestCorruptWeightsStrategy:
     def test_corrupt_weights_adds_noise(self):
         """CORRUPT_WEIGHTS adds Gaussian noise to weights."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         torch.manual_seed(42)
         original_weights = {"layer.weight": torch.ones(100, 100)}
         original = MagicMock(return_value=original_weights)
@@ -940,6 +964,7 @@ class TestCorruptWeightsStrategy:
     def test_corrupt_weights_default_noise_scale(self):
         """CORRUPT_WEIGHTS uses default noise_scale of 0.01."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         torch.manual_seed(42)
         original_weights = {"layer.weight": torch.ones(1000)}
         original = MagicMock(return_value=original_weights)
@@ -963,6 +988,7 @@ class TestCorruptWeightsStrategy:
     def test_corrupt_weights_handles_multiple_tensors(self):
         """CORRUPT_WEIGHTS corrupts all tensors in dict."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         torch.manual_seed(42)
         original_weights = {
             "layer1.weight": torch.ones(50, 50),
@@ -989,6 +1015,7 @@ class TestCorruptWeightsStrategy:
     def test_corrupt_weights_preserves_shape(self):
         """CORRUPT_WEIGHTS preserves tensor shapes."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         torch.manual_seed(42)
         original_weights = {"layer.weight": torch.ones(3, 5, 7)}
         original = MagicMock(return_value=original_weights)
@@ -1014,6 +1041,7 @@ class TestOldWeightsStrategy:
     def test_old_weights_returns_previous_weights(self):
         """OLD_WEIGHTS returns previously stored weights."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         call_count = [0]
 
         def mock_update_weights():
@@ -1048,6 +1076,7 @@ class TestOldWeightsStrategy:
     def test_old_weights_default_staleness(self):
         """OLD_WEIGHTS uses default staleness_steps of 1."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         call_count = [0]
 
         def mock_update_weights():
@@ -1076,6 +1105,7 @@ class TestOldWeightsStrategy:
     def test_old_weights_multiple_staleness(self):
         """OLD_WEIGHTS can return weights from multiple steps ago."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         call_count = [0]
 
         def mock_update_weights():
@@ -1109,6 +1139,7 @@ class TestUpdateWeightsProxyIntegration:
     def test_step_based_trigger(self):
         """Proxy only triggers within step range."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         torch.manual_seed(42)
         original = MagicMock(return_value={"weight": torch.ones(100)})
         proxy = UpdateWeightsProxy(original)
@@ -1139,6 +1170,7 @@ class TestUpdateWeightsProxyIntegration:
     def test_periodic_trigger(self):
         """Proxy triggers every N steps."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         torch.manual_seed(42)
         original = MagicMock(return_value={"weight": torch.ones(100)})
         proxy = UpdateWeightsProxy(original)
@@ -1169,6 +1201,7 @@ class TestUpdateWeightsProxyIntegration:
     def test_collector_recording(self):
         """Proxy records to collector when provided."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         collector = MagicMock()
         collector.record_fault_injection.return_value = "fault_789"
 
@@ -1194,6 +1227,7 @@ class TestUpdateWeightsProxyIntegration:
     def test_args_passed_to_original(self):
         """Arguments are passed correctly to original function."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original = MagicMock(return_value={"weight": torch.ones(10)})
         proxy = UpdateWeightsProxy(original)
 
@@ -1204,6 +1238,7 @@ class TestUpdateWeightsProxyIntegration:
     def test_kwargs_passed_to_original_with_strategy(self):
         """kwargs are passed to original even when strategy executes."""
         from ralph.proxies.inference import UpdateWeightsProxy
+
         original = MagicMock(return_value={"weight": torch.ones(10)})
         proxy = UpdateWeightsProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)

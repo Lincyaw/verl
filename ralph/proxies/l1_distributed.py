@@ -235,9 +235,7 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         deadlock_rank = self._config.parameters.get("deadlock_rank")
 
         if deadlock_rank is None:
-            raise ValueError(
-                "deadlock_rank must be specified in config parameters for DEADLOCK strategy"
-            )
+            raise ValueError("deadlock_rank must be specified in config parameters for DEADLOCK strategy")
 
         current_rank = self._get_current_rank()
 
@@ -397,9 +395,7 @@ class AllGatherProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         missing_rank = self._config.parameters.get("missing_rank")
 
         if missing_rank is None:
-            raise ValueError(
-                "missing_rank must be specified in config parameters for MISSING_RANK strategy"
-            )
+            raise ValueError("missing_rank must be specified in config parameters for MISSING_RANK strategy")
 
         # Build kwargs for original call
         call_kwargs = dict(kwargs)
@@ -463,11 +459,7 @@ class AllGatherProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
                 new_size = max(1, tensor.size(0) + size_delta)
                 if size_delta > 0:
                     # Expand tensor
-                    padding = torch.zeros(
-                        size_delta, *tensor.shape[1:],
-                        dtype=tensor.dtype,
-                        device=tensor.device
-                    )
+                    padding = torch.zeros(size_delta, *tensor.shape[1:], dtype=tensor.dtype, device=tensor.device)
                     tensor = torch.cat([tensor, padding], dim=0)
                 elif size_delta < 0 and tensor.size(0) > abs(size_delta):
                     # Shrink tensor
@@ -559,9 +551,7 @@ class BarrierProxy(BaseProxy, DelayMixin):
         timeout_rank = self._config.parameters.get("timeout_rank")
 
         if timeout_rank is None:
-            raise ValueError(
-                "timeout_rank must be specified in config parameters for BARRIER_TIMEOUT strategy"
-            )
+            raise ValueError("timeout_rank must be specified in config parameters for BARRIER_TIMEOUT strategy")
 
         current_rank = self._get_current_rank()
 

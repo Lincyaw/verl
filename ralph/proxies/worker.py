@@ -126,6 +126,7 @@ class ComputeValuesProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultMod
             return modified
         elif isinstance(result, (int, float)):
             import random
+
             return type(result)(result + random.gauss(0, noise_scale))
         elif isinstance(result, list):
             return [self._apply_noise_to_values(item, noise_scale) for item in result]
@@ -226,7 +227,7 @@ class ComputeValuesProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultMod
             output = result.clone().float()
             # Create mask for NaN injection
             mask = torch.rand_like(output) < nan_ratio
-            output[mask] = float('nan')
+            output[mask] = float("nan")
             return output.to(result.dtype)
         elif isinstance(result, dict):
             # Only modify value-related keys
@@ -240,8 +241,9 @@ class ComputeValuesProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultMod
             return modified
         elif isinstance(result, (int, float)):
             import random
+
             if random.random() < nan_ratio:
-                return float('nan')
+                return float("nan")
             return result
         elif isinstance(result, list):
             return [self._apply_nan_to_values(item, nan_ratio) for item in result]

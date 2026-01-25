@@ -4,9 +4,14 @@ Unit tests for Megatron proxies.
 Tests for MegatronOptimizerProxy and ParallelismProxy classes.
 """
 
-import pytest
-from unittest.mock import MagicMock, Mock, patch
 import sys
+from unittest.mock import MagicMock
+
+import pytest
+
+from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
+from ralph.core.registry import ProxyRegistry
+from ralph.proxies.megatron import MegatronOptimizerProxy, ParallelismProxy
 
 # Mock torch before importing
 mock_torch = MagicMock()
@@ -14,17 +19,10 @@ mock_torch.Tensor = MagicMock
 mock_torch.tensor = MagicMock(return_value=MagicMock())
 mock_torch.randn_like = MagicMock(side_effect=lambda x: x)
 mock_torch.randperm = MagicMock(side_effect=lambda n: MagicMock(__getitem__=lambda s, i: list(range(n))))
-sys.modules['torch'] = mock_torch
-
-from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
-from ralph.core.registry import ProxyRegistry
-
+sys.modules["torch"] = mock_torch
 
 # Clear registry before importing proxies to avoid duplicate registration errors
 ProxyRegistry.clear()
-
-from ralph.proxies.megatron import MegatronOptimizerProxy, ParallelismProxy
-
 
 # ============================================================================
 # MegatronOptimizerProxy Tests
@@ -1243,7 +1241,7 @@ class TestWrongMicroBatchRoutingStrategy:
         proxy.set_config(config)
         proxy.set_step(1)
 
-        result = proxy()
+        proxy()
 
         # Original called twice due to duplication + once for return
         assert original.call_count == 2
@@ -1269,7 +1267,7 @@ class TestWrongMicroBatchRoutingStrategy:
         proxy.set_config(config)
         proxy.set_step(1)
 
-        result = proxy()
+        proxy()
 
         # Context should have been modified
         # Stage 0 should become 1 during execution
@@ -1300,7 +1298,7 @@ class TestActivationCorruptionStrategy:
         proxy.set_config(config)
         proxy.set_step(1)
 
-        result = proxy()
+        proxy()
 
         original.assert_called_once()
         mock_tensor.clone.assert_called()
@@ -1326,7 +1324,7 @@ class TestActivationCorruptionStrategy:
         proxy.set_config(config)
         proxy.set_step(1)
 
-        result = proxy()
+        proxy()
 
         original.assert_called_once()
 
@@ -1350,7 +1348,7 @@ class TestActivationCorruptionStrategy:
         proxy.set_config(config)
         proxy.set_step(1)
 
-        result = proxy()
+        proxy()
 
         original.assert_called_once()
         mock_tensor.clone.assert_called()
@@ -1405,7 +1403,7 @@ class TestActivationCorruptionStrategy:
         proxy.set_config(config)
         proxy.set_step(1)
 
-        result = proxy()
+        proxy()
 
         original.assert_called_once()
         # layer1 should be corrupted (clone called)

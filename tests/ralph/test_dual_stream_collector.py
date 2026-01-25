@@ -7,16 +7,9 @@ import os
 import tempfile
 import threading
 import time
-from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 
 from ralph.collectors.dual_stream import (
     DualStreamCollector,
-    FaultInjectionRecord,
-    FaultOutcomeRecord,
-    TelemetryRecord,
 )
 
 
@@ -86,7 +79,7 @@ class TestRecordFaultInjection:
         """Test that fault injection is tracked as active."""
         with tempfile.TemporaryDirectory() as tmpdir:
             collector = DualStreamCollector(tmpdir)
-            fault_id = collector.record_fault_injection(
+            collector.record_fault_injection(
                 fault_type="delay",
                 target_layer="L0",
                 target_function="ray.get",
@@ -184,9 +177,7 @@ class TestRecordFaultOutcome:
                 expected_behavior="",
             )
 
-            collector.record_fault_outcome(
-                fault_id, "exception: RuntimeError: test error", 50.0
-            )
+            collector.record_fault_outcome(fault_id, "exception: RuntimeError: test error", 50.0)
 
             # Should have 2 records: start and end
             sizes = collector.get_buffer_sizes()
@@ -305,7 +296,7 @@ class TestFlush:
             assert collector.get_buffer_sizes()["labels"] == 0
 
             # File should exist and have content
-            with open(collector.get_labels_path(), "r") as f:
+            with open(collector.get_labels_path()) as f:
                 lines = f.readlines()
                 assert len(lines) == 2
 
@@ -321,7 +312,7 @@ class TestFlush:
 
             collector.flush()
 
-            with open(collector.get_telemetry_path(), "r") as f:
+            with open(collector.get_telemetry_path()) as f:
                 lines = f.readlines()
                 assert len(lines) == 2
 
@@ -414,7 +405,7 @@ class TestContextManager:
                 telemetry_path = collector.get_telemetry_path()
 
             # File should exist with content after context exit
-            with open(telemetry_path, "r") as f:
+            with open(telemetry_path) as f:
                 lines = f.readlines()
                 assert len(lines) == 1
 
@@ -433,7 +424,7 @@ class TestAutoFlush:
 
             # File should not exist yet or be empty
             if collector.get_telemetry_path().exists():
-                with open(collector.get_telemetry_path(), "r") as f:
+                with open(collector.get_telemetry_path()) as f:
                     assert len(f.readlines()) == 0
 
             # Add 3rd record (triggers flush)
@@ -443,7 +434,7 @@ class TestAutoFlush:
             assert collector.get_buffer_sizes()["telemetry"] == 0
 
             # File should have content
-            with open(collector.get_telemetry_path(), "r") as f:
+            with open(collector.get_telemetry_path()) as f:
                 lines = f.readlines()
                 assert len(lines) == 3
 
@@ -475,7 +466,7 @@ class TestJSONLFormat:
                 collector.record_telemetry("event", {"key": "value"})
                 telemetry_path = collector.get_telemetry_path()
 
-            with open(telemetry_path, "r") as f:
+            with open(telemetry_path) as f:
                 for line in f:
                     record = json.loads(line.strip())
                     assert "event_id" in record
@@ -498,7 +489,7 @@ class TestJSONLFormat:
                 collector.record_fault_outcome(fault_id, "success", 100.0)
                 labels_path = collector.get_labels_path()
 
-            with open(labels_path, "r") as f:
+            with open(labels_path) as f:
                 lines = f.readlines()
                 assert len(lines) == 2
 
@@ -525,7 +516,7 @@ class TestJSONLFormat:
                 )
                 telemetry_path = collector.get_telemetry_path()
 
-            with open(telemetry_path, "r", encoding="utf-8") as f:
+            with open(telemetry_path, encoding="utf-8") as f:
                 record = json.loads(f.readline())
                 assert record["data"]["message"] == "测试中文字符"
                 assert record["data"]["emoji"] == "🚀"
@@ -623,7 +614,7 @@ class TestIntegrationWithBaseProxy:
                 labels_path = collector.get_labels_path()
 
             # Verify output
-            with open(labels_path, "r") as f:
+            with open(labels_path) as f:
                 lines = f.readlines()
                 assert len(lines) == 6  # 3 starts + 3 ends
 
@@ -661,7 +652,7 @@ class TestIntegrationWithBaseProxy:
 
                 labels_path = collector.get_labels_path()
 
-            with open(labels_path, "r") as f:
+            with open(labels_path) as f:
                 records = [json.loads(line) for line in f]
 
             end_record = [r for r in records if r["record_type"] == "fault_injection_end"][0]

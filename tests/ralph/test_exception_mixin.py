@@ -7,8 +7,9 @@ Tests cover:
 - _strategy_raise_exception reads exc_type and message from config
 - Error handling for unknown exception types
 """
+
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -19,7 +20,7 @@ from ralph.mixins.exception import EXCEPTION_MAP, ExceptionMixin
 class MockConfig:
     """Mock config class for testing."""
 
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
 
 
 class MockProxy(ExceptionMixin):

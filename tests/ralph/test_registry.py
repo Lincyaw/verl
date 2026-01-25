@@ -249,6 +249,7 @@ class TestProxyRegistryIntegration:
 
     def test_full_workflow(self):
         """Test full registration and lookup workflow."""
+
         # Register
         @ProxyRegistry.register("integration.test")
         class IntegrationProxy:
@@ -289,15 +290,9 @@ class TestProxyRegistryIntegration:
             SUPPORTED_STRATEGIES = {StrategyType.REPEAT}
 
         # Each proxy has its own strategies
-        assert ProxyRegistry.get_supported_strategies("concurrent.one") == {
-            StrategyType.DELAY
-        }
-        assert ProxyRegistry.get_supported_strategies("concurrent.two") == {
-            StrategyType.SKIP
-        }
-        assert ProxyRegistry.get_supported_strategies("concurrent.three") == {
-            StrategyType.REPEAT
-        }
+        assert ProxyRegistry.get_supported_strategies("concurrent.one") == {StrategyType.DELAY}
+        assert ProxyRegistry.get_supported_strategies("concurrent.two") == {StrategyType.SKIP}
+        assert ProxyRegistry.get_supported_strategies("concurrent.three") == {StrategyType.REPEAT}
 
     def test_registry_persistence(self):
         """Test registry maintains state across calls."""

@@ -5,7 +5,6 @@ Tests the DataProtoConcatProxy class and its strategies for data pipeline
 fault injection.
 """
 
-import random
 from unittest.mock import MagicMock
 
 import pytest
@@ -13,7 +12,7 @@ import torch
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.registry import ProxyRegistry
-from ralph.proxies.data_pipeline import DataProtoConcatProxy
+from ralph.proxies.data_pipeline import DataProtoChunkProxy, DataProtoConcatProxy
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +83,6 @@ class TestDataProtoConcatProxyRegistration:
     def test_proxy_is_registered(self):
         """Test that the proxy is registered in the registry."""
         # Import to trigger registration
-        from ralph.proxies.data_pipeline import DataProtoConcatProxy
 
         assert ProxyRegistry.is_registered("DataProto.concat")
 
@@ -147,9 +145,7 @@ class TestDataMismatchStrategy:
     def test_data_mismatch_increases_batch_size(self, mock_original):
         """Test that positive mismatch_ratio increases batch size."""
         proxy = DataProtoConcatProxy(mock_original)
-        config = create_config(
-            StrategyType.DATA_MISMATCH, parameters={"mismatch_ratio": 0.5}
-        )
+        config = create_config(StrategyType.DATA_MISMATCH, parameters={"mismatch_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -162,9 +158,7 @@ class TestDataMismatchStrategy:
     def test_data_mismatch_decreases_batch_size(self, mock_original):
         """Test that negative mismatch_ratio decreases batch size."""
         proxy = DataProtoConcatProxy(mock_original)
-        config = create_config(
-            StrategyType.DATA_MISMATCH, parameters={"mismatch_ratio": -0.25}
-        )
+        config = create_config(StrategyType.DATA_MISMATCH, parameters={"mismatch_ratio": -0.25})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -189,9 +183,7 @@ class TestDataMismatchStrategy:
     def test_data_mismatch_with_dict_result(self, mock_original):
         """Test data mismatch with dict containing tensors."""
         proxy = DataProtoConcatProxy(mock_original)
-        config = create_config(
-            StrategyType.DATA_MISMATCH, parameters={"mismatch_ratio": 0.5}
-        )
+        config = create_config(StrategyType.DATA_MISMATCH, parameters={"mismatch_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -211,9 +203,7 @@ class TestLostItemsStrategy:
     def test_lost_items_drops_items(self, mock_original):
         """Test that LOST_ITEMS drops some input items."""
         proxy = DataProtoConcatProxy(mock_original)
-        config = create_config(
-            StrategyType.LOST_ITEMS, parameters={"drop_ratio": 0.5}
-        )
+        config = create_config(StrategyType.LOST_ITEMS, parameters={"drop_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -239,9 +229,7 @@ class TestLostItemsStrategy:
     def test_lost_items_keeps_at_least_one(self, mock_original):
         """Test that at least one item is kept."""
         proxy = DataProtoConcatProxy(mock_original)
-        config = create_config(
-            StrategyType.LOST_ITEMS, parameters={"drop_ratio": 1.0}
-        )
+        config = create_config(StrategyType.LOST_ITEMS, parameters={"drop_ratio": 1.0})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -255,9 +243,7 @@ class TestLostItemsStrategy:
         proxy = DataProtoConcatProxy(mock_original)
 
         # Negative ratio should be clamped to 0
-        config = create_config(
-            StrategyType.LOST_ITEMS, parameters={"drop_ratio": -0.5}
-        )
+        config = create_config(StrategyType.LOST_ITEMS, parameters={"drop_ratio": -0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -273,9 +259,7 @@ class TestDuplicateItemsStrategy:
     def test_duplicate_items_adds_items(self, mock_original):
         """Test that DUPLICATE_ITEMS adds duplicate items."""
         proxy = DataProtoConcatProxy(mock_original)
-        config = create_config(
-            StrategyType.DUPLICATE_ITEMS, parameters={"duplicate_ratio": 0.5}
-        )
+        config = create_config(StrategyType.DUPLICATE_ITEMS, parameters={"duplicate_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -300,9 +284,7 @@ class TestDuplicateItemsStrategy:
     def test_duplicate_items_preserves_content(self, mock_original):
         """Test that duplicated items have same content."""
         proxy = DataProtoConcatProxy(mock_original)
-        config = create_config(
-            StrategyType.DUPLICATE_ITEMS, parameters={"duplicate_ratio": 1.0}
-        )
+        config = create_config(StrategyType.DUPLICATE_ITEMS, parameters={"duplicate_ratio": 1.0})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -317,9 +299,7 @@ class TestDuplicateItemsStrategy:
         proxy = DataProtoConcatProxy(mock_original)
 
         # Ratio > 1 should be clamped to 1
-        config = create_config(
-            StrategyType.DUPLICATE_ITEMS, parameters={"duplicate_ratio": 2.0}
-        )
+        config = create_config(StrategyType.DUPLICATE_ITEMS, parameters={"duplicate_ratio": 2.0})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -617,8 +597,6 @@ class TestDataProtoConcatProxyIntegration:
 # DataProtoChunkProxy Tests
 # =============================================================================
 
-from ralph.proxies.data_pipeline import DataProtoChunkProxy
-
 
 @pytest.fixture
 def mock_chunk_original():
@@ -643,7 +621,7 @@ def mock_chunk_original():
         elif isinstance(data, list):
             # Split list into chunks
             chunk_size = max(1, len(data) // num_chunks)
-            return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+            return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
         return [data]
 
     return chunk_fn
@@ -654,7 +632,6 @@ class TestDataProtoChunkProxyRegistration:
 
     def test_proxy_is_registered(self):
         """Test that the proxy is registered in the registry."""
-        from ralph.proxies.data_pipeline import DataProtoChunkProxy
 
         assert ProxyRegistry.is_registered("DataProto.chunk")
 
@@ -717,9 +694,7 @@ class TestUnevenSplitStrategy:
     def test_uneven_split_creates_different_sizes(self, mock_chunk_original):
         """Test that UNEVEN_SPLIT creates chunks of different sizes."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.5}
-        )
+        config = create_config(StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -741,15 +716,13 @@ class TestUnevenSplitStrategy:
         data = torch.randn(20, 4)
         result = proxy(data, 2)
         # Default variance 0.3 should produce noticeable difference
-        sizes = [chunk.shape[0] for chunk in result]
+        [chunk.shape[0] for chunk in result]
         assert len(result) == 2
 
     def test_uneven_split_preserves_total_data(self, mock_chunk_original):
         """Test that uneven split changes total amount of data."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.3}
-        )
+        config = create_config(StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.3})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -763,9 +736,7 @@ class TestUnevenSplitStrategy:
     def test_uneven_split_with_dict_result(self, mock_chunk_original):
         """Test uneven split with dict chunks."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.3}
-        )
+        config = create_config(StrategyType.UNEVEN_SPLIT, parameters={"variance_ratio": 0.3})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -781,9 +752,7 @@ class TestLostChunksStrategy:
     def test_lost_chunks_drops_chunks(self, mock_chunk_original):
         """Test that LOST_CHUNKS drops some chunks."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 0.5}
-        )
+        config = create_config(StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -808,9 +777,7 @@ class TestLostChunksStrategy:
     def test_lost_chunks_keeps_at_least_one(self, mock_chunk_original):
         """Test that at least one chunk is kept."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 1.0}
-        )
+        config = create_config(StrategyType.LOST_CHUNKS, parameters={"drop_ratio": 1.0})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -821,9 +788,7 @@ class TestLostChunksStrategy:
     def test_lost_chunks_ratio_clamped(self, mock_chunk_original):
         """Test that drop_ratio is clamped to [0, 1]."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.LOST_CHUNKS, parameters={"drop_ratio": -0.5}
-        )
+        config = create_config(StrategyType.LOST_CHUNKS, parameters={"drop_ratio": -0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -839,9 +804,7 @@ class TestEmptyChunkStrategy:
     def test_empty_chunk_zeros_data(self, mock_chunk_original):
         """Test that EMPTY_CHUNK creates zeroed chunks."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 0.5}
-        )
+        config = create_config(StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -867,9 +830,7 @@ class TestEmptyChunkStrategy:
     def test_empty_chunk_preserves_shape(self, mock_chunk_original):
         """Test that empty chunks preserve shape."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 1.0}
-        )
+        config = create_config(StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 1.0})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -883,9 +844,7 @@ class TestEmptyChunkStrategy:
     def test_empty_chunk_with_dict(self, mock_chunk_original):
         """Test empty chunk with dict data."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 0.5}
-        )
+        config = create_config(StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 0.5})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -898,9 +857,7 @@ class TestEmptyChunkStrategy:
     def test_empty_chunk_ratio_clamped(self, mock_chunk_original):
         """Test that empty_ratio is clamped to [0, 1]."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 2.0}
-        )
+        config = create_config(StrategyType.EMPTY_CHUNK, parameters={"empty_ratio": 2.0})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -917,9 +874,7 @@ class TestOverlappingChunksStrategy:
     def test_overlapping_chunks_adds_overlap(self, mock_chunk_original):
         """Test that OVERLAPPING_CHUNKS adds overlapping data."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.2}
-        )
+        config = create_config(StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.2})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -944,9 +899,7 @@ class TestOverlappingChunksStrategy:
     def test_overlapping_chunks_ratio_clamped(self, mock_chunk_original):
         """Test that overlap_ratio is clamped to [0, 0.5]."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.8}
-        )
+        config = create_config(StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.8})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -958,9 +911,7 @@ class TestOverlappingChunksStrategy:
     def test_overlapping_chunks_preserves_width(self, mock_chunk_original):
         """Test that overlap preserves tensor width."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.2}
-        )
+        config = create_config(StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.2})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -973,9 +924,7 @@ class TestOverlappingChunksStrategy:
     def test_overlapping_chunks_single_chunk(self, mock_chunk_original):
         """Test that single chunk is not modified."""
         proxy = DataProtoChunkProxy(mock_chunk_original)
-        config = create_config(
-            StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.3}
-        )
+        config = create_config(StrategyType.OVERLAPPING_CHUNKS, parameters={"overlap_ratio": 0.3})
         proxy.set_config(config)
         proxy.set_step(0)
 
@@ -1115,6 +1064,7 @@ class TestDataProtoChunkProxyIntegration:
 
     def test_tuple_result_preserved(self, mock_chunk_original):
         """Test that tuple results are preserved as tuples."""
+
         def tuple_chunk_fn(data, num_chunks=2, *args, **kwargs):
             return tuple(torch.chunk(data, num_chunks, dim=0))
 

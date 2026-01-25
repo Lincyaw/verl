@@ -4,7 +4,6 @@ Unit tests for InjectionEngine orchestrator.
 
 import os
 import tempfile
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -425,7 +424,7 @@ class TestInjectionEngineContextManager:
         # Record some telemetry
         collector.record_telemetry("test", {"key": "value"})
 
-        with InjectionEngine(collector) as engine:
+        with InjectionEngine(collector):
             pass
 
         # After context exit, collector should be flushed
@@ -723,6 +722,7 @@ class TestInjectionEngineIntegration:
     def test_full_workflow_with_delay(self, temp_dir, cleanup_registry):
         """Test full workflow: add config, install, run, uninstall."""
         import sys
+
         from ralph.collectors.dual_stream import DualStreamCollector
 
         # Create test module

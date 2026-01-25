@@ -226,8 +226,7 @@ class CheckpointSaveProxy(BaseProxy, DelayMixin, ExceptionMixin):
 
         # Build checkpoint-specific default message with context
         default_message = (
-            f"Fault injection: {exc_type} during checkpoint save "
-            f"(local_path={local_path}, global_step={global_step})"
+            f"Fault injection: {exc_type} during checkpoint save (local_path={local_path}, global_step={global_step})"
         )
         message = self._config.parameters.get("message", default_message)
 
@@ -297,10 +296,7 @@ class CheckpointLoadProxy(BaseProxy, TensorCorruptionMixin, ExceptionMixin):
         if exc_type is None:
             raise ValueError("exc_type must be specified in config parameters")
 
-        default_message = (
-            f"Fault injection: {exc_type} during checkpoint load "
-            f"(checkpoint_path={checkpoint_path})"
-        )
+        default_message = f"Fault injection: {exc_type} during checkpoint load (checkpoint_path={checkpoint_path})"
         message = self._config.parameters.get("message", default_message)
 
         self._raise_exception(exc_type, message)
@@ -448,9 +444,7 @@ class CheckpointLoadProxy(BaseProxy, TensorCorruptionMixin, ExceptionMixin):
             if drop_keys is not None:
                 # Drop specific keys
                 return {
-                    k: self._apply_partial_load(v, drop_keys, drop_ratio)
-                    for k, v in obj.items()
-                    if k not in drop_keys
+                    k: self._apply_partial_load(v, drop_keys, drop_ratio) for k, v in obj.items() if k not in drop_keys
                 }
             else:
                 # Drop random fraction of keys
@@ -691,4 +685,3 @@ class UpdateActorProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, SkipMixin):
         self._original(batch, *args, **kwargs)
         # Call the second time (result returned)
         return self._original(batch, *args, **kwargs)
-

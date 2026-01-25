@@ -140,8 +140,14 @@ class GenerateProxy(BaseProxy, DelayMixin):
         elif isinstance(result, dict):
             # Handle dict-like outputs (common in many frameworks)
             output_keys = {
-                "sequences", "generated_ids", "output_ids", "token_ids",
-                "outputs", "generated_tokens", "generated_text", "text"
+                "sequences",
+                "generated_ids",
+                "output_ids",
+                "token_ids",
+                "outputs",
+                "generated_tokens",
+                "generated_text",
+                "text",
             }
             modified = {}
             for k, v in result.items():
@@ -219,8 +225,14 @@ class GenerateProxy(BaseProxy, DelayMixin):
         elif isinstance(result, dict):
             # Handle dict-like outputs
             output_keys = {
-                "sequences", "generated_ids", "output_ids", "token_ids",
-                "outputs", "generated_tokens", "generated_text", "text"
+                "sequences",
+                "generated_ids",
+                "output_ids",
+                "token_ids",
+                "outputs",
+                "generated_tokens",
+                "generated_text",
+                "text",
             }
             modified = {}
             for k, v in result.items():
@@ -246,7 +258,7 @@ class GenerateProxy(BaseProxy, DelayMixin):
         elif isinstance(result, str):
             # Truncate string output (approximate by characters, not tokens)
             # Use a rough estimate of 4 chars per token
-            return result[:max_tokens * 4]
+            return result[: max_tokens * 4]
         elif hasattr(result, "outputs"):
             # Handle vLLM RequestOutput-like objects
             try:
@@ -254,7 +266,7 @@ class GenerateProxy(BaseProxy, DelayMixin):
                     if hasattr(output, "token_ids"):
                         output.token_ids = output.token_ids[:max_tokens]
                     if hasattr(output, "text"):
-                        output.text = output.text[:max_tokens * 4]
+                        output.text = output.text[: max_tokens * 4]
             except (AttributeError, TypeError):
                 pass
             return result
@@ -285,12 +297,7 @@ class GenerateProxy(BaseProxy, DelayMixin):
         seed = self._config.parameters.get("seed", None)
         return self._apply_garbage_output(result, vocab_size, seed)
 
-    def _apply_garbage_output(
-        self,
-        result: Any,
-        vocab_size: int,
-        seed: Optional[int] = None
-    ) -> Any:
+    def _apply_garbage_output(self, result: Any, vocab_size: int, seed: Optional[int] = None) -> Any:
         """
         Recursively replace sequences with random tokens.
 
@@ -307,16 +314,10 @@ class GenerateProxy(BaseProxy, DelayMixin):
 
         if isinstance(result, torch.Tensor):
             # Generate random tokens with same shape
-            return torch.randint(
-                0, vocab_size, result.shape,
-                dtype=result.dtype, device=result.device
-            )
+            return torch.randint(0, vocab_size, result.shape, dtype=result.dtype, device=result.device)
         elif isinstance(result, dict):
             # Handle dict-like outputs
-            output_keys = {
-                "sequences", "generated_ids", "output_ids", "token_ids",
-                "outputs", "generated_tokens"
-            }
+            output_keys = {"sequences", "generated_ids", "output_ids", "token_ids", "outputs", "generated_tokens"}
             # Exclude text keys since we handle them differently
             text_keys = {"generated_text", "text"}
             modified = {}
@@ -333,6 +334,7 @@ class GenerateProxy(BaseProxy, DelayMixin):
             if all(isinstance(item, int) for item in result):
                 # List of token IDs - replace with random
                 import random
+
                 if seed is not None:
                     random.seed(seed)
                 return [random.randint(0, vocab_size - 1) for _ in result]
@@ -342,6 +344,7 @@ class GenerateProxy(BaseProxy, DelayMixin):
         elif isinstance(result, tuple):
             if all(isinstance(item, int) for item in result):
                 import random
+
                 if seed is not None:
                     random.seed(seed)
                 return tuple(random.randint(0, vocab_size - 1) for _ in result)
@@ -354,14 +357,12 @@ class GenerateProxy(BaseProxy, DelayMixin):
             # Handle vLLM RequestOutput-like objects
             try:
                 import random
+
                 if seed is not None:
                     random.seed(seed)
                 for output in result.outputs:
                     if hasattr(output, "token_ids") and output.token_ids:
-                        output.token_ids = [
-                            random.randint(0, vocab_size - 1)
-                            for _ in output.token_ids
-                        ]
+                        output.token_ids = [random.randint(0, vocab_size - 1) for _ in output.token_ids]
                     if hasattr(output, "text"):
                         output.text = self._generate_garbage_text(output.text, vocab_size)
             except (AttributeError, TypeError):
@@ -510,6 +511,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
                 if delta > 0:
                     # Randomly choose to increase or decrease
                     import random
+
                     if random.random() > 0.5:
                         new_shape[dim_idx] = original_size + delta
                         # Pad with zeros
@@ -559,9 +561,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
         keys_to_skip = self._config.parameters.get("keys_to_skip", None)
         return self._apply_partial_update(result, update_ratio, keys_to_skip)
 
-    def _apply_partial_update(
-        self, result: Any, update_ratio: float, keys_to_skip: Optional[list[str]] = None
-    ) -> Any:
+    def _apply_partial_update(self, result: Any, update_ratio: float, keys_to_skip: Optional[list[str]] = None) -> Any:
         """
         Recursively apply partial update to weights.
 
@@ -600,6 +600,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
         elif isinstance(result, torch.Tensor):
             # For tensors at root level, return zeros based on ratio
             import random
+
             if random.random() > update_ratio:
                 return torch.zeros_like(result)
             return result
@@ -693,12 +694,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
             self._store_weights(args, kwargs, current_result)
             return current_result
 
-    def _store_weights(
-        self,
-        args: tuple,
-        kwargs: dict,
-        result: Optional[Any] = None
-    ) -> None:
+    def _store_weights(self, args: tuple, kwargs: dict, result: Optional[Any] = None) -> None:
         """
         Store weights in history for OLD_WEIGHTS strategy.
 
@@ -726,7 +722,7 @@ class UpdateWeightsProxy(BaseProxy, DelayMixin):
 
         # Trim history if too large
         if len(self._weight_history) > self._max_history_size:
-            self._weight_history = self._weight_history[-self._max_history_size:]
+            self._weight_history = self._weight_history[-self._max_history_size :]
 
     def _deep_copy_weights(self, weights: Any) -> Any:
         """

@@ -724,9 +724,7 @@ class GRPOProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModification
         # we modify it to look like it was computed with wrong mean/std
         return self._apply_wrong_normalization(result, mean_scale, std_scale)
 
-    def _apply_wrong_normalization(
-        self, result: Any, mean_scale: float, std_scale: float
-    ) -> Any:
+    def _apply_wrong_normalization(self, result: Any, mean_scale: float, std_scale: float) -> Any:
         """
         Recursively apply wrong normalization scaling to advantage tensors.
 
@@ -743,20 +741,11 @@ class GRPOProxy(BaseProxy, DelayMixin, TensorCorruptionMixin, ResultModification
             # This simulates effect of wrong mean/std computation
             return result * mean_scale * std_scale
         elif isinstance(result, tuple):
-            return tuple(
-                self._apply_wrong_normalization(item, mean_scale, std_scale)
-                for item in result
-            )
+            return tuple(self._apply_wrong_normalization(item, mean_scale, std_scale) for item in result)
         elif isinstance(result, dict):
-            return {
-                k: self._apply_wrong_normalization(v, mean_scale, std_scale)
-                for k, v in result.items()
-            }
+            return {k: self._apply_wrong_normalization(v, mean_scale, std_scale) for k, v in result.items()}
         elif isinstance(result, list):
-            return [
-                self._apply_wrong_normalization(item, mean_scale, std_scale)
-                for item in result
-            ]
+            return [self._apply_wrong_normalization(item, mean_scale, std_scale) for item in result]
         else:
             return result
 

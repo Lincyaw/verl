@@ -52,9 +52,7 @@ class ProxyRegistry:
 
         def decorator(proxy_class: type["BaseProxy"]) -> type["BaseProxy"]:
             if target in cls._registry:
-                raise ValueError(
-                    f"Target '{target}' is already registered to {cls._registry[target].__name__}"
-                )
+                raise ValueError(f"Target '{target}' is already registered to {cls._registry[target].__name__}")
             cls._registry[target] = proxy_class
             return proxy_class
 
@@ -75,10 +73,7 @@ class ProxyRegistry:
             KeyError: If no proxy is registered for the target
         """
         if target not in cls._registry:
-            raise KeyError(
-                f"No proxy registered for target '{target}'. "
-                f"Available targets: {cls.list_targets()}"
-            )
+            raise KeyError(f"No proxy registered for target '{target}'. Available targets: {cls.list_targets()}")
         return cls._registry[target]
 
     @classmethod

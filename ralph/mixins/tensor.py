@@ -8,6 +8,7 @@ This mixin enables proxies to corrupt tensor data in various ways:
 - Scaling tensor values
 - Recursively corrupting tensors in nested structures (dict/list/tuple)
 """
+
 from typing import Any
 
 import torch
@@ -52,15 +53,10 @@ class TensorCorruptionMixin:
         """
         mask = torch.rand_like(tensor.float()) < ratio
         result = tensor.clone().float()
-        result[mask] = float('nan')
+        result[mask] = float("nan")
         return result.to(tensor.dtype)
 
-    def _inject_inf(
-        self,
-        tensor: torch.Tensor,
-        ratio: float,
-        positive: bool = True
-    ) -> torch.Tensor:
+    def _inject_inf(self, tensor: torch.Tensor, ratio: float, positive: bool = True) -> torch.Tensor:
         """
         Inject Inf values into a tensor.
 
@@ -74,7 +70,7 @@ class TensorCorruptionMixin:
         """
         mask = torch.rand_like(tensor.float()) < ratio
         result = tensor.clone().float()
-        inf_value = float('inf') if positive else float('-inf')
+        inf_value = float("inf") if positive else float("-inf")
         result[mask] = inf_value
         return result.to(tensor.dtype)
 
@@ -91,11 +87,7 @@ class TensorCorruptionMixin:
         """
         return tensor * scale
 
-    def _corrupt_result_tensors(
-        self,
-        result: Any,
-        noise_scale: float
-    ) -> Any:
+    def _corrupt_result_tensors(self, result: Any, noise_scale: float) -> Any:
         """
         Recursively corrupt all tensors in a result structure.
 
@@ -112,20 +104,11 @@ class TensorCorruptionMixin:
         if isinstance(result, torch.Tensor):
             return self._corrupt_tensor(result, noise_scale)
         elif isinstance(result, dict):
-            return {
-                k: self._corrupt_result_tensors(v, noise_scale)
-                for k, v in result.items()
-            }
+            return {k: self._corrupt_result_tensors(v, noise_scale) for k, v in result.items()}
         elif isinstance(result, list):
-            return [
-                self._corrupt_result_tensors(item, noise_scale)
-                for item in result
-            ]
+            return [self._corrupt_result_tensors(item, noise_scale) for item in result]
         elif isinstance(result, tuple):
-            return tuple(
-                self._corrupt_result_tensors(item, noise_scale)
-                for item in result
-            )
+            return tuple(self._corrupt_result_tensors(item, noise_scale) for item in result)
         else:
             return result
 
@@ -183,16 +166,11 @@ class TensorCorruptionMixin:
         if isinstance(result, torch.Tensor):
             return self._inject_nan(result, nan_ratio)
         elif isinstance(result, dict):
-            return {
-                k: self._inject_nan_result(v, nan_ratio)
-                for k, v in result.items()
-            }
+            return {k: self._inject_nan_result(v, nan_ratio) for k, v in result.items()}
         elif isinstance(result, list):
             return [self._inject_nan_result(item, nan_ratio) for item in result]
         elif isinstance(result, tuple):
-            return tuple(
-                self._inject_nan_result(item, nan_ratio) for item in result
-            )
+            return tuple(self._inject_nan_result(item, nan_ratio) for item in result)
         else:
             return result
 
@@ -218,12 +196,7 @@ class TensorCorruptionMixin:
         positive = self._config.parameters.get("positive", True)
         return self._inject_inf_result(result, inf_ratio, positive)
 
-    def _inject_inf_result(
-        self,
-        result: Any,
-        inf_ratio: float,
-        positive: bool
-    ) -> Any:
+    def _inject_inf_result(self, result: Any, inf_ratio: float, positive: bool) -> Any:
         """
         Recursively inject Inf into all tensors in a result structure.
 
@@ -238,19 +211,10 @@ class TensorCorruptionMixin:
         if isinstance(result, torch.Tensor):
             return self._inject_inf(result, inf_ratio, positive)
         elif isinstance(result, dict):
-            return {
-                k: self._inject_inf_result(v, inf_ratio, positive)
-                for k, v in result.items()
-            }
+            return {k: self._inject_inf_result(v, inf_ratio, positive) for k, v in result.items()}
         elif isinstance(result, list):
-            return [
-                self._inject_inf_result(item, inf_ratio, positive)
-                for item in result
-            ]
+            return [self._inject_inf_result(item, inf_ratio, positive) for item in result]
         elif isinstance(result, tuple):
-            return tuple(
-                self._inject_inf_result(item, inf_ratio, positive)
-                for item in result
-            )
+            return tuple(self._inject_inf_result(item, inf_ratio, positive) for item in result)
         else:
             return result

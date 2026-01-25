@@ -8,7 +8,6 @@ and YAML configuration loading from ralph.core.config.
 import os
 import random
 import tempfile
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -622,9 +621,7 @@ scenarios:
 
     def test_load_minimal_config(self, minimal_yaml):
         """Test loading minimal valid config."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(minimal_yaml)
             f.flush()
             try:
@@ -641,9 +638,7 @@ scenarios:
 
     def test_load_empty_file_raises(self):
         """Test empty file raises ValueError."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("")
             f.flush()
             try:
@@ -654,9 +649,7 @@ scenarios:
 
     def test_load_no_scenarios_raises(self):
         """Test missing scenarios raises ValueError."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("experiment:\n  name: test\n")
             f.flush()
             try:
@@ -682,9 +675,7 @@ scenarios:
       at_step: 1
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -702,9 +693,7 @@ scenarios:
 
     def test_validate_missing_scenarios(self):
         """Test validation with missing scenarios."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("experiment:\n  name: test\n")
             f.flush()
             try:
@@ -716,9 +705,7 @@ scenarios:
 
     def test_validate_empty_scenarios(self):
         """Test validation with empty scenarios."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("scenarios: []\n")
             f.flush()
             try:
@@ -730,9 +717,7 @@ scenarios:
 
     def test_validate_scenario_missing_fields(self):
         """Test validation detects missing fields."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("scenarios:\n  - id: incomplete\n    fault_type: delay\n")
             f.flush()
             try:

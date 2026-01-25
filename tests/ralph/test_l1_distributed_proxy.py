@@ -16,7 +16,7 @@ import torch
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.registry import ProxyRegistry
-from ralph.proxies.l1_distributed import AllReduceProxy
+from ralph.proxies.l1_distributed import AllGatherProxy, AllReduceProxy, BarrierProxy
 
 
 class TestAllReduceProxyRegistration:
@@ -468,7 +468,7 @@ class TestAllReduceProxyIntegration:
 
     def test_strategy_only_triggers_at_configured_step(self):
         """Strategy only triggers at configured step."""
-        tensor = torch.ones(100)
+        torch.ones(100)
         original = MagicMock(return_value=None)
         proxy = AllReduceProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=5)
@@ -600,8 +600,6 @@ class TestAllReduceProxyIntegration:
 # AllGatherProxy Tests
 # =============================================================================
 
-from ralph.proxies.l1_distributed import AllGatherProxy
-
 
 class TestAllGatherProxyRegistration:
     """Tests for AllGatherProxy registration."""
@@ -728,7 +726,7 @@ class TestCorruptGatheredStrategy:
         """CORRUPT_GATHERED strategy corrupts all gathered tensors by default."""
         tensor_list = [torch.ones(10), torch.ones(10), torch.ones(10)]
         tensor = torch.ones(10)
-        original_values = [t.clone() for t in tensor_list]
+        [t.clone() for t in tensor_list]
 
         def mock_original(tl, t, **kwargs):
             # Simulate all_gather filling tensor_list
@@ -1210,8 +1208,6 @@ class TestAllGatherProxyIntegration:
 # =============================================================================
 # BarrierProxy Tests
 # =============================================================================
-
-from ralph.proxies.l1_distributed import BarrierProxy
 
 
 class TestBarrierProxyRegistration:

@@ -9,8 +9,9 @@ Tests cover:
 - _strategy_reward_flip negates all numeric results
 - _strategy_constant_reward sets all results to a constant value
 """
+
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,7 +24,7 @@ from ralph.mixins.result import ResultModificationMixin
 class MockConfig:
     """Mock config class for testing."""
 
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
 
 
 class MockProxy(ResultModificationMixin):
@@ -174,17 +175,9 @@ class TestNegateResult:
         """Test negating values in mixed nested structures."""
         proxy = MockProxy(MagicMock(), MockConfig(parameters={}))
 
-        result = proxy._negate_result({
-            "list": [1, 2],
-            "tuple": (3, 4),
-            "nested": {"value": 5}
-        })
+        result = proxy._negate_result({"list": [1, 2], "tuple": (3, 4), "nested": {"value": 5}})
 
-        assert result == {
-            "list": [-1, -2],
-            "tuple": (-3, -4),
-            "nested": {"value": -5}
-        }
+        assert result == {"list": [-1, -2], "tuple": (-3, -4), "nested": {"value": -5}}
 
     def test_negate_result_with_string_unchanged(self):
         """Test that strings are returned unchanged."""
@@ -427,10 +420,7 @@ class TestStrategyRewardFlip:
     def test_strategy_reward_flip_with_nested_structure(self):
         """Test reward flip with nested structure containing tensors."""
         tensor = torch.tensor([1.0, 2.0])
-        mock_original = MagicMock(return_value={
-            "rewards": tensor,
-            "meta": {"score": 10}
-        })
+        mock_original = MagicMock(return_value={"rewards": tensor, "meta": {"score": 10}})
         config = MockConfig(parameters={})
         proxy = MockProxy(mock_original, config)
 
@@ -507,10 +497,7 @@ class TestStrategyConstantReward:
     def test_strategy_constant_reward_with_nested_structure(self):
         """Test constant reward with nested structure containing tensors."""
         tensor = torch.tensor([1.0, 2.0])
-        mock_original = MagicMock(return_value={
-            "rewards": tensor,
-            "meta": {"score": 10}
-        })
+        mock_original = MagicMock(return_value={"rewards": tensor, "meta": {"score": 10}})
         config = MockConfig(parameters={"constant_value": 0.5})
         proxy = MockProxy(mock_original, config)
 
@@ -585,15 +572,9 @@ class TestResultModificationMixinIntegration:
 
         complex_structure = {
             "scalars": [1, 2.5, -3],
-            "tensors": {
-                "small": torch.tensor([1.0, 2.0]),
-                "large": torch.randn(10, 10)
-            },
+            "tensors": {"small": torch.tensor([1.0, 2.0]), "large": torch.randn(10, 10)},
             "strings": ["a", "b"],  # Should be unchanged
-            "nested": [
-                {"value": 5},
-                (1, 2, 3)
-            ]
+            "nested": [{"value": 5}, (1, 2, 3)],
         }
 
         result = proxy._negate_result(complex_structure)

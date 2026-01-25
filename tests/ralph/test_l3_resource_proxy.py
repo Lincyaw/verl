@@ -140,9 +140,9 @@ class TestAllocatePressure:
         """allocate_pressure allocates GPU memory."""
         injector = GPUMemoryInjector()
         try:
-            initial_allocated = injector._get_allocated_memory()
+            injector._get_allocated_memory()
             result = injector.allocate_pressure(0.1)
-            final_allocated = injector._get_allocated_memory()
+            injector._get_allocated_memory()
 
             # Should have allocated some memory
             assert result is True
@@ -459,9 +459,10 @@ class TestMemoryLeakStrategy:
         injector.set_config(config)
         injector.set_step(0)
 
-        with patch.object(injector, "start_leak") as mock_start, patch.object(
-            injector, "step_leak", return_value=50 * 1024 * 1024
-        ) as mock_step:
+        with (
+            patch.object(injector, "start_leak") as mock_start,
+            patch.object(injector, "step_leak", return_value=50 * 1024 * 1024) as mock_step,
+        ):
             result = injector()
             mock_start.assert_called_once_with(50)
             mock_step.assert_called_once()
@@ -481,8 +482,9 @@ class TestMemoryLeakStrategy:
         injector.set_config(config)
         injector.set_step(0)
 
-        with patch.object(injector, "start_leak") as mock_start, patch.object(
-            injector, "step_leak", return_value=100 * 1024 * 1024
+        with (
+            patch.object(injector, "start_leak") as mock_start,
+            patch.object(injector, "step_leak", return_value=100 * 1024 * 1024),
         ):
             injector()
             mock_start.assert_called_once_with(100)

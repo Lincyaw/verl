@@ -6,9 +6,10 @@ Tests cover:
 - _strategy_delay reads delay_seconds from config parameters
 - _strategy_delay calls original function with correct arguments
 """
+
 import time
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,7 +21,7 @@ from ralph.mixins.delay import DelayMixin
 class MockConfig:
     """Mock config class for testing."""
 
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
 
 
 class MockProxy(DelayMixin):

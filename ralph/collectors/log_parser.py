@@ -146,9 +146,7 @@ class RayLogParser:
         """Check if a log level should be included based on filter."""
         if self._log_level_filter is None:
             return True
-        filter_priority = self._level_priority.get(
-            self._log_level_filter.upper(), 0
-        )
+        filter_priority = self._level_priority.get(self._log_level_filter.upper(), 0)
         level_priority = self._level_priority.get(level.upper(), 0)
         return level_priority >= filter_priority
 
@@ -214,9 +212,7 @@ class RayLogParser:
 
         return "unknown", metadata
 
-    def parse_line(
-        self, line: str, source_file: str = "", line_number: int = 0
-    ) -> Optional[LogEvent]:
+    def parse_line(self, line: str, source_file: str = "", line_number: int = 0) -> Optional[LogEvent]:
         """
         Parse a single log line into a LogEvent.
 
@@ -456,9 +452,7 @@ class NCCLLogParser:
         """Check if a log level should be included based on filter."""
         if self._log_level_filter is None:
             return True
-        filter_priority = self._level_priority.get(
-            self._log_level_filter.upper(), 0
-        )
+        filter_priority = self._level_priority.get(self._log_level_filter.upper(), 0)
         level_priority = self._level_priority.get(level.upper(), 0)
         return level_priority >= filter_priority
 
@@ -529,9 +523,7 @@ class NCCLLogParser:
 
         return "unknown", metadata
 
-    def parse_line(
-        self, line: str, source_file: str = "", line_number: int = 0
-    ) -> Optional[LogEvent]:
+    def parse_line(self, line: str, source_file: str = "", line_number: int = 0) -> Optional[LogEvent]:
         """
         Parse a single log line into a LogEvent.
 

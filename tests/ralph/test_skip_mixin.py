@@ -7,8 +7,9 @@ Tests cover:
 - _strategy_skip reads default_return from config parameters
 - _strategy_repeat reads times from config parameters
 """
+
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -20,7 +21,7 @@ from ralph.mixins.skip import SkipMixin
 class MockConfig:
     """Mock config class for testing."""
 
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
 
 
 class MockProxy(SkipMixin):

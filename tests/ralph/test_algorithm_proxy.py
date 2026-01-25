@@ -149,10 +149,12 @@ class TestWrongAdvantageStrategy:
 
     def test_wrong_advantage_with_returns(self):
         """WRONG_ADVANTAGE also corrupts returns if present."""
-        original = MagicMock(return_value={
-            "advantages": torch.ones(5),
-            "returns": torch.ones(5) * 2,
-        })
+        original = MagicMock(
+            return_value={
+                "advantages": torch.ones(5),
+                "returns": torch.ones(5) * 2,
+            }
+        )
         proxy = GAEProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -173,11 +175,13 @@ class TestWrongAdvantageStrategy:
 
     def test_wrong_advantage_preserves_other_keys(self):
         """WRONG_ADVANTAGE preserves non-advantage keys."""
-        original = MagicMock(return_value={
-            "advantages": torch.ones(5),
-            "other_data": "should_be_preserved",
-            "metadata": {"key": "value"},
-        })
+        original = MagicMock(
+            return_value={
+                "advantages": torch.ones(5),
+                "other_data": "should_be_preserved",
+                "metadata": {"key": "value"},
+            }
+        )
         proxy = GAEProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -216,10 +220,12 @@ class TestZeroAdvantageStrategy:
 
     def test_zero_advantage_with_returns(self):
         """ZERO_ADVANTAGE also zeros returns if present."""
-        original = MagicMock(return_value={
-            "advantages": torch.ones(5) * 3,
-            "returns": torch.ones(5) * 7,
-        })
+        original = MagicMock(
+            return_value={
+                "advantages": torch.ones(5) * 3,
+                "returns": torch.ones(5) * 7,
+            }
+        )
         proxy = GAEProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -297,10 +303,12 @@ class TestInvertedAdvantageStrategy:
 
     def test_inverted_advantage_with_returns(self):
         """INVERTED_ADVANTAGE also negates returns."""
-        original = MagicMock(return_value={
-            "advantages": torch.tensor([1.0, 2.0]),
-            "returns": torch.tensor([3.0, 4.0]),
-        })
+        original = MagicMock(
+            return_value={
+                "advantages": torch.tensor([1.0, 2.0]),
+                "returns": torch.tensor([3.0, 4.0]),
+            }
+        )
         proxy = GAEProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -430,10 +438,12 @@ class TestScaledAdvantageStrategy:
 
     def test_scaled_advantage_with_returns(self):
         """SCALED_ADVANTAGE also scales returns."""
-        original = MagicMock(return_value={
-            "advantages": torch.ones(5),
-            "returns": torch.ones(5) * 2,
-        })
+        original = MagicMock(
+            return_value={
+                "advantages": torch.ones(5),
+                "returns": torch.ones(5) * 2,
+            }
+        )
         proxy = GAEProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -489,7 +499,7 @@ class TestDelayedAdvantageStrategy:
         proxy.set_step(0)
 
         with patch.object(proxy, "_apply_delay") as mock_delay:
-            result = proxy()
+            proxy()
             mock_delay.assert_called_once_with(10.0)
 
     def test_delayed_advantage_returns_original_result(self):
@@ -617,6 +627,7 @@ class TestGAEProxyIntegration:
 
     def test_failure_recording(self):
         """Collector records failure when strategy raises exception."""
+
         def failing_original():
             return {"advantages": torch.ones(5)}
 
@@ -866,10 +877,12 @@ class TestWrongKLStrategy:
 
     def test_wrong_kl_with_kl_penalty_key(self):
         """WRONG_KL also scales kl_penalty if present."""
-        original = MagicMock(return_value={
-            "kl": torch.ones(5),
-            "kl_penalty": torch.ones(5) * 2,
-        })
+        original = MagicMock(
+            return_value={
+                "kl": torch.ones(5),
+                "kl_penalty": torch.ones(5) * 2,
+            }
+        )
         proxy = KLPenaltyProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -888,11 +901,13 @@ class TestWrongKLStrategy:
 
     def test_wrong_kl_preserves_other_keys(self):
         """WRONG_KL preserves non-KL keys."""
-        original = MagicMock(return_value={
-            "kl": torch.ones(5),
-            "other_data": "should_be_preserved",
-            "metadata": {"key": "value"},
-        })
+        original = MagicMock(
+            return_value={
+                "kl": torch.ones(5),
+                "other_data": "should_be_preserved",
+                "metadata": {"key": "value"},
+            }
+        )
         proxy = KLPenaltyProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -951,10 +966,12 @@ class TestZeroKLStrategy:
 
     def test_zero_kl_with_kl_penalty(self):
         """ZERO_KL also zeros kl_penalty if present."""
-        original = MagicMock(return_value={
-            "kl": torch.ones(5) * 3,
-            "kl_penalty": torch.ones(5) * 7,
-        })
+        original = MagicMock(
+            return_value={
+                "kl": torch.ones(5) * 3,
+                "kl_penalty": torch.ones(5) * 7,
+            }
+        )
         proxy = KLPenaltyProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1106,10 +1123,12 @@ class TestExtremeKLStrategy:
 
     def test_extreme_kl_with_kl_penalty(self):
         """EXTREME_KL also sets kl_penalty to extreme value."""
-        original = MagicMock(return_value={
-            "kl": torch.ones(5),
-            "kl_penalty": torch.ones(5) * 2,
-        })
+        original = MagicMock(
+            return_value={
+                "kl": torch.ones(5),
+                "kl_penalty": torch.ones(5) * 2,
+            }
+        )
         proxy = KLPenaltyProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1170,10 +1189,12 @@ class TestNegativeKLStrategy:
 
     def test_negative_kl_with_kl_penalty(self):
         """NEGATIVE_KL also negates kl_penalty."""
-        original = MagicMock(return_value={
-            "kl": torch.tensor([1.0, 2.0]),
-            "kl_penalty": torch.tensor([3.0, 4.0]),
-        })
+        original = MagicMock(
+            return_value={
+                "kl": torch.tensor([1.0, 2.0]),
+                "kl_penalty": torch.tensor([3.0, 4.0]),
+            }
+        )
         proxy = KLPenaltyProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1209,11 +1230,13 @@ class TestNegativeKLStrategy:
 
     def test_negative_kl_preserves_other_keys(self):
         """NEGATIVE_KL preserves non-KL keys."""
-        original = MagicMock(return_value={
-            "kl": torch.ones(5),
-            "loss": torch.ones(5) * 2,
-            "metadata": "should_preserve",
-        })
+        original = MagicMock(
+            return_value={
+                "kl": torch.ones(5),
+                "loss": torch.ones(5) * 2,
+                "metadata": "should_preserve",
+            }
+        )
         proxy = KLPenaltyProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1812,7 +1835,7 @@ class TestSkipNormalizationStrategy:
         proxy.set_step(0)
 
         # Call with no args
-        result = proxy()
+        proxy()
 
         original.assert_called_once()
 
@@ -1935,9 +1958,7 @@ class TestGRPOProxyIntegration:
         original = MagicMock(return_value=(advantages, returns))
 
         proxy = GRPOProxy(original)
-        trigger = TriggerConfig(
-            type=TriggerType.STEP_BASED, start_step=5, end_step=10
-        )
+        trigger = TriggerConfig(type=TriggerType.STEP_BASED, start_step=5, end_step=10)
         config = FaultConfig(
             id="test",
             strategy=StrategyType.WRONG_NORMALIZATION,
@@ -1979,10 +2000,10 @@ class TestGRPOProxyIntegration:
             results.append(is_modified)
 
         # Steps 0, 3 should trigger (every 3 steps)
-        assert results[0] is True   # step 0
+        assert results[0] is True  # step 0
         assert results[1] is False  # step 1
         assert results[2] is False  # step 2
-        assert results[3] is True   # step 3
+        assert results[3] is True  # step 3
 
     def test_collector_records_fault(self):
         """GRPOProxy records fault with collector."""

@@ -14,7 +14,6 @@ from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerT
 from ralph.core.registry import ProxyRegistry
 from ralph.proxies.base import BaseProxy
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -245,10 +244,7 @@ class TestAllReduceProxy:
     def test_registration(self, all_reduce_proxy_class):
         """Test AllReduceProxy is registered."""
         assert ProxyRegistry.is_registered("torch.distributed.all_reduce")
-        assert (
-            ProxyRegistry.get_proxy("torch.distributed.all_reduce")
-            == all_reduce_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("torch.distributed.all_reduce") == all_reduce_proxy_class
 
     def test_supported_strategies(self, all_reduce_proxy_class):
         """Test supported strategies."""
@@ -280,10 +276,7 @@ class TestAllGatherProxy:
     def test_registration(self, all_gather_proxy_class):
         """Test AllGatherProxy is registered."""
         assert ProxyRegistry.is_registered("torch.distributed.all_gather")
-        assert (
-            ProxyRegistry.get_proxy("torch.distributed.all_gather")
-            == all_gather_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("torch.distributed.all_gather") == all_gather_proxy_class
 
     def test_supported_strategies(self, all_gather_proxy_class):
         """Test supported strategies."""
@@ -309,9 +302,7 @@ class TestBarrierProxy:
     def test_registration(self, barrier_proxy_class):
         """Test BarrierProxy is registered."""
         assert ProxyRegistry.is_registered("torch.distributed.barrier")
-        assert (
-            ProxyRegistry.get_proxy("torch.distributed.barrier") == barrier_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("torch.distributed.barrier") == barrier_proxy_class
 
     def test_supported_strategies(self, barrier_proxy_class):
         """Test supported strategies."""
@@ -342,10 +333,7 @@ class TestRewardManagerProxy:
     def test_registration(self, reward_manager_proxy_class):
         """Test RewardManagerProxy is registered."""
         assert ProxyRegistry.is_registered("RewardManager.__call__")
-        assert (
-            ProxyRegistry.get_proxy("RewardManager.__call__")
-            == reward_manager_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("RewardManager.__call__") == reward_manager_proxy_class
 
     def test_supported_strategies(self, reward_manager_proxy_class):
         """Test supported strategies."""
@@ -376,10 +364,7 @@ class TestCheckpointSaveProxy:
     def test_registration(self, checkpoint_save_proxy_class):
         """Test CheckpointSaveProxy is registered."""
         assert ProxyRegistry.is_registered("FSDPCheckpointManager.save_checkpoint")
-        assert (
-            ProxyRegistry.get_proxy("FSDPCheckpointManager.save_checkpoint")
-            == checkpoint_save_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("FSDPCheckpointManager.save_checkpoint") == checkpoint_save_proxy_class
 
     def test_supported_strategies(self, checkpoint_save_proxy_class):
         """Test supported strategies."""
@@ -400,10 +385,7 @@ class TestCheckpointLoadProxy:
     def test_registration(self, checkpoint_load_proxy_class):
         """Test CheckpointLoadProxy is registered."""
         assert ProxyRegistry.is_registered("FSDPCheckpointManager.load_checkpoint")
-        assert (
-            ProxyRegistry.get_proxy("FSDPCheckpointManager.load_checkpoint")
-            == checkpoint_load_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("FSDPCheckpointManager.load_checkpoint") == checkpoint_load_proxy_class
 
     def test_supported_strategies(self, checkpoint_load_proxy_class):
         """Test supported strategies."""
@@ -429,10 +411,7 @@ class TestUpdateActorProxy:
     def test_registration(self, update_actor_proxy_class):
         """Test UpdateActorProxy is registered."""
         assert ProxyRegistry.is_registered("RayPPOTrainer._update_actor")
-        assert (
-            ProxyRegistry.get_proxy("RayPPOTrainer._update_actor")
-            == update_actor_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("RayPPOTrainer._update_actor") == update_actor_proxy_class
 
     def test_supported_strategies(self, update_actor_proxy_class):
         """Test supported strategies."""
@@ -602,10 +581,7 @@ class TestComputeValuesProxy:
     def test_registration(self, compute_values_proxy_class):
         """Test ComputeValuesProxy is registered."""
         assert ProxyRegistry.is_registered("CriticWorker.compute_values")
-        assert (
-            ProxyRegistry.get_proxy("CriticWorker.compute_values")
-            == compute_values_proxy_class
-        )
+        assert ProxyRegistry.get_proxy("CriticWorker.compute_values") == compute_values_proxy_class
 
     def test_supported_strategies(self, compute_values_proxy_class):
         """Test supported strategies."""

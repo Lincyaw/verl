@@ -15,8 +15,8 @@ Tests cover:
 - _get_layer is abstract and must be implemented
 """
 
-from typing import Any, Set
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -27,7 +27,7 @@ from ralph.proxies.base import BaseProxy
 class ConcreteProxy(BaseProxy):
     """Concrete proxy for testing BaseProxy functionality."""
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {
+    SUPPORTED_STRATEGIES: set[StrategyType] = {
         StrategyType.DELAY,
         StrategyType.RAISE_EXCEPTION,
     }
@@ -47,7 +47,7 @@ class ConcreteProxy(BaseProxy):
 class NoStrategyProxy(BaseProxy):
     """Proxy with no supported strategies for testing."""
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = set()
+    SUPPORTED_STRATEGIES: set[StrategyType] = set()
 
     def _get_layer(self) -> str:
         return "L0"
@@ -56,7 +56,7 @@ class NoStrategyProxy(BaseProxy):
 class MissingMethodProxy(BaseProxy):
     """Proxy that declares strategies but doesn't implement methods."""
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {StrategyType.SKIP}
+    SUPPORTED_STRATEGIES: set[StrategyType] = {StrategyType.SKIP}
 
     def _get_layer(self) -> str:
         return "L0"
@@ -75,7 +75,7 @@ class TestBaseProxyAbstract:
         """Subclass without _get_layer cannot be instantiated."""
 
         class IncompleteProxy(BaseProxy):
-            SUPPORTED_STRATEGIES: Set[StrategyType] = set()
+            SUPPORTED_STRATEGIES: set[StrategyType] = set()
             # Missing _get_layer implementation
 
         with pytest.raises(TypeError) as exc_info:

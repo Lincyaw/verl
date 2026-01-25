@@ -4,6 +4,7 @@ DelayMixin provides delay injection capabilities for fault injection proxies.
 This mixin enables proxies to introduce artificial delays before executing
 the original function, simulating network latency, slow operations, etc.
 """
+
 import time
 from typing import Any
 

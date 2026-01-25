@@ -15,15 +15,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
-from ralph.core.engine import InjectionEngine
-from ralph.core.registry import ProxyRegistry
-
 # Import proxy modules to register them with the ProxyRegistry
 # This is necessary because the proxies use @ProxyRegistry.register() decorator
 # which only runs when the module is imported
 import ralph.proxies.l0_ray  # noqa: F401 - registers ray.get, ray.put
 import ralph.proxies.l1_distributed  # noqa: F401 - registers torch.distributed.*
+from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
+from ralph.core.engine import InjectionEngine
 
 
 class TestPostImportHookBasics:

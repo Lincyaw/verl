@@ -758,7 +758,7 @@ class TestCallToolProxyIntegration:
         proxy.set_config(config)
         proxy.set_step(0)
 
-        result = proxy("my_tool")
+        proxy("my_tool")
 
         # Should record fault injection
         collector.record_fault_injection.assert_called_once()
@@ -814,7 +814,7 @@ class TestCallToolProxyIntegration:
         proxy.set_step(0)
 
         with patch("time.sleep"):
-            result = proxy(tool_name="test", arg1="value1", arg2=42)
+            proxy(tool_name="test", arg1="value1", arg2=42)
 
         original.assert_called_once_with(tool_name="test", arg1="value1", arg2=42)
 
@@ -953,6 +953,7 @@ class TestParseFailureStrategy:
     def test_parse_failure_json_error(self):
         """PARSE_FAILURE with json error_type raises JSONDecodeError."""
         import json
+
         proxy = ToolParserProxy(lambda: None)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1077,10 +1078,12 @@ class TestWrongToolNameStrategy:
 
     def test_wrong_tool_name_list_of_calls(self):
         """WRONG_TOOL_NAME handles list of tool calls."""
-        original = MagicMock(return_value=[
-            {"name": "tool1", "arguments": {}},
-            {"name": "tool2", "arguments": {}},
-        ])
+        original = MagicMock(
+            return_value=[
+                {"name": "tool1", "arguments": {}},
+                {"name": "tool2", "arguments": {}},
+            ]
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1120,10 +1123,12 @@ class TestWrongArgumentsStrategy:
 
     def test_wrong_arguments_drop(self):
         """WRONG_ARGUMENTS with drop removes some arguments."""
-        original = MagicMock(return_value={
-            "name": "tool",
-            "arguments": {"arg1": "val1", "arg2": "val2", "arg3": "val3", "arg4": "val4"},
-        })
+        original = MagicMock(
+            return_value={
+                "name": "tool",
+                "arguments": {"arg1": "val1", "arg2": "val2", "arg3": "val3", "arg4": "val4"},
+            }
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1141,10 +1146,12 @@ class TestWrongArgumentsStrategy:
 
     def test_wrong_arguments_add_extra(self):
         """WRONG_ARGUMENTS with add_extra adds spurious arguments."""
-        original = MagicMock(return_value={
-            "name": "tool",
-            "arguments": {"real_arg": "value"},
-        })
+        original = MagicMock(
+            return_value={
+                "name": "tool",
+                "arguments": {"real_arg": "value"},
+            }
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1163,10 +1170,12 @@ class TestWrongArgumentsStrategy:
 
     def test_wrong_arguments_wrong_type(self):
         """WRONG_ARGUMENTS with wrong_type changes argument types."""
-        original = MagicMock(return_value={
-            "name": "tool",
-            "arguments": {"bool_arg": True, "int_arg": 42},
-        })
+        original = MagicMock(
+            return_value={
+                "name": "tool",
+                "arguments": {"bool_arg": True, "int_arg": 42},
+            }
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1185,10 +1194,12 @@ class TestWrongArgumentsStrategy:
 
     def test_wrong_arguments_wrong_value(self):
         """WRONG_ARGUMENTS with wrong_value corrupts values but keeps types."""
-        original = MagicMock(return_value={
-            "name": "tool",
-            "arguments": {"bool_arg": True, "str_arg": "hello"},
-        })
+        original = MagicMock(
+            return_value={
+                "name": "tool",
+                "arguments": {"bool_arg": True, "str_arg": "hello"},
+            }
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1207,10 +1218,12 @@ class TestWrongArgumentsStrategy:
 
     def test_wrong_arguments_shuffle(self):
         """WRONG_ARGUMENTS with shuffle rearranges argument values."""
-        original = MagicMock(return_value={
-            "name": "tool",
-            "arguments": {"a": 1, "b": 2, "c": 3},
-        })
+        original = MagicMock(
+            return_value={
+                "name": "tool",
+                "arguments": {"a": 1, "b": 2, "c": 3},
+            }
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1230,10 +1243,13 @@ class TestWrongArgumentsStrategy:
     def test_wrong_arguments_json_string(self):
         """WRONG_ARGUMENTS handles JSON string arguments."""
         import json
-        original = MagicMock(return_value={
-            "name": "tool",
-            "function": {"arguments": json.dumps({"key": "value", "num": 42})},
-        })
+
+        original = MagicMock(
+            return_value={
+                "name": "tool",
+                "function": {"arguments": json.dumps({"key": "value", "num": 42})},
+            }
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1335,10 +1351,12 @@ class TestExtraToolCallsStrategy:
 
     def test_extra_tool_calls_with_list_input(self):
         """EXTRA_TOOL_CALLS works with list of original calls."""
-        original = MagicMock(return_value=[
-            {"name": "tool1", "arguments": {}},
-            {"name": "tool2", "arguments": {}},
-        ])
+        original = MagicMock(
+            return_value=[
+                {"name": "tool1", "arguments": {}},
+                {"name": "tool2", "arguments": {}},
+            ]
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1359,12 +1377,14 @@ class TestMissingToolCallsStrategy:
 
     def test_missing_tool_calls_drops_some(self):
         """MISSING_TOOL_CALLS removes some tool calls."""
-        original = MagicMock(return_value=[
-            {"name": "tool1", "arguments": {}},
-            {"name": "tool2", "arguments": {}},
-            {"name": "tool3", "arguments": {}},
-            {"name": "tool4", "arguments": {}},
-        ])
+        original = MagicMock(
+            return_value=[
+                {"name": "tool1", "arguments": {}},
+                {"name": "tool2", "arguments": {}},
+                {"name": "tool3", "arguments": {}},
+                {"name": "tool4", "arguments": {}},
+            ]
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1382,11 +1402,13 @@ class TestMissingToolCallsStrategy:
 
     def test_missing_tool_calls_keep_first(self):
         """MISSING_TOOL_CALLS keeps first call when configured."""
-        original = MagicMock(return_value=[
-            {"name": "first_tool", "arguments": {}},
-            {"name": "tool2", "arguments": {}},
-            {"name": "tool3", "arguments": {}},
-        ])
+        original = MagicMock(
+            return_value=[
+                {"name": "first_tool", "arguments": {}},
+                {"name": "tool2", "arguments": {}},
+                {"name": "tool3", "arguments": {}},
+            ]
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1404,11 +1426,13 @@ class TestMissingToolCallsStrategy:
 
     def test_missing_tool_calls_keep_last(self):
         """MISSING_TOOL_CALLS keeps last call when configured."""
-        original = MagicMock(return_value=[
-            {"name": "tool1", "arguments": {}},
-            {"name": "tool2", "arguments": {}},
-            {"name": "last_tool", "arguments": {}},
-        ])
+        original = MagicMock(
+            return_value=[
+                {"name": "tool1", "arguments": {}},
+                {"name": "tool2", "arguments": {}},
+                {"name": "last_tool", "arguments": {}},
+            ]
+        )
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1426,9 +1450,7 @@ class TestMissingToolCallsStrategy:
 
     def test_missing_tool_calls_max_keep(self):
         """MISSING_TOOL_CALLS respects max_keep limit."""
-        original = MagicMock(return_value=[
-            {"name": f"tool{i}", "arguments": {}} for i in range(10)
-        ])
+        original = MagicMock(return_value=[{"name": f"tool{i}", "arguments": {}} for i in range(10)])
         proxy = ToolParserProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -1547,7 +1569,7 @@ class TestToolParserProxyIntegration:
         proxy.set_config(config)
         proxy.set_step(0)
 
-        result = proxy("input")
+        proxy("input")
 
         # Should record fault injection
         collector.record_fault_injection.assert_called_once()

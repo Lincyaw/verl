@@ -17,7 +17,15 @@ import torch
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.registry import ProxyRegistry
-from ralph.proxies.l0_ray import ObjectLostError, RayGetProxy
+from ralph.proxies.l0_ray import (
+    DummyObjectRef,
+    ExecuteAllProxy,
+    ObjectLostError,
+    ObjectStoreFullError,
+    RayGetProxy,
+    RayPutProxy,
+    WorkerDeathError,
+)
 
 
 class TestRayGetProxyRegistration:
@@ -460,8 +468,6 @@ class TestRayGetProxyIntegration:
 # RayPutProxy Tests
 # =============================================================================
 
-from ralph.proxies.l0_ray import DummyObjectRef, ObjectStoreFullError, RayPutProxy
-
 
 class TestRayPutProxyRegistration:
     """Tests for RayPutProxy registration."""
@@ -591,7 +597,7 @@ class TestRayPutCorruptTensorStrategy:
 
     def test_corrupt_tensor_dict_value(self):
         """CORRUPT_TENSOR strategy corrupts tensors in dict values."""
-        value = {"tensor": torch.ones(5), "string": "hello"}
+        {"tensor": torch.ones(5), "string": "hello"}
         stored_value = None
 
         def capture_put(v):
@@ -883,8 +889,6 @@ class TestRayPutProxyIntegration:
 # =============================================================================
 # ExecuteAllProxy Tests
 # =============================================================================
-
-from ralph.proxies.l0_ray import ExecuteAllProxy, WorkerDeathError
 
 
 class TestExecuteAllProxyRegistration:

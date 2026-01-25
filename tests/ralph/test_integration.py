@@ -14,17 +14,14 @@ import json
 import os
 import sys
 import tempfile
-from typing import Any, Dict, List
-from unittest.mock import MagicMock
 
 import pytest
 
+from ralph.collectors.dual_stream import DualStreamCollector
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.core.engine import InjectionEngine
 from ralph.core.registry import ProxyRegistry
-from ralph.collectors.dual_stream import DualStreamCollector
 from ralph.proxies.base import BaseProxy
-
 
 # ==============================================================================
 # Test Fixtures
@@ -56,7 +53,7 @@ class IntegrationTestProxy(BaseProxy):
 
     def _strategy_raise_exception(self, *args, **kwargs):
         self.injected_count += 1
-        exc_type = self._config.parameters.get("exc_type", "RuntimeError")
+        self._config.parameters.get("exc_type", "RuntimeError")
         message = self._config.parameters.get("message", "Test exception")
         raise RuntimeError(message)
 
@@ -205,9 +202,7 @@ scenarios:
 class TestFullWorkflow:
     """Tests for the complete load_config -> install -> run -> collect workflow."""
 
-    def test_yaml_config_load_install_run_uninstall(
-        self, temp_dir, test_modules, sample_yaml_config
-    ):
+    def test_yaml_config_load_install_run_uninstall(self, temp_dir, test_modules, sample_yaml_config):
         """Test complete workflow from YAML config to running and cleanup."""
         module_a = test_modules["module_a"]
         module_b = test_modules["module_b"]
@@ -249,12 +244,14 @@ class TestFullWorkflow:
                 transform_result = module_a.transform(step)
                 process_result = module_b.process(step)
 
-                results.append({
-                    "step": step,
-                    "compute": compute_result,
-                    "transform": transform_result,
-                    "process": process_result,
-                })
+                results.append(
+                    {
+                        "step": step,
+                        "compute": compute_result,
+                        "transform": transform_result,
+                        "process": process_result,
+                    }
+                )
 
         # After context exit, proxies should be uninstalled
         assert not engine.is_installed()
@@ -309,7 +306,7 @@ class TestFullWorkflow:
         labels_path = collector.get_labels_path()
         assert os.path.exists(labels_path)
 
-        with open(labels_path, "r") as f:
+        with open(labels_path) as f:
             lines = f.readlines()
 
         # Should have at least injection start record
@@ -344,7 +341,7 @@ class TestFullWorkflow:
         telemetry_path = collector.get_telemetry_path()
         assert os.path.exists(telemetry_path)
 
-        with open(telemetry_path, "r") as f:
+        with open(telemetry_path) as f:
             lines = f.readlines()
 
         assert len(lines) == 3
@@ -579,7 +576,7 @@ class TestMultipleSimultaneousProxies:
             parameters={"delay_seconds": 0.001},
         )
 
-        def run_with_seed(seed: int) -> List[int]:
+        def run_with_seed(seed: int) -> list[int]:
             engine = InjectionEngine(seed=seed)
             engine.add_config("test_integration_module_a.compute", config)
             engine.install_proxies()
@@ -605,7 +602,7 @@ class TestMultipleSimultaneousProxies:
         assert result1 == result2
 
         # Run with different seed
-        result3 = run_with_seed(123)
+        run_with_seed(123)
 
         # Results should likely be different (not guaranteed but highly probable)
         # We just check that the system works - exact comparison is probabilistic
@@ -674,7 +671,7 @@ class TestJSONLOutput:
 
         # Read and validate JSONL
         labels_path = collector.get_labels_path()
-        with open(labels_path, "r") as f:
+        with open(labels_path) as f:
             for line_num, line in enumerate(f, 1):
                 try:
                     record = json.loads(line)
@@ -712,7 +709,7 @@ class TestJSONLOutput:
 
         # Read labels file
         labels_path = collector.get_labels_path()
-        with open(labels_path, "r") as f:
+        with open(labels_path) as f:
             records = [json.loads(line) for line in f]
 
         # Find fault injection start record
@@ -745,7 +742,7 @@ class TestJSONLOutput:
         # Read and validate JSONL
         telemetry_path = collector.get_telemetry_path()
         records = []
-        with open(telemetry_path, "r") as f:
+        with open(telemetry_path) as f:
             for line_num, line in enumerate(f, 1):
                 try:
                     record = json.loads(line)
@@ -787,18 +784,14 @@ class TestJSONLOutput:
         collector = DualStreamCollector(temp_dir)
 
         # Record telemetry with unicode
-        collector.record_telemetry("unicode_test", {
-            "message": "测试中文",
-            "emoji": "🚀✨",
-            "special": "äöü ñ é"
-        })
+        collector.record_telemetry("unicode_test", {"message": "测试中文", "emoji": "🚀✨", "special": "äöü ñ é"})
 
         collector.flush()
         collector.close()
 
         # Read and verify
         telemetry_path = collector.get_telemetry_path()
-        with open(telemetry_path, "r", encoding="utf-8") as f:
+        with open(telemetry_path, encoding="utf-8") as f:
             record = json.loads(f.readline())
 
         assert record["data"]["message"] == "测试中文"
@@ -822,7 +815,7 @@ class TestJSONLOutput:
 
         # All records should be written
         telemetry_path = collector.get_telemetry_path()
-        with open(telemetry_path, "r") as f:
+        with open(telemetry_path) as f:
             records = [json.loads(line) for line in f]
 
         assert len(records) == 10

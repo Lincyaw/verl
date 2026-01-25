@@ -10,7 +10,7 @@ Tests cover:
 
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,7 +21,6 @@ from ralph.collectors.metrics_hook import (
     ThroughputTracker,
     VerlMetricsHook,
 )
-
 
 # =============================================================================
 # MetricSample Tests
@@ -239,11 +238,14 @@ class TestVerlMetricsHookRecording:
         """Test recording multiple metrics at once."""
         hook = VerlMetricsHook()
         hook.start_capture()
-        count = hook.record_metrics({
-            "loss": 0.5,
-            "grad_norm": 1.2,
-            "lr": 0.001,
-        }, step=10)
+        count = hook.record_metrics(
+            {
+                "loss": 0.5,
+                "grad_norm": 1.2,
+                "lr": 0.001,
+            },
+            step=10,
+        )
         assert count == 3
         assert len(hook._samples) == 3
 
@@ -251,11 +253,14 @@ class TestVerlMetricsHookRecording:
         """Test non-numeric values are ignored."""
         hook = VerlMetricsHook()
         hook.start_capture()
-        count = hook.record_metrics({
-            "loss": 0.5,
-            "name": "test",  # string, should be ignored
-            "config": {},  # dict, should be ignored
-        }, step=10)
+        count = hook.record_metrics(
+            {
+                "loss": 0.5,
+                "name": "test",  # string, should be ignored
+                "config": {},  # dict, should be ignored
+            },
+            step=10,
+        )
         assert count == 1
 
     def test_step_interval_filtering(self):
@@ -696,7 +701,7 @@ class TestGradientNormTracker:
 
     @pytest.mark.skipif(
         True,  # Skip if torch not available
-        reason="Torch required for compute_grad_norm test"
+        reason="Torch required for compute_grad_norm test",
     )
     def test_compute_grad_norm_with_torch(self):
         """Test computing gradient norm with torch parameters."""
@@ -732,11 +737,13 @@ class TestVerlMetricsHookIntegration:
             for step in range(100):
                 hook.set_step(step)
                 # Simulate training metrics
-                hook.record_metrics({
-                    "train/loss": 1.0 - step * 0.01,
-                    "train/grad_norm": 1.0 + step * 0.01,
-                    "train/lr": 0.001 * (0.99 ** step),
-                })
+                hook.record_metrics(
+                    {
+                        "train/loss": 1.0 - step * 0.01,
+                        "train/grad_norm": 1.0 + step * 0.01,
+                        "train/lr": 0.001 * (0.99**step),
+                    }
+                )
 
         metrics = hook.get_metrics()
         assert metrics["capture_info"]["total_samples"] == 300
@@ -770,6 +777,7 @@ class TestVerlMetricsHookIntegration:
     def test_with_collector_integration(self):
         """Test integration with DualStreamCollector."""
         import tempfile
+
         from ralph.collectors.dual_stream import DualStreamCollector
 
         with tempfile.TemporaryDirectory() as tmpdir:

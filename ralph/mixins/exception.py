@@ -4,6 +4,7 @@ ExceptionMixin provides exception raising capabilities for fault injection proxi
 This mixin enables proxies to raise configurable exceptions, simulating various
 error conditions like IOError, RuntimeError, TimeoutError, etc.
 """
+
 from typing import Any
 
 # Map of exception type names to their corresponding Python exception classes
@@ -58,10 +59,7 @@ class ExceptionMixin:
         """
         exception_class = EXCEPTION_MAP.get(exc_type)
         if exception_class is None:
-            raise ValueError(
-                f"Unknown exception type: {exc_type}. "
-                f"Available types: {list(EXCEPTION_MAP.keys())}"
-            )
+            raise ValueError(f"Unknown exception type: {exc_type}. Available types: {list(EXCEPTION_MAP.keys())}")
         raise exception_class(message)
 
     def _strategy_raise_exception(self, *args: Any, **kwargs: Any) -> Any:

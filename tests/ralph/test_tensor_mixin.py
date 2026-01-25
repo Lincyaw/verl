@@ -9,12 +9,11 @@ Tests cover:
 - _corrupt_result_tensors recursively corrupts tensors in nested structures
 - Strategy methods (_strategy_corrupt_tensor, _strategy_inject_nan, _strategy_inject_inf)
 """
-import math
+
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
 import torch
 
 from ralph.mixins.tensor import TensorCorruptionMixin
@@ -24,7 +23,7 @@ from ralph.mixins.tensor import TensorCorruptionMixin
 class MockConfig:
     """Mock config class for testing."""
 
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
 
 
 class MockProxy(TensorCorruptionMixin):
@@ -331,9 +330,7 @@ class TestCorruptResultTensors:
             corrupted["level1"]["level2"]["tensor"],
             result["level1"]["level2"]["tensor"],
         )
-        assert not torch.equal(
-            corrupted["level1"]["list"][0], result["level1"]["list"][0]
-        )
+        assert not torch.equal(corrupted["level1"]["list"][0], result["level1"]["list"][0])
         assert not torch.equal(
             corrupted["level1"]["list"][1]["nested_tensor"],
             result["level1"]["list"][1]["nested_tensor"],
@@ -530,9 +527,7 @@ class TestTensorCorruptionMixinIntegration:
                 self._original = original_fn
                 self._config = config
 
-        proxy = CombinedProxy(
-            lambda: torch.zeros(50), MockConfig(parameters={"noise_scale": 1.0})
-        )
+        proxy = CombinedProxy(lambda: torch.zeros(50), MockConfig(parameters={"noise_scale": 1.0}))
 
         corrupted = proxy._strategy_corrupt_tensor()
         assert isinstance(corrupted, torch.Tensor)

@@ -12,10 +12,7 @@ Tests cover:
 """
 
 import inspect
-from typing import Any, List, Optional, Set
-from unittest.mock import MagicMock
-
-import pytest
+from typing import Any
 
 from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
 from ralph.proxies.base import BaseProxy
@@ -24,7 +21,7 @@ from ralph.proxies.base import BaseProxy
 class ConcreteProxy(BaseProxy):
     """Concrete proxy for testing introspection."""
 
-    SUPPORTED_STRATEGIES: Set[StrategyType] = {StrategyType.DELAY}
+    SUPPORTED_STRATEGIES: set[StrategyType] = {StrategyType.DELAY}
 
     def _get_layer(self) -> str:
         return "Test"
@@ -63,7 +60,7 @@ def no_doc_function(a, b):
 class SampleClass:
     """Sample class for method introspection tests."""
 
-    def instance_method(self, data: List[int], name: str = "default") -> dict:
+    def instance_method(self, data: list[int], name: str = "default") -> dict:
         """Instance method with annotations."""
         return {"data": data, "name": name}
 
@@ -99,15 +96,15 @@ class TestSignaturePreservation:
         """Proxy preserves parameter annotations."""
         proxy = ConcreteProxy(sample_function)
         sig = inspect.signature(proxy)
-        assert sig.parameters["a"].annotation == int
-        assert sig.parameters["b"].annotation == str
-        assert sig.parameters["c"].annotation == float
+        assert sig.parameters["a"].annotation is int
+        assert sig.parameters["b"].annotation is str
+        assert sig.parameters["c"].annotation is float
 
     def test_signature_return_annotation(self):
         """Proxy preserves return annotation."""
         proxy = ConcreteProxy(sample_function)
         sig = inspect.signature(proxy)
-        assert sig.return_annotation == str
+        assert sig.return_annotation is str
 
     def test_signature_default_values(self):
         """Proxy preserves default values."""
@@ -228,7 +225,7 @@ class TestAnnotationsPreservation:
         """Annotations include return type."""
         proxy = ConcreteProxy(sample_function)
         assert "return" in proxy.__annotations__
-        assert proxy.__annotations__["return"] == str
+        assert proxy.__annotations__["return"] is str
 
     def test_annotations_empty_for_unannotated(self):
         """Annotations dict empty for unannotated function."""
@@ -273,7 +270,7 @@ class TestAsyncGeneratorDetection:
             pass
 
         caplog.set_level(logging.WARNING)
-        proxy = ConcreteProxy(async_fn)
+        ConcreteProxy(async_fn)
         assert any("async function" in record.message.lower() for record in caplog.records)
 
     def test_generator_function_warning_logged(self, caplog):
@@ -284,7 +281,7 @@ class TestAsyncGeneratorDetection:
             yield 1
 
         caplog.set_level(logging.WARNING)
-        proxy = ConcreteProxy(gen_fn)
+        ConcreteProxy(gen_fn)
         assert any("generator function" in record.message.lower() for record in caplog.records)
 
 
@@ -398,7 +395,7 @@ class TestIntrospectionWithInjection:
         proxy.set_step(0)
 
         # Trigger injection
-        result = proxy(1, "hello", 2.5)
+        proxy(1, "hello", 2.5)
 
         # Introspection should still work
         assert proxy.__name__ == "sample_function"

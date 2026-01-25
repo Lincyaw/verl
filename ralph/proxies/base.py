@@ -241,6 +241,7 @@ class BaseProxy(ABC):
         Raises:
             NotImplementedError: If strategy is declared but method not found
         """
+        assert self._config is not None, "FaultConfig must be set before executing strategy"
         strategy = self._config.strategy
 
         if strategy in self._strategy_methods:
@@ -258,6 +259,8 @@ class BaseProxy(ABC):
         Returns:
             Unique fault_id for this injection, or empty string if no collector
         """
+        assert self._config is not None, "FaultConfig must be set before executing strategy"
+
         if not self._collector:
             return ""
 

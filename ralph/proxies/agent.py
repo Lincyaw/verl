@@ -252,7 +252,7 @@ class CallToolProxy(BaseProxy, DelayMixin, ExceptionMixin):
         elif isinstance(result, str):
             return result[::-1]
         elif isinstance(result, (int, float)):
-            return 1 / result if result != 0 else float('inf')
+            return 1 / result if result != 0 else float("inf")
         else:
             return result
 
@@ -276,8 +276,9 @@ class CallToolProxy(BaseProxy, DelayMixin, ExceptionMixin):
             return random.uniform(-1000.0, 1000.0)
         elif isinstance(result, str):
             import string
+
             length = len(result) if result else 10
-            return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+            return "".join(random.choices(string.ascii_letters + string.digits, k=length))
         elif isinstance(result, dict):
             return {k: self._randomize_result(v) for k, v in result.items()}
         elif isinstance(result, list):
@@ -498,16 +499,16 @@ class CallToolProxy(BaseProxy, DelayMixin, ExceptionMixin):
         if isinstance(result, dict):
             modified = dict(result)
             for i in range(noise_key_count):
-                noise_key = f"__noise_{i}_" + ''.join(
-                    random.choices(string.ascii_lowercase, k=5)
+                noise_key = f"__noise_{i}_" + "".join(random.choices(string.ascii_lowercase, k=5))
+                noise_value = random.choice(
+                    [
+                        None,
+                        random.randint(-100, 100),
+                        "".join(random.choices(string.ascii_letters, k=10)),
+                        [random.randint(0, 10) for _ in range(3)],
+                        {"nested": "noise"},
+                    ]
                 )
-                noise_value = random.choice([
-                    None,
-                    random.randint(-100, 100),
-                    ''.join(random.choices(string.ascii_letters, k=10)),
-                    [random.randint(0, 10) for _ in range(3)],
-                    {"nested": "noise"},
-                ])
                 modified[noise_key] = noise_value
             return modified
         elif isinstance(result, list):
@@ -580,7 +581,7 @@ class CallToolProxy(BaseProxy, DelayMixin, ExceptionMixin):
             return self._corrupt_structure(list(result))
         elif isinstance(result, str):
             # Insert corruption markers
-            return f"[CORRUPTED]{result[:len(result)//2]}[TRUNCATED]"
+            return f"[CORRUPTED]{result[: len(result) // 2]}[TRUNCATED]"
         else:
             # Wrap in error-like structure
             return {"error": "corrupted", "partial_value": result}
@@ -658,6 +659,7 @@ class ToolParserProxy(BaseProxy, DelayMixin):
         # Raise appropriate exception based on error_type
         if error_type == "json":
             import json
+
             raise json.JSONDecodeError(error_message, "", 0)
         elif error_type == "timeout":
             raise TimeoutError(error_message)
@@ -775,17 +777,38 @@ class ToolParserProxy(BaseProxy, DelayMixin):
             # Replace a character with a nearby key
             idx = random.randint(0, len(chars) - 1)
             nearby = {
-                'a': 'sq', 'b': 'vn', 'c': 'xv', 'd': 'sf', 'e': 'wr',
-                'f': 'dg', 'g': 'fh', 'h': 'gj', 'i': 'uo', 'j': 'hk',
-                'k': 'jl', 'l': 'k', 'm': 'n', 'n': 'bm', 'o': 'ip',
-                'p': 'o', 'q': 'wa', 'r': 'et', 's': 'ad', 't': 'ry',
-                'u': 'yi', 'v': 'cb', 'w': 'qe', 'x': 'zc', 'y': 'tu', 'z': 'x',
+                "a": "sq",
+                "b": "vn",
+                "c": "xv",
+                "d": "sf",
+                "e": "wr",
+                "f": "dg",
+                "g": "fh",
+                "h": "gj",
+                "i": "uo",
+                "j": "hk",
+                "k": "jl",
+                "l": "k",
+                "m": "n",
+                "n": "bm",
+                "o": "ip",
+                "p": "o",
+                "q": "wa",
+                "r": "et",
+                "s": "ad",
+                "t": "ry",
+                "u": "yi",
+                "v": "cb",
+                "w": "qe",
+                "x": "zc",
+                "y": "tu",
+                "z": "x",
             }
             char = chars[idx].lower()
             if char in nearby:
                 chars[idx] = random.choice(nearby[char])
 
-        return ''.join(chars)
+        return "".join(chars)
 
     def _get_similar_name(self, name: str) -> str:
         """
@@ -1127,6 +1150,7 @@ class ToolParserProxy(BaseProxy, DelayMixin):
         ]
 
         import random
+
         return random.sample(fake_tools, min(count, len(fake_tools)))
 
     def _add_extra_tool_calls(self, result: Any, extra_tools: list, position: str) -> Any:

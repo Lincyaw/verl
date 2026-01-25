@@ -9,7 +9,6 @@ import json
 import os
 import tempfile
 import threading
-import time
 from pathlib import Path
 from typing import Generator
 
@@ -179,7 +178,7 @@ class TestRecordFaultInjection:
         """Test recording increments active fault count."""
         assert collector.get_active_fault_count() == 0
 
-        fault_id1 = collector.record_fault_injection(
+        collector.record_fault_injection(
             fault_type="delay",
             target_layer="L0",
             target_function="ray.get",
@@ -190,7 +189,7 @@ class TestRecordFaultInjection:
 
         assert collector.get_active_fault_count() == 1
 
-        fault_id2 = collector.record_fault_injection(
+        collector.record_fault_injection(
             fault_type="delay",
             target_layer="L0",
             target_function="ray.get",
@@ -388,9 +387,7 @@ class TestBufferAndFlush:
 
         assert collector.get_buffer_sizes()["labels"] == 0
 
-    def test_auto_flush_on_buffer_full(
-        self, auto_flush_collector: DualStreamCollector
-    ):
+    def test_auto_flush_on_buffer_full(self, auto_flush_collector: DualStreamCollector):
         """Test auto-flush when buffer reaches limit."""
         # Buffer size is 2
         auto_flush_collector.record_fault_injection(
@@ -466,9 +463,7 @@ class TestJSONLOutput:
         assert record["event_type"] == "test_event"
         assert record["data"]["key"] == "value"
 
-    def test_labels_contains_fault_info_in_outcome(
-        self, collector: DualStreamCollector
-    ):
+    def test_labels_contains_fault_info_in_outcome(self, collector: DualStreamCollector):
         """Test fault outcome includes original fault info."""
         fault_id = collector.record_fault_injection(
             fault_type="delay",
@@ -526,9 +521,7 @@ class TestCloseAndContextManager:
 
     def test_context_manager(self, temp_output_dir: str):
         """Test context manager usage."""
-        with DualStreamCollector(
-            output_dir=temp_output_dir, auto_flush=False
-        ) as collector:
+        with DualStreamCollector(output_dir=temp_output_dir, auto_flush=False) as collector:
             collector.record_fault_injection(
                 fault_type="delay",
                 target_layer="L0",
@@ -660,8 +653,8 @@ class TestDualStreamCollectorIntegration:
 
         assert len(labels) == 4  # 2 starts + 2 ends
 
-        starts = [l for l in labels if l["record_type"] == "fault_injection_start"]
-        ends = [l for l in labels if l["record_type"] == "fault_injection_end"]
+        starts = [label for label in labels if label["record_type"] == "fault_injection_start"]
+        ends = [label for label in labels if label["record_type"] == "fault_injection_end"]
 
         assert len(starts) == 2
         assert len(ends) == 2

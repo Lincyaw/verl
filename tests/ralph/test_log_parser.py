@@ -7,9 +7,6 @@ Tests RayLogParser and NCCLLogParser classes.
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
-
-import pytest
 
 from ralph.collectors.log_parser import (
     LogEvent,
@@ -18,7 +15,6 @@ from ralph.collectors.log_parser import (
     parse_nccl_logs,
     parse_ray_logs,
 )
-
 
 # =============================================================================
 # LogEvent Tests
@@ -316,7 +312,6 @@ class TestRayLogParserParseFile:
             f.write("2024-01-15T10:30:00Z ERROR: ObjectLostError object_ref = abc123\n")
             f.write("2024-01-15T10:30:01Z INFO: Regular message\n")
             f.write("2024-01-15T10:30:02Z ERROR: Worker died exit code 1\n")
-            f.name
 
         try:
             parser = RayLogParser()
@@ -370,12 +365,8 @@ class TestRayLogParserParseRayLogs:
         """Test parsing multiple log files."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create multiple log files
-            (Path(tmpdir) / "raylet.log").write_text(
-                "2024-01-15T10:30:00Z ERROR: ObjectLostError\n"
-            )
-            (Path(tmpdir) / "worker.out").write_text(
-                "2024-01-15T10:30:01Z ERROR: Task failed\n"
-            )
+            (Path(tmpdir) / "raylet.log").write_text("2024-01-15T10:30:00Z ERROR: ObjectLostError\n")
+            (Path(tmpdir) / "worker.out").write_text("2024-01-15T10:30:01Z ERROR: Task failed\n")
 
             parser = RayLogParser()
             events = parser.parse_ray_logs(tmpdir)
@@ -400,9 +391,7 @@ class TestRayLogParserParseRayLogs:
             # Create nested directory structure
             subdir = Path(tmpdir) / "logs" / "session"
             subdir.mkdir(parents=True)
-            (subdir / "raylet.log").write_text(
-                "2024-01-15T10:30:00Z ERROR: ObjectLostError\n"
-            )
+            (subdir / "raylet.log").write_text("2024-01-15T10:30:00Z ERROR: ObjectLostError\n")
 
             parser = RayLogParser()
             events = parser.parse_ray_logs(tmpdir)
@@ -687,9 +676,7 @@ class TestConvenienceFunctions:
     def test_parse_ray_logs_function(self):
         """Test parse_ray_logs convenience function."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / "raylet.log").write_text(
-                "2024-01-15T10:30:00Z ERROR: ObjectLostError\n"
-            )
+            (Path(tmpdir) / "raylet.log").write_text("2024-01-15T10:30:00Z ERROR: ObjectLostError\n")
 
             events = parse_ray_logs(tmpdir)
             assert len(events) == 1
@@ -756,13 +743,11 @@ class TestLogParserIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Ray logs
             (Path(tmpdir) / "raylet.log").write_text(
-                "2024-01-15T10:30:00Z ERROR: ObjectLostError\n"
-                "2024-01-15T10:30:01Z ERROR: Worker crashed\n"
+                "2024-01-15T10:30:00Z ERROR: ObjectLostError\n2024-01-15T10:30:01Z ERROR: Worker crashed\n"
             )
             # NCCL logs (might be in stderr)
             (Path(tmpdir) / "worker.err").write_text(
-                "2024-01-15T10:30:02Z ERROR: NCCL timeout\n"
-                "2024-01-15T10:30:03Z ERROR: Watchdog timeout\n"
+                "2024-01-15T10:30:02Z ERROR: NCCL timeout\n2024-01-15T10:30:03Z ERROR: Watchdog timeout\n"
             )
 
             # Parse Ray logs

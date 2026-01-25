@@ -514,10 +514,7 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
             return self._original(*args, **kwargs)
         elif failure_type == "crash":
             # Simulate a crash by raising an exception
-            raise RuntimeError(
-                f"Simulated crash at pipeline stage {fail_stage}: "
-                "PP stage failure injection"
-            )
+            raise RuntimeError(f"Simulated crash at pipeline stage {fail_stage}: PP stage failure injection")
         elif failure_type == "silent":
             # Silently skip execution and return None
             return None
@@ -691,18 +688,14 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         """
         noise_scale = self._config.parameters.get("noise_scale", 0.01)
         corrupt_ratio = self._config.parameters.get("corrupt_ratio", 0.1)
-        target_layers: Optional[list[str]] = self._config.parameters.get(
-            "target_layers", None
-        )
+        target_layers: Optional[list[str]] = self._config.parameters.get("target_layers", None)
         corrupt_type = self._config.parameters.get("corrupt_type", "noise")
 
         # Call original function first
         result = self._original(*args, **kwargs)
 
         # Corrupt the result
-        return self._apply_activation_corruption(
-            result, noise_scale, corrupt_ratio, target_layers, corrupt_type
-        )
+        return self._apply_activation_corruption(result, noise_scale, corrupt_ratio, target_layers, corrupt_type)
 
     def _apply_activation_corruption(
         self,
@@ -726,23 +719,17 @@ class ParallelismProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
             Corrupted result.
         """
         if isinstance(result, torch.Tensor):
-            return self._corrupt_single_activation(
-                result, noise_scale, corrupt_ratio, corrupt_type
-            )
+            return self._corrupt_single_activation(result, noise_scale, corrupt_ratio, corrupt_type)
         elif isinstance(result, dict):
             return {
-                key: self._apply_activation_corruption(
-                    value, noise_scale, corrupt_ratio, target_layers, corrupt_type
-                )
+                key: self._apply_activation_corruption(value, noise_scale, corrupt_ratio, target_layers, corrupt_type)
                 if target_layers is None or key in target_layers
                 else value
                 for key, value in result.items()
             }
         elif isinstance(result, (list, tuple)):
             corrupted = [
-                self._apply_activation_corruption(
-                    item, noise_scale, corrupt_ratio, target_layers, corrupt_type
-                )
+                self._apply_activation_corruption(item, noise_scale, corrupt_ratio, target_layers, corrupt_type)
                 for item in result
             ]
             return type(result)(corrupted)

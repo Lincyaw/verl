@@ -17,7 +17,6 @@ from ralph.core.config import (
     GlobalConfig,
     RalphConfig,
     StrategyType,
-    TriggerConfig,
     TriggerType,
     load_yaml_config,
     validate_yaml_config,
@@ -114,9 +113,7 @@ scenarios:
 @pytest.fixture
 def temp_yaml_file(sample_yaml_content: str) -> Generator[str, None, None]:
     """Create a temporary YAML file with sample content."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(sample_yaml_content)
         f.flush()
         yield f.name
@@ -228,9 +225,7 @@ class TestLoadYamlConfig:
 
     def test_empty_yaml(self):
         """Test ValueError for empty YAML file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("")
             f.flush()
             try:
@@ -247,9 +242,7 @@ experiment:
 global:
   output_dir: "/tmp"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -265,9 +258,7 @@ scenarios:
   - id: "incomplete"
     fault_type: "delay"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -288,9 +279,7 @@ scenarios:
       type: "invalid_type"
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -322,9 +311,7 @@ scenarios:
       path: "${global.output_dir}/logs"
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -352,9 +339,7 @@ scenarios:
       path: "${output_dir}/logs"
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -386,9 +371,7 @@ scenarios:
           - "${global.base_path}/item2"
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -418,9 +401,7 @@ scenarios:
       unknown: "${global.unknown_var}"
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -448,9 +429,7 @@ class TestValidateYamlConfig:
 
     def test_invalid_yaml_syntax(self):
         """Test validation of file with invalid YAML syntax."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("invalid: yaml: syntax: :")
             f.flush()
             try:
@@ -466,9 +445,7 @@ class TestValidateYamlConfig:
 experiment:
   name: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -483,9 +460,7 @@ experiment:
         yaml_content = """
 scenarios: []
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -502,9 +477,7 @@ scenarios:
   - id: "incomplete"
     fault_type: "delay"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -533,9 +506,7 @@ scenarios:
       delay_seconds: 1800
     expected_behavior: "NCCL timeout"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -559,9 +530,7 @@ scenarios:
       noise_scale: 0.1
     expected_behavior: "Gradient corruption"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -584,9 +553,7 @@ scenarios:
     parameters: {}
     expected_behavior: "IO error on checkpoint"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -612,9 +579,7 @@ scenarios:
     parameters: {}
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -637,9 +602,7 @@ scenarios:
     parameters: {}
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -662,9 +625,7 @@ scenarios:
     parameters: {}
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:
@@ -687,9 +648,7 @@ scenarios:
     parameters: {}
     expected_behavior: "test"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             try:

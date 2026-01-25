@@ -327,13 +327,15 @@ class TestRewardFlipStrategy:
             },
             "list_rewards": [torch.tensor([3.0]), torch.tensor([-4.0])],
         }
-        original = MagicMock(return_value={
-            "outer": {
-                "inner_rewards": original_result["outer"]["inner_rewards"].clone(),
-                "scalar": 5.0,
-            },
-            "list_rewards": [t.clone() for t in original_result["list_rewards"]],
-        })
+        original = MagicMock(
+            return_value={
+                "outer": {
+                    "inner_rewards": original_result["outer"]["inner_rewards"].clone(),
+                    "scalar": 5.0,
+                },
+                "list_rewards": [t.clone() for t in original_result["list_rewards"]],
+            }
+        )
         proxy = RewardManagerProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -359,12 +361,14 @@ class TestRewardFlipStrategy:
             "data": {"nested": "value"},
             "metadata": None,
         }
-        original = MagicMock(return_value={
-            "rewards": original_result["rewards"].clone(),
-            "name": "test",
-            "data": {"nested": "value"},
-            "metadata": None,
-        })
+        original = MagicMock(
+            return_value={
+                "rewards": original_result["rewards"].clone(),
+                "name": "test",
+                "data": {"nested": "value"},
+                "metadata": None,
+            }
+        )
         proxy = RewardManagerProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -827,7 +831,7 @@ class TestCheckpointSaveDelayStrategy:
         proxy.set_step(0)
 
         with patch("time.sleep"):
-            result = proxy(
+            proxy(
                 "/local/path",
                 "/hdfs/path",
                 global_step=1000,
@@ -1013,7 +1017,7 @@ class TestCheckpointSaveProxyIntegration:
             proxy.set_step(step)
             try:
                 proxy("/path", global_step=step)
-            except IOError:
+            except OSError:
                 exception_steps.append(step)
 
         # Steps 0, 3, 6, 9 should trigger (step % 3 == 0)
@@ -1087,7 +1091,6 @@ class TestCheckpointLoadProxyRegistration:
 
     def test_registered_with_checkpoint_manager_target(self):
         """CheckpointLoadProxy is registered for 'FSDPCheckpointManager.load_checkpoint' target."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         assert ProxyRegistry.is_registered("FSDPCheckpointManager.load_checkpoint")
         assert ProxyRegistry.get_proxy("FSDPCheckpointManager.load_checkpoint") is CheckpointLoadProxy
@@ -1109,14 +1112,12 @@ class TestCheckpointLoadProxyBasics:
 
     def test_get_layer_returns_l2(self):
         """_get_layer returns 'L2'."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         proxy = CheckpointLoadProxy(lambda x: x)
         assert proxy._get_layer() == "L2"
 
     def test_call_without_config_calls_original(self):
         """Proxy calls original when no config is set."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {"model.weight": torch.ones(5)}
         original = MagicMock(return_value=state_dict)
@@ -1127,7 +1128,6 @@ class TestCheckpointLoadProxyBasics:
 
     def test_call_with_disabled_config_calls_original(self):
         """Proxy calls original when config is disabled."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {"model.weight": torch.ones(5)}
         original = MagicMock(return_value=state_dict)
@@ -1147,7 +1147,6 @@ class TestCheckpointLoadProxyBasics:
 
     def test_unsupported_strategy_raises_error(self):
         """Setting an unsupported strategy raises ValueError."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         proxy = CheckpointLoadProxy(lambda x: x)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
@@ -1166,7 +1165,6 @@ class TestCheckpointLoadRaiseExceptionStrategy:
 
     def test_raise_exception_ioerror(self):
         """RAISE_EXCEPTION strategy raises IOError."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original = MagicMock(return_value={})
         proxy = CheckpointLoadProxy(original)
@@ -1187,7 +1185,6 @@ class TestCheckpointLoadRaiseExceptionStrategy:
 
     def test_raise_exception_runtime_error(self):
         """RAISE_EXCEPTION strategy raises RuntimeError."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original = MagicMock(return_value={})
         proxy = CheckpointLoadProxy(original)
@@ -1207,7 +1204,6 @@ class TestCheckpointLoadRaiseExceptionStrategy:
 
     def test_raise_exception_default_message(self):
         """RAISE_EXCEPTION uses default message with checkpoint context."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original = MagicMock(return_value={})
         proxy = CheckpointLoadProxy(original)
@@ -1228,7 +1224,6 @@ class TestCheckpointLoadRaiseExceptionStrategy:
 
     def test_raise_exception_missing_exc_type(self):
         """RAISE_EXCEPTION raises ValueError if exc_type not specified."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original = MagicMock(return_value={})
         proxy = CheckpointLoadProxy(original)
@@ -1252,7 +1247,6 @@ class TestCheckpointLoadFileNotFoundStrategy:
 
     def test_file_not_found_raises_error(self):
         """FILE_NOT_FOUND strategy raises FileNotFoundError."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original = MagicMock(return_value={})
         proxy = CheckpointLoadProxy(original)
@@ -1272,7 +1266,6 @@ class TestCheckpointLoadFileNotFoundStrategy:
 
     def test_file_not_found_custom_message(self):
         """FILE_NOT_FOUND uses custom message when provided."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original = MagicMock(return_value={})
         proxy = CheckpointLoadProxy(original)
@@ -1292,7 +1285,6 @@ class TestCheckpointLoadFileNotFoundStrategy:
 
     def test_file_not_found_default_message(self):
         """FILE_NOT_FOUND includes path in default message."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original = MagicMock(return_value={})
         proxy = CheckpointLoadProxy(original)
@@ -1315,7 +1307,6 @@ class TestCheckpointLoadCorruptStateDictStrategy:
 
     def test_corrupt_state_dict_adds_noise(self):
         """CORRUPT_STATE_DICT adds noise to tensor values."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original_tensor = torch.ones(10, 10)
         state_dict = {"model.weight": original_tensor.clone()}
@@ -1341,7 +1332,6 @@ class TestCheckpointLoadCorruptStateDictStrategy:
 
     def test_corrupt_state_dict_default_noise_scale(self):
         """CORRUPT_STATE_DICT uses default noise scale of 0.01."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         original_tensor = torch.zeros(5, 5)
         state_dict = {"layer.bias": original_tensor.clone()}
@@ -1366,7 +1356,6 @@ class TestCheckpointLoadCorruptStateDictStrategy:
 
     def test_corrupt_state_dict_multiple_tensors(self):
         """CORRUPT_STATE_DICT corrupts all tensors in state dict."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {
             "encoder.weight": torch.ones(5, 5),
@@ -1395,7 +1384,6 @@ class TestCheckpointLoadCorruptStateDictStrategy:
 
     def test_corrupt_state_dict_nested_structure(self):
         """CORRUPT_STATE_DICT handles nested state dict structures."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {
             "model": {
@@ -1427,7 +1415,6 @@ class TestCheckpointLoadCorruptStateDictStrategy:
 
     def test_corrupt_state_dict_preserves_dtype(self):
         """CORRUPT_STATE_DICT preserves tensor dtypes."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {
             "float32": torch.ones(5, dtype=torch.float32),
@@ -1456,7 +1443,6 @@ class TestCheckpointLoadPartialLoadStrategy:
 
     def test_partial_load_drops_keys(self):
         """PARTIAL_LOAD drops specific keys from state dict."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {
             "layer1.weight": torch.ones(5),
@@ -1485,7 +1471,6 @@ class TestCheckpointLoadPartialLoadStrategy:
 
     def test_partial_load_drop_ratio(self):
         """PARTIAL_LOAD drops random ratio of keys."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {f"layer{i}.weight": torch.ones(5) for i in range(10)}
         original = MagicMock(return_value=state_dict)
@@ -1509,7 +1494,6 @@ class TestCheckpointLoadPartialLoadStrategy:
 
     def test_partial_load_default_drop_ratio(self):
         """PARTIAL_LOAD uses default drop_ratio of 0.1."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {f"param{i}": torch.ones(5) for i in range(20)}
         original = MagicMock(return_value=state_dict)
@@ -1531,7 +1515,6 @@ class TestCheckpointLoadPartialLoadStrategy:
 
     def test_partial_load_preserves_values(self):
         """PARTIAL_LOAD preserves values for non-dropped keys."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {
             "keep_this": torch.tensor([1.0, 2.0, 3.0]),
@@ -1556,7 +1539,6 @@ class TestCheckpointLoadPartialLoadStrategy:
 
     def test_partial_load_nested_structure(self):
         """PARTIAL_LOAD handles nested state dict structures."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {
             "model": {
@@ -1589,7 +1571,6 @@ class TestCheckpointLoadProxyIntegration:
 
     def test_strategy_only_triggers_at_configured_step(self):
         """Strategies only trigger at configured step."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {"weight": torch.ones(5)}
         original = MagicMock(return_value=state_dict)
@@ -1615,7 +1596,6 @@ class TestCheckpointLoadProxyIntegration:
 
     def test_periodic_trigger(self):
         """Periodic trigger fires at correct intervals."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {"weight": torch.ones(5)}
         original = MagicMock(return_value=state_dict)
@@ -1641,7 +1621,6 @@ class TestCheckpointLoadProxyIntegration:
 
     def test_collector_records_injection(self):
         """Collector records fault injection when provided."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         collector = MagicMock()
         collector.record_fault_injection.return_value = "fault-load-001"
@@ -1674,7 +1653,6 @@ class TestCheckpointLoadProxyIntegration:
 
     def test_corrupt_then_return_success(self):
         """CORRUPT_STATE_DICT corrupts then returns successfully."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {"model.weight": torch.ones(10)}
         original = MagicMock(return_value=state_dict)
@@ -1698,7 +1676,6 @@ class TestCheckpointLoadProxyIntegration:
 
     def test_passes_additional_kwargs(self):
         """Proxy passes additional kwargs to original function."""
-        from ralph.proxies.l2_verl import CheckpointLoadProxy
 
         state_dict = {"weight": torch.ones(5)}
         original = MagicMock(return_value=state_dict)

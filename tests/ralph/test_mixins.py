@@ -18,7 +18,6 @@ from ralph.mixins.result import ResultModificationMixin
 from ralph.mixins.skip import SkipMixin
 from ralph.mixins.tensor import TensorCorruptionMixin
 
-
 # =============================================================================
 # DelayMixin Tests
 # =============================================================================
@@ -299,9 +298,7 @@ class TestTensorCorruptionMixinCorruptResultTensors:
         }
         result = obj._corrupt_result_tensors(data, noise_scale=0.1)
 
-        assert not torch.allclose(
-            result["nested"]["tensor"], data["nested"]["tensor"]
-        )
+        assert not torch.allclose(result["nested"]["tensor"], data["nested"]["tensor"])
         assert not torch.allclose(result["list"][0], data["list"][0])
 
 

@@ -9,7 +9,6 @@ Tests cover ComputeValuesProxy with all 5 supported strategies:
 - INVERTED_VALUES: Negates the computed values
 """
 
-import math
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -183,11 +182,13 @@ class TestWrongValuesStrategy:
 
     def test_wrong_values_with_multiple_value_keys(self):
         """WRONG_VALUES handles multiple value-related keys."""
-        original = MagicMock(return_value={
-            "values": torch.ones(5),
-            "critic_values": torch.ones(5) * 2,
-            "other_key": torch.ones(5) * 3,
-        })
+        original = MagicMock(
+            return_value={
+                "values": torch.ones(5),
+                "critic_values": torch.ones(5) * 2,
+                "other_key": torch.ones(5) * 3,
+            }
+        )
         proxy = ComputeValuesProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(
@@ -476,11 +477,13 @@ class TestInvertedValuesStrategy:
 
     def test_inverted_values_with_multiple_keys(self):
         """INVERTED_VALUES handles multiple value-related keys."""
-        original = MagicMock(return_value={
-            "values": torch.ones(5),
-            "v": torch.ones(5) * 2,
-            "other_key": torch.ones(5) * 3,
-        })
+        original = MagicMock(
+            return_value={
+                "values": torch.ones(5),
+                "v": torch.ones(5) * 2,
+                "other_key": torch.ones(5) * 3,
+            }
+        )
         proxy = ComputeValuesProxy(original)
         trigger = TriggerConfig(type=TriggerType.ONE_SHOT, at_step=0)
         config = FaultConfig(

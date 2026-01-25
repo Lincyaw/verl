@@ -4,25 +4,23 @@ Unit tests for optimizer proxies.
 Tests for OptimizerStepProxy and LRSchedulerProxy classes.
 """
 
-import pytest
-from unittest.mock import MagicMock, Mock, patch
 import sys
+from unittest.mock import MagicMock
+
+import pytest
+
+from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
+from ralph.core.registry import ProxyRegistry
+from ralph.proxies.optimizer import LRSchedulerProxy, OptimizerStepProxy
 
 # Mock torch before importing
 mock_torch = MagicMock()
 mock_torch.Tensor = MagicMock
 mock_torch.randn_like = MagicMock(side_effect=lambda x: x)
-sys.modules['torch'] = mock_torch
-
-from ralph.core.config import FaultConfig, StrategyType, TriggerConfig, TriggerType
-from ralph.core.registry import ProxyRegistry
-
+sys.modules["torch"] = mock_torch
 
 # Clear registry before importing proxies to avoid duplicate registration errors
 ProxyRegistry.clear()
-
-from ralph.proxies.optimizer import OptimizerStepProxy, LRSchedulerProxy
-
 
 # ============================================================================
 # OptimizerStepProxy Tests
@@ -263,7 +261,7 @@ class TestCorruptedMomentumStrategy:
         mock_tensor.__class__ = mock_torch.Tensor
 
         # Make isinstance check work
-        original_isinstance = __builtins__['isinstance'] if isinstance(__builtins__, dict) else __builtins__.isinstance
+        __builtins__["isinstance"] if isinstance(__builtins__, dict) else __builtins__.isinstance
 
         mock_optimizer.state = {
             "param1": {

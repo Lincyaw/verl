@@ -12,10 +12,7 @@ Tests the command-line interface including:
 """
 
 import os
-import sys
 import tempfile
-from io import StringIO
-from unittest import mock
 
 import pytest
 
@@ -94,11 +91,15 @@ class TestCreateParser:
     def test_parser_combined_options(self):
         """Parser should accept multiple options together."""
         parser = create_parser()
-        args = parser.parse_args([
-            "--config", "test.yaml",
-            "--output-dir", "/tmp/out",
-            "--dry-run",
-        ])
+        args = parser.parse_args(
+            [
+                "--config",
+                "test.yaml",
+                "--output-dir",
+                "/tmp/out",
+                "--dry-run",
+            ]
+        )
         assert args.config == "test.yaml"
         assert args.output_dir == "/tmp/out"
         assert args.dry_run is True
@@ -174,7 +175,7 @@ scenarios:
             result = validate_config(f.name)
 
         os.unlink(f.name)
-        captured = capsys.readouterr()
+        capsys.readouterr()
         assert result == 1
 
     def test_validate_missing_scenarios(self, capsys):
@@ -302,11 +303,15 @@ scenarios:
     expected_behavior: "delay"
 """)
             f.flush()
-            result = main([
-                "--config", f.name,
-                "--output-dir", "/new/path",
-                "--dry-run",
-            ])
+            result = main(
+                [
+                    "--config",
+                    f.name,
+                    "--output-dir",
+                    "/new/path",
+                    "--dry-run",
+                ]
+            )
 
         os.unlink(f.name)
         assert result == 0
@@ -393,10 +398,12 @@ class TestMainModuleExecution:
     def test_module_is_importable(self):
         """ralph.cli.main should be importable."""
         import ralph.cli.main
+
         assert hasattr(ralph.cli.main, "main")
         assert hasattr(ralph.cli.main, "create_parser")
 
     def test_cli_package_exports_main(self):
         """ralph.cli should export main function."""
         from ralph.cli import main as cli_main
+
         assert callable(cli_main)
