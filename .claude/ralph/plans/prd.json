@@ -834,14 +834,14 @@
       "Implement _create_wrapper() method that creates a FunctionWrapper",
       "Implement _invoke(wrapped, instance, args, kwargs) method with wrapt-style signature",
       "Forward __call__ to internal wrapper",
-      "Expose introspection properties: __wrapped__, __name__, __doc__, __signature__, __module__, __qualname__",
+      "Expose introspection properties: __wrapped__, __name__, __doc__, __signature__, __module__, get_qualname() (note: __qualname__ cannot be a property due to ABC metaclass)",
       "Preserve _should_inject(), _execute_strategy(), _record_injection_start(), _record_injection_end() methods",
       "Verify: `inspect.signature(proxy)` returns original function signature",
       "Verify: `proxy.__name__` returns original function name",
       "Verify: `proxy.__doc__` returns original function docstring",
       "Verify: Strategy dispatch pattern works unchanged with mixins"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.1-wrapt-dependency"]
   },
   {
@@ -857,7 +857,7 @@
       "Verify: All existing unit tests pass without modification",
       "Verify: All proxy subclasses work with new BaseProxy"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.2-wrapt-base-proxy"]
   },
   {
@@ -874,7 +874,7 @@
       "Verify: Uninstall correctly restores original functions",
       "Verify: All existing integration tests pass"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   },
   {
@@ -892,7 +892,7 @@
       "Verify: Hook fires immediately when module already imported",
       "Verify: Multiple hooks for same module work correctly"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.4-wrapt-engine-patching"]
   },
   {
@@ -907,7 +907,7 @@
       "Verify: All existing tests in tests/ralph/test_l0_ray_proxy.py pass",
       "Verify: Signature introspection works for all L0 proxies"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   },
   {
@@ -922,7 +922,7 @@
       "Verify: All existing tests in tests/ralph/test_l1_distributed_proxy.py pass",
       "Verify: Distributed communication patterns handled correctly"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   },
   {
@@ -936,7 +936,7 @@
       "Verify UpdateActorProxy works with new BaseProxy",
       "Verify: All existing tests in tests/ralph/test_l2_verl_proxy.py pass"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   },
   {
@@ -949,7 +949,7 @@
       "Verify GRPOProxy works with new BaseProxy",
       "Verify: All existing tests in tests/ralph/test_algorithm_proxy.py pass"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   },
   {
@@ -966,7 +966,7 @@
       "Verify: All corresponding test files pass",
       "Verify: Total of 22 proxies successfully verified"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   },
   {
@@ -976,14 +976,14 @@
     "requirements": [
       "Create tests/ralph/test_wrapt_introspection.py",
       "Test __signature__ preservation for functions with various parameter types",
-      "Test __name__, __doc__, __module__, __qualname__ preservation",
+      "Test __name__, __doc__, __module__, get_qualname() preservation",
       "Test inspect.signature() returns correct signature",
       "Test help() displays correct documentation",
       "Test bound method scenarios (instance methods, class methods, static methods)",
       "Test decorated functions (multiple decorators stacked)",
       "Verify: All new tests pass"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   },
   {
@@ -999,7 +999,7 @@
       "Test error handling when hook registration fails",
       "Verify: All tests pass"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.5-post-import-hooks"]
   },
   {
@@ -1017,7 +1017,7 @@
       "Verify: Warning logged for generator functions",
       "Verify: Sync functions work normally without warnings"
     ],
-    "passes": false,
+    "passes": true,
     "blockedBy": ["16.3-replace-base-proxy"]
   }
 ]

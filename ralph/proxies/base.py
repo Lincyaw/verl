@@ -2,10 +2,14 @@
 Base proxy class for Ralph fault injection framework.
 
 Contains the abstract BaseProxy class that all proxy implementations inherit from.
+Uses wrapt library for signature-preserving function wrapping.
 """
 
+import inspect
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Callable, Optional
+
+import wrapt
 
 from ralph.core.config import FaultConfig, StrategyType
 
@@ -16,6 +20,11 @@ if TYPE_CHECKING:
 class BaseProxy(ABC):
     """
     Abstract base class for all fault injection proxies.
+
+    This class composes wrapt.FunctionWrapper internally to provide:
+    - Signature preservation for IDE introspection
+    - Proper metadata forwarding (__name__, __doc__, __module__, etc.)
+    - Transparent wrapping that behaves like the original function
 
     Subclasses must:
     1. Inherit required Mixin classes for strategy implementations
@@ -30,6 +39,12 @@ class BaseProxy(ABC):
 
             def _get_layer(self) -> str:
                 return 'L0'
+
+    Introspection:
+        proxy = RayGetProxy(ray.get, collector)
+        inspect.signature(proxy)  # Returns original function signature
+        proxy.__name__  # Returns 'get'
+        proxy.__doc__   # Returns original docstring
     """
 
     # Subclasses must declare which strategies they support
@@ -57,6 +72,56 @@ class BaseProxy(ABC):
         # Build strategy method mapping
         self._strategy_methods: dict[StrategyType, Callable] = {}
         self._build_strategy_map()
+
+        # Create the wrapt wrapper that delegates to our _invoke method
+        self._wrapper = self._create_wrapper(original_fn)
+
+        # Log warning for async/generator functions (not fully supported)
+        self._check_function_type(original_fn)
+
+    def _create_wrapper(self, original_fn: Callable) -> Callable:
+        """
+        Create a wrapt-based wrapper around the original function.
+
+        Args:
+            original_fn: The original function to wrap
+
+        Returns:
+            A wrapped function that preserves signature and metadata
+        """
+        # Capture self in closure for the decorator
+        proxy_self = self
+
+        @wrapt.decorator
+        def _wrapper(wrapped, instance, args, kwargs):
+            return proxy_self._invoke(wrapped, instance, args, kwargs)
+
+        return _wrapper(original_fn)
+
+    def _check_function_type(self, fn: Callable) -> None:
+        """
+        Check if function is async or generator and log warning.
+
+        Args:
+            fn: The function to check
+        """
+        import asyncio
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        if asyncio.iscoroutinefunction(fn):
+            logger.warning(
+                f"Wrapping async function {getattr(fn, '__name__', fn)} - "
+                "async functions are not fully supported by Ralph proxies. "
+                "Fault injection may not work correctly."
+            )
+        elif inspect.isgeneratorfunction(fn):
+            logger.warning(
+                f"Wrapping generator function {getattr(fn, '__name__', fn)} - "
+                "generator functions are not fully supported by Ralph proxies. "
+                "Fault injection may not work correctly."
+            )
 
     def _build_strategy_map(self) -> None:
         """
@@ -111,9 +176,32 @@ class BaseProxy(ABC):
         """
         Transparent proxy call entry point.
 
-        Checks if fault should be injected and either:
-        - Executes the fault strategy if triggered
-        - Executes the original function if not triggered
+        Delegates to the internal wrapt wrapper which calls _invoke.
+        """
+        return self._wrapper(*args, **kwargs)
+
+    def _invoke(
+        self,
+        wrapped: Callable,
+        instance: Any,
+        args: tuple,
+        kwargs: dict,
+    ) -> Any:
+        """
+        Core invocation logic called by the wrapt wrapper.
+
+        This method implements the fault injection logic:
+        - Checks if fault should be injected
+        - Either executes the fault strategy or the original function
+
+        Args:
+            wrapped: The wrapped (original) function
+            instance: The instance for bound methods, or None for functions
+            args: Positional arguments tuple
+            kwargs: Keyword arguments dict
+
+        Returns:
+            Result from either the strategy method or original function
         """
         if self._should_inject():
             fault_id = self._record_injection_start()
@@ -125,8 +213,8 @@ class BaseProxy(ABC):
                 self._record_injection_end(fault_id, f"exception: {type(e).__name__}: {e}")
                 raise
 
-        # Normal execution - call original function
-        return self._original(*args, **kwargs)
+        # Normal execution - call the wrapped function
+        return wrapped(*args, **kwargs)
 
     def _should_inject(self) -> bool:
         """
@@ -241,3 +329,95 @@ class BaseProxy(ABC):
             The current step number
         """
         return self._current_step
+
+    # =========================================================================
+    # Special attribute forwarding via __getattribute__
+    # =========================================================================
+
+    # Attributes to forward to the wrapped function (bypass class docstring, etc.)
+    _FORWARD_TO_WRAPPED = frozenset({"__doc__", "__annotations__"})
+
+    def __getattribute__(self, name: str) -> Any:
+        """
+        Custom attribute access to forward special attributes to wrapped function.
+
+        For __doc__ and __annotations__, Python's default lookup would return
+        the class's values instead of the instance property. We intercept these
+        to return the wrapped function's values.
+        """
+        # Check if this is one of the special forwarded attributes
+        if name in object.__getattribute__(self, "_FORWARD_TO_WRAPPED"):
+            # Get _original without triggering recursion
+            original = object.__getattribute__(self, "_original")
+            return getattr(original, name, None if name == "__doc__" else {})
+
+        # Default attribute lookup
+        return object.__getattribute__(self, name)
+
+    # =========================================================================
+    # Introspection properties - delegate to wrapped function for transparency
+    # =========================================================================
+
+    @property
+    def __wrapped__(self) -> Callable:
+        """Return the original wrapped function."""
+        return self._original
+
+    @property
+    def __name__(self) -> str:
+        """Return the original function name."""
+        return getattr(self._original, "__name__", "")
+
+    @property
+    def __module__(self) -> str:
+        """Return the original function module."""
+        return getattr(self._original, "__module__", "")
+
+    def get_qualname(self) -> str:
+        """Return the original function qualified name.
+
+        Note: __qualname__ cannot be a property on ABC subclasses because
+        the metaclass expects it to be a string during class creation.
+        Use this method instead, or access original.__qualname__ directly.
+        """
+        return getattr(self._original, "__qualname__", "")
+
+    @property
+    def __signature__(self) -> inspect.Signature:
+        """Return the original function signature.
+
+        This is the key property that enables IDE introspection.
+        """
+        return inspect.signature(self._original)
+
+    # =========================================================================
+    # Async/Generator detection helpers
+    # =========================================================================
+
+    @staticmethod
+    def _is_async_function(fn: Callable) -> bool:
+        """
+        Check if a function is an async coroutine function.
+
+        Args:
+            fn: The function to check
+
+        Returns:
+            True if fn is an async function, False otherwise
+        """
+        import asyncio
+
+        return asyncio.iscoroutinefunction(fn)
+
+    @staticmethod
+    def _is_generator_function(fn: Callable) -> bool:
+        """
+        Check if a function is a generator function.
+
+        Args:
+            fn: The function to check
+
+        Returns:
+            True if fn is a generator function, False otherwise
+        """
+        return inspect.isgeneratorfunction(fn)

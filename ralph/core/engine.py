@@ -5,11 +5,14 @@ The InjectionEngine is the central orchestrator that:
 - Loads fault configurations
 - Installs and manages proxy instances
 - Coordinates fault injection across the training loop
+- Optionally uses wrapt post-import hooks for late patching
 """
 
 import importlib
 import random
 from typing import TYPE_CHECKING, Any, Callable, Optional
+
+import wrapt
 
 from ralph.core.config import FaultConfig
 from ralph.core.registry import ProxyRegistry
@@ -65,6 +68,7 @@ class InjectionEngine:
         self,
         collector: Optional["DualStreamCollector"] = None,
         seed: Optional[int] = None,
+        use_post_import_hooks: bool = False,
     ):
         """
         Initialize the injection engine.
@@ -73,8 +77,12 @@ class InjectionEngine:
             collector: Optional DualStreamCollector for recording fault injections.
                       If None, injection recording is disabled but faults still execute.
             seed: Optional random seed for reproducible probabilistic triggering.
+            use_post_import_hooks: If True, enables post-import hooks via wrapt.
+                      This allows proxies to be installed on modules that are imported
+                      AFTER install_proxies() is called. Default False for simplicity.
         """
         self._collector = collector
+        self._use_post_import_hooks = use_post_import_hooks
 
         # Configuration: target -> FaultConfig
         self._configs: dict[str, FaultConfig] = {}
@@ -87,6 +95,9 @@ class InjectionEngine:
 
         # Monkey-patch references: target -> (module, attr_name)
         self._patch_refs: dict[str, tuple] = {}
+
+        # Post-import hooks: module_name -> list of (target, config) tuples
+        self._import_hooks: dict[str, list[tuple[str, FaultConfig]]] = {}
 
         # Scheduler for trigger coordination
         self._scheduler = TriggerScheduler(seed=seed)
@@ -392,6 +403,7 @@ class InjectionEngine:
 
         This method reverses the monkey-patching performed by install_proxies(),
         restoring all target functions to their original implementations.
+        Also clears any registered post-import hooks.
         """
         if not self._installed:
             return
@@ -406,6 +418,7 @@ class InjectionEngine:
         self._proxies.clear()
         self._originals.clear()
         self._patch_refs.clear()
+        self._import_hooks.clear()
         self._installed = False
 
     def update_step(self, step: int) -> None:
@@ -485,6 +498,124 @@ class InjectionEngine:
         # Update all installed proxies
         for proxy in self._proxies.values():
             proxy.set_rng(self._rng)
+
+    def register_post_import_hook(self, target: str, config: FaultConfig) -> None:
+        """
+        Register a post-import hook for a target that may not be imported yet.
+
+        This method uses wrapt.register_post_import_hook() to defer proxy
+        installation until the target module is actually imported. This is useful
+        when you need to install proxies before the target module is loaded.
+
+        Note: This method requires use_post_import_hooks=True in __init__.
+
+        Args:
+            target: Fully qualified target name (e.g., 'ray.get')
+            config: FaultConfig specifying the fault to inject
+
+        Raises:
+            RuntimeError: If use_post_import_hooks is False
+            KeyError: If no proxy is registered for the target
+            ValueError: If the strategy is not supported by the proxy
+
+        Example:
+            engine = InjectionEngine(use_post_import_hooks=True)
+            engine.register_post_import_hook("ray.get", config)
+            # Later, when ray is imported, the proxy will be installed automatically
+            import ray  # Triggers the hook
+        """
+        if not self._use_post_import_hooks:
+            raise RuntimeError(
+                "Post-import hooks not enabled. Initialize InjectionEngine with "
+                "use_post_import_hooks=True to use this feature."
+            )
+
+        # Validate target has a registered proxy
+        if not ProxyRegistry.is_registered(target):
+            raise KeyError(
+                f"No proxy registered for target '{target}'. Available targets: {ProxyRegistry.list_targets()}"
+            )
+
+        # Validate strategy is supported
+        supported = ProxyRegistry.get_supported_strategies(target)
+        if config.strategy not in supported:
+            supported_str = ", ".join(s.value for s in sorted(supported, key=lambda x: x.value))
+            raise ValueError(
+                f"Strategy '{config.strategy.value}' not supported for target '{target}'. Supported: [{supported_str}]"
+            )
+
+        # Extract module name from target
+        if ".__call__" in target:
+            parts = target.replace(".__call__", "").rsplit(".", 1)
+        else:
+            parts = target.rsplit(".", 1)
+
+        if len(parts) == 1:
+            raise ValueError(f"Target '{target}' must be fully qualified (e.g., 'module.function')")
+
+        module_path = parts[0]
+
+        # Store config and target for the hook callback
+        if module_path not in self._import_hooks:
+            self._import_hooks[module_path] = []
+        self._import_hooks[module_path].append((target, config))
+
+        # Also add to configs for tracking
+        self._configs[target] = config
+        self._scheduler.add_config(config)
+
+        # Create and register the hook callback
+        engine = self
+
+        def hook_callback(module):
+            """Callback invoked when the module is imported."""
+            for hook_target, hook_config in engine._import_hooks.get(module_path, []):
+                try:
+                    engine._install_single_proxy(hook_target, hook_config)
+                except Exception:
+                    # Log but don't raise - we don't want to break the import
+                    import logging
+
+                    logging.getLogger(__name__).exception(
+                        f"Failed to install proxy for {hook_target} via post-import hook"
+                    )
+
+        # Register the hook with wrapt
+        wrapt.register_post_import_hook(hook_callback, module_path)
+
+    def _install_single_proxy(self, target: str, config: FaultConfig) -> None:
+        """
+        Install a single proxy for a target.
+
+        This is used internally by both install_proxies() and post-import hooks.
+
+        Args:
+            target: Fully qualified target name
+            config: FaultConfig for the proxy
+        """
+        if target in self._proxies:
+            # Already installed
+            return
+
+        # Get proxy class
+        proxy_class = ProxyRegistry.get_proxy(target)
+
+        # Resolve the target function
+        original_fn, module, attr_name = self._resolve_target(target)
+
+        # Create proxy instance
+        proxy = proxy_class(original_fn, self._collector)
+        proxy.set_config(config)
+        proxy.set_step(self._current_step)
+        proxy.set_rng(self._rng)
+
+        # Store references
+        self._originals[target] = original_fn
+        self._proxies[target] = proxy
+        self._patch_refs[target] = (module, attr_name)
+
+        # Monkey-patch
+        setattr(module, attr_name, proxy)
 
     def __enter__(self) -> "InjectionEngine":
         """
