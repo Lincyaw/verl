@@ -808,5 +808,216 @@
       "15.1-unit-tests",
       "7.1-sample-configs"
     ]
+  },
+  {
+    "id": "16.1-wrapt-dependency",
+    "story": "Add wrapt as a project dependency",
+    "priority": "high",
+    "requirements": [
+      "Add wrapt>=1.15.0 to ralph/requirements.txt",
+      "Update ralph/__init__.py to check wrapt dependency in check_dependencies()",
+      "Add wrapt to get_dependency_status() function",
+      "Verify: `python -c 'import wrapt; print(wrapt.__version__)'` succeeds",
+      "Verify: wrapt C extension loads for performance (not pure Python fallback)"
+    ],
+    "passes": true
+  },
+  {
+    "id": "16.2-wrapt-base-proxy",
+    "story": "Implement WraptBaseProxy class with signature preservation",
+    "priority": "high",
+    "requirements": [
+      "Create ralph/proxies/wrapt_base.py with WraptBaseProxy class",
+      "Compose wrapt.FunctionWrapper internally (not inherit)",
+      "Preserve existing state attributes: _original, _collector, _config, _current_step, _rng",
+      "Preserve _build_strategy_map() method for mixin compatibility",
+      "Implement _create_wrapper() method that creates a FunctionWrapper",
+      "Implement _invoke(wrapped, instance, args, kwargs) method with wrapt-style signature",
+      "Forward __call__ to internal wrapper",
+      "Expose introspection properties: __wrapped__, __name__, __doc__, __signature__, __module__, __qualname__",
+      "Preserve _should_inject(), _execute_strategy(), _record_injection_start(), _record_injection_end() methods",
+      "Verify: `inspect.signature(proxy)` returns original function signature",
+      "Verify: `proxy.__name__` returns original function name",
+      "Verify: `proxy.__doc__` returns original function docstring",
+      "Verify: Strategy dispatch pattern works unchanged with mixins"
+    ],
+    "passes": false,
+    "blockedBy": ["16.1-wrapt-dependency"]
+  },
+  {
+    "id": "16.3-replace-base-proxy",
+    "story": "Replace BaseProxy with WraptBaseProxy (direct replacement)",
+    "priority": "high",
+    "requirements": [
+      "Replace BaseProxy implementation in ralph/proxies/base.py with WraptBaseProxy code",
+      "Keep class name as BaseProxy (no rename needed)",
+      "Update ralph/proxies/__init__.py exports",
+      "Ensure all existing imports 'from ralph.proxies.base import BaseProxy' work unchanged",
+      "Remove ralph/proxies/wrapt_base.py if created separately (merge into base.py)",
+      "Verify: All existing unit tests pass without modification",
+      "Verify: All proxy subclasses work with new BaseProxy"
+    ],
+    "passes": false,
+    "blockedBy": ["16.2-wrapt-base-proxy"]
+  },
+  {
+    "id": "16.4-wrapt-engine-patching",
+    "story": "Update InjectionEngine to leverage wrapt-based proxies",
+    "priority": "high",
+    "requirements": [
+      "Modify install_proxies() to install proxy (which internally uses FunctionWrapper)",
+      "Keep existing setattr() approach but ensure wrapper metadata is preserved",
+      "Preserve existing _resolve_target() logic for nested attributes",
+      "Ensure uninstall_proxies() correctly restores original functions",
+      "Verify: Monkey-patching works for module functions",
+      "Verify: Monkey-patching works for class methods",
+      "Verify: Uninstall correctly restores original functions",
+      "Verify: All existing integration tests pass"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
+  },
+  {
+    "id": "16.5-post-import-hooks",
+    "story": "Add optional post-import hook support to InjectionEngine",
+    "priority": "medium",
+    "requirements": [
+      "Add use_post_import_hooks: bool = False parameter to __init__",
+      "Add register_post_import_hook(target, config) method",
+      "Use wrapt.register_post_import_hook() internally",
+      "Handle case where module is already imported (hook fires immediately)",
+      "Add _import_hooks tracking dictionary for cleanup",
+      "Clean up hooks in uninstall_proxies()",
+      "Verify: Hook fires when module is imported after registration",
+      "Verify: Hook fires immediately when module already imported",
+      "Verify: Multiple hooks for same module work correctly"
+    ],
+    "passes": false,
+    "blockedBy": ["16.4-wrapt-engine-patching"]
+  },
+  {
+    "id": "16.6-migrate-l0-proxies",
+    "story": "Verify L0 Ray proxies work with new BaseProxy",
+    "priority": "high",
+    "requirements": [
+      "Verify RayGetProxy in ralph/proxies/l0_ray.py works with new BaseProxy",
+      "Verify RayPutProxy works with new BaseProxy",
+      "Verify ExecuteAllProxy works with new BaseProxy",
+      "Ensure all strategy methods work unchanged (they call self._original)",
+      "Verify: All existing tests in tests/ralph/test_l0_ray_proxy.py pass",
+      "Verify: Signature introspection works for all L0 proxies"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
+  },
+  {
+    "id": "16.7-migrate-l1-proxies",
+    "story": "Verify L1 distributed proxies work with new BaseProxy",
+    "priority": "high",
+    "requirements": [
+      "Verify AllReduceProxy in ralph/proxies/l1_distributed.py works with new BaseProxy",
+      "Verify AllGatherProxy works with new BaseProxy",
+      "Verify BarrierProxy works with new BaseProxy",
+      "Ensure in-place tensor modifications still work correctly",
+      "Verify: All existing tests in tests/ralph/test_l1_distributed_proxy.py pass",
+      "Verify: Distributed communication patterns handled correctly"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
+  },
+  {
+    "id": "16.8-migrate-l2-proxies",
+    "story": "Verify L2 verl proxies work with new BaseProxy",
+    "priority": "high",
+    "requirements": [
+      "Verify RewardManagerProxy in ralph/proxies/l2_verl.py works with new BaseProxy",
+      "Verify CheckpointSaveProxy works with new BaseProxy",
+      "Verify CheckpointLoadProxy works with new BaseProxy",
+      "Verify UpdateActorProxy works with new BaseProxy",
+      "Verify: All existing tests in tests/ralph/test_l2_verl_proxy.py pass"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
+  },
+  {
+    "id": "16.9-migrate-algorithm-proxies",
+    "story": "Verify algorithm proxies work with new BaseProxy",
+    "priority": "medium",
+    "requirements": [
+      "Verify GAEProxy in ralph/proxies/algorithm.py works with new BaseProxy",
+      "Verify KLPenaltyProxy works with new BaseProxy",
+      "Verify GRPOProxy works with new BaseProxy",
+      "Verify: All existing tests in tests/ralph/test_algorithm_proxy.py pass"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
+  },
+  {
+    "id": "16.10-migrate-remaining-proxies",
+    "story": "Verify all remaining proxies work with new BaseProxy",
+    "priority": "medium",
+    "requirements": [
+      "Verify GenerateProxy and UpdateWeightsProxy in ralph/proxies/inference.py",
+      "Verify ComputeValuesProxy in ralph/proxies/worker.py",
+      "Verify DataProtoConcatProxy and DataProtoChunkProxy in ralph/proxies/data_pipeline.py",
+      "Verify CallToolProxy and ToolParserProxy in ralph/proxies/agent.py",
+      "Verify OptimizerStepProxy and LRSchedulerProxy in ralph/proxies/optimizer.py",
+      "Verify MegatronOptimizerProxy and ParallelismProxy in ralph/proxies/megatron.py",
+      "Verify: All corresponding test files pass",
+      "Verify: Total of 22 proxies successfully verified"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
+  },
+  {
+    "id": "16.11-introspection-tests",
+    "story": "Add comprehensive introspection and metadata tests",
+    "priority": "medium",
+    "requirements": [
+      "Create tests/ralph/test_wrapt_introspection.py",
+      "Test __signature__ preservation for functions with various parameter types",
+      "Test __name__, __doc__, __module__, __qualname__ preservation",
+      "Test inspect.signature() returns correct signature",
+      "Test help() displays correct documentation",
+      "Test bound method scenarios (instance methods, class methods, static methods)",
+      "Test decorated functions (multiple decorators stacked)",
+      "Verify: All new tests pass"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
+  },
+  {
+    "id": "16.12-post-import-hook-tests",
+    "story": "Add tests for post-import hook functionality",
+    "priority": "medium",
+    "requirements": [
+      "Create tests/ralph/test_post_import_hooks.py",
+      "Test hook fires when module imported after registration",
+      "Test hook fires immediately for already-imported modules",
+      "Test multiple hooks for different modules",
+      "Test hook cleanup on uninstall_proxies()",
+      "Test error handling when hook registration fails",
+      "Verify: All tests pass"
+    ],
+    "passes": false,
+    "blockedBy": ["16.5-post-import-hooks"]
+  },
+  {
+    "id": "16.13-async-generator-detection",
+    "story": "Add async function and generator detection with warnings",
+    "priority": "low",
+    "requirements": [
+      "Add _is_async_function(fn) helper method to BaseProxy",
+      "Add _is_generator_function(fn) helper method to BaseProxy",
+      "Log warning when wrapping async functions (asyncio.iscoroutinefunction)",
+      "Log warning when wrapping generator functions (inspect.isgeneratorfunction)",
+      "Document limitation in class and method docstrings",
+      "Add TODO comment for future async wrapper support",
+      "Verify: Warning logged for async functions",
+      "Verify: Warning logged for generator functions",
+      "Verify: Sync functions work normally without warnings"
+    ],
+    "passes": false,
+    "blockedBy": ["16.3-replace-base-proxy"]
   }
 ]

@@ -6,6 +6,7 @@ resilience in distributed reinforcement learning systems.
 
 Dependencies:
     - pyyaml: Required for YAML configuration parsing
+    - wrapt: Required for function wrapping with signature preservation
     - torch: Required for tensor operations (provided by verl)
     - ray: Required for distributed computing (provided by verl)
 """
@@ -33,9 +34,25 @@ def check_dependencies():
         status["pyyaml"] = {"available": True, "version": yaml.__version__}
     except ImportError as e:
         status["pyyaml"] = {"available": False, "error": str(e)}
-        raise ImportError(
-            "pyyaml is required for Ralph. Install it with: pip install pyyaml"
-        ) from e
+        raise ImportError("pyyaml is required for Ralph. Install it with: pip install pyyaml") from e
+
+    # Check wrapt (required)
+    try:
+        import wrapt
+
+        status["wrapt"] = {"available": True, "version": wrapt.__version__}  # type: ignore
+        # Check if C extension is loaded (not pure Python fallback)
+        try:
+            # wrapt uses C extension for performance when available
+            # The presence of _wrappers module indicates C extension
+            from wrapt import _wrappers  # noqa: F401
+
+            status["wrapt"]["c_extension"] = True
+        except ImportError:
+            status["wrapt"]["c_extension"] = False
+    except ImportError as e:
+        status["wrapt"] = {"available": False, "error": str(e)}
+        raise ImportError("wrapt is required for Ralph. Install it with: pip install wrapt") from e
 
     # Check torch (optional - provided by verl runtime)
     try:
@@ -76,6 +93,20 @@ def get_dependency_status():
         status["pyyaml"] = {"available": True, "version": yaml.__version__}
     except ImportError as e:
         status["pyyaml"] = {"available": False, "error": str(e)}
+
+    try:
+        import wrapt
+
+        status["wrapt"] = {"available": True, "version": wrapt.__version__}
+        # Check if C extension is loaded
+        try:
+            from wrapt import _wrappers
+
+            status["wrapt"]["c_extension"] = True
+        except ImportError:
+            status["wrapt"]["c_extension"] = False
+    except ImportError as e:
+        status["wrapt"] = {"available": False, "error": str(e)}
 
     try:
         import torch

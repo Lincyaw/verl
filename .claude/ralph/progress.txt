@@ -1496,3 +1496,17 @@
 - All imports work correctly: VerlMetricsHook, ThroughputTracker, GradientNormTracker
 - THIS COMPLETES ALL FEATURES IN THE PRD - All 50+ features are now implemented!
 
+
+[2026-01-25] 16.1-wrapt-dependency: COMPLETED
+- Verified wrapt>=1.15.0 already declared in ralph/requirements.txt (line 8)
+- Verified ralph/__init__.py already has wrapt in check_dependencies() (lines 39-54)
+- Verified get_dependency_status() already has wrapt checking (lines 96-108)
+- Fixed missing import in C extension check: added "from wrapt import _wrappers" statement
+- Both check_dependencies() and get_dependency_status() properly check for wrapt
+- C extension detection uses try/except on "from wrapt import _wrappers" to detect native module
+- Documentation updated to include wrapt in docstring (line 9)
+- Verification: Code syntax verified via py_compile
+- Note: wrapt needs to be installed via pip install wrapt>=1.15.0 by user
+- This unblocks: 16.2-wrapt-base-proxy
+- Next priorities: 16.2-wrapt-base-proxy (implement WraptBaseProxy class)
+
