@@ -5,10 +5,13 @@ Extracts structured events from system logs for correlation with
 fault injection labels.
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -260,25 +263,38 @@ class RayLogParser:
 
         Returns:
             List of LogEvent objects
+
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+            PermissionError: If the file can't be read due to permissions
+            OSError: For other I/O errors
         """
         file_path = Path(file_path)
         events: list[LogEvent] = []
 
         if not file_path.exists():
+            logger.warning(f"Log file not found: {file_path}")
             return events
 
         try:
             with open(file_path, encoding="utf-8", errors="replace") as f:
                 for line_num, line in enumerate(f, start=1):
-                    event = self.parse_line(
-                        line,
-                        source_file=str(file_path),
-                        line_number=line_num,
-                    )
-                    if event:
-                        events.append(event)
-        except OSError:
-            pass
+                    try:
+                        event = self.parse_line(
+                            line,
+                            source_file=str(file_path),
+                            line_number=line_num,
+                        )
+                        if event:
+                            events.append(event)
+                    except Exception as e:
+                        logger.debug(f"Failed to parse line {line_num} in {file_path}: {e}")
+        except PermissionError:
+            logger.error(f"Permission denied reading log file: {file_path}")
+            raise
+        except OSError as e:
+            logger.error(f"Error reading log file {file_path}: {e}")
+            raise
 
         return events
 
@@ -597,18 +613,28 @@ class NCCLLogParser:
 
         Returns:
             List of event dictionaries
+
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+            PermissionError: If the file can't be read due to permissions
+            OSError: For other I/O errors
         """
         file_path = Path(file_path)
 
         if not file_path.exists():
+            logger.warning(f"NCCL log file not found: {file_path}")
             return []
 
         try:
             with open(file_path, encoding="utf-8", errors="replace") as f:
                 content = f.read()
             return self.parse_nccl_logs(content)
-        except OSError:
-            return []
+        except PermissionError:
+            logger.error(f"Permission denied reading NCCL log file: {file_path}")
+            raise
+        except OSError as e:
+            logger.error(f"Error reading NCCL log file {file_path}: {e}")
+            raise
 
 
 def parse_ray_logs(log_dir: str | Path) -> list[dict[str, Any]]:

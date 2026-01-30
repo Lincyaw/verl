@@ -4,6 +4,7 @@ L1 Distributed proxies for Ralph fault injection framework.
 Contains proxy classes for torch.distributed operations like all_reduce, all_gather, barrier, etc.
 """
 
+import os
 import time
 from typing import Any
 
@@ -14,6 +15,10 @@ from ralph.core.registry import ProxyRegistry
 from ralph.mixins.delay import DelayMixin
 from ralph.mixins.tensor import TensorCorruptionMixin
 from ralph.proxies.base import BaseProxy
+
+# Constants for deadlock simulation
+_DEADLOCK_CHECK_INTERVAL = 10  # seconds
+_DEADLOCK_STOP_FILE_PREFIX = "/tmp/ralph_stop_deadlock_"
 
 # Attempt to import torch.distributed for rank detection
 try:
@@ -83,8 +88,14 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         Adds Gaussian noise to the tensor before performing the all_reduce operation.
         This simulates data corruption in the communication layer.
 
+        NOTE: This strategy modifies the input tensor IN-PLACE, which is consistent
+        with all_reduce's expected behavior where the input tensor is both the
+        source and destination. The tensor is corrupted before the collective
+        operation, so all ranks will see the corruption propagate through the
+        reduction.
+
         Args:
-            tensor: The tensor to be reduced.
+            tensor: The tensor to be reduced (modified in-place).
             op: The reduction operation (e.g., ReduceOp.SUM).
             group: The process group to work on.
             async_op: If True, returns a distributed request object.
@@ -99,6 +110,7 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         noise_scale = self._config.parameters.get("noise_scale", 0.1)
 
         # Corrupt the tensor in-place before all_reduce
+        # Note: In-place modification is intentional and matches all_reduce semantics
         corrupted = self._corrupt_tensor(tensor, noise_scale)
         tensor.copy_(corrupted)
 
@@ -126,8 +138,12 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         Sets a ratio of tensor elements to NaN before performing all_reduce.
         This simulates numerical instability in the communication layer.
 
+        NOTE: This strategy modifies the input tensor IN-PLACE, which is consistent
+        with all_reduce's expected behavior where the input tensor is both the
+        source and destination.
+
         Args:
-            tensor: The tensor to be reduced.
+            tensor: The tensor to be reduced (modified in-place).
             op: The reduction operation (e.g., ReduceOp.SUM).
             group: The process group to work on.
             async_op: If True, returns a distributed request object.
@@ -142,6 +158,7 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         nan_ratio = self._config.parameters.get("nan_ratio", 0.001)
 
         # Inject NaN into the tensor in-place before all_reduce
+        # Note: In-place modification is intentional and matches all_reduce semantics
         nan_tensor = self._inject_nan(tensor, nan_ratio)
         tensor.copy_(nan_tensor)
 
@@ -169,8 +186,12 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         Sets a ratio of tensor elements to +/-Inf before performing all_reduce.
         This simulates numerical overflow in the communication layer.
 
+        NOTE: This strategy modifies the input tensor IN-PLACE, which is consistent
+        with all_reduce's expected behavior where the input tensor is both the
+        source and destination.
+
         Args:
-            tensor: The tensor to be reduced.
+            tensor: The tensor to be reduced (modified in-place).
             op: The reduction operation (e.g., ReduceOp.SUM).
             group: The process group to work on.
             async_op: If True, returns a distributed request object.
@@ -187,6 +208,7 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         positive = self._config.parameters.get("positive", True)
 
         # Inject Inf into the tensor in-place before all_reduce
+        # Note: In-place modification is intentional and matches all_reduce semantics
         inf_tensor = self._inject_inf(tensor, inf_ratio, positive)
         tensor.copy_(inf_tensor)
 
@@ -209,11 +231,15 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         **kwargs: Any,
     ) -> Any:
         """
-        Cause specified rank to hang indefinitely, simulating a deadlock.
+        Cause specified rank to hang, simulating a deadlock.
 
-        The specified rank will enter an infinite sleep loop, while other ranks
+        The specified rank will enter a sleep loop, while other ranks
         will proceed normally. This creates a deadlock situation where other ranks
         wait for the hanging rank during collective operations.
+
+        The deadlock can be terminated by:
+        1. Exceeding max_deadlock_time (default: 3600s)
+        2. Creating a stop signal file: /tmp/ralph_stop_deadlock_{pid}
 
         Args:
             tensor: The tensor to be reduced.
@@ -223,16 +249,21 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
             **kwargs: Additional keyword arguments for the original function.
 
         Returns:
-            Never returns for the deadlock rank.
+            Never returns for the deadlock rank (raises TimeoutError/InterruptedError).
             Result of original all_reduce for other ranks.
 
         Config parameters:
             deadlock_rank (int): The rank that should hang (required).
+            max_deadlock_time (float): Maximum time to simulate deadlock in seconds
+                                      (default: 3600). Set to 0 for infinite.
 
         Raises:
             ValueError: If deadlock_rank is not specified in config parameters.
+            TimeoutError: When max_deadlock_time is exceeded.
+            InterruptedError: When stop signal file is detected.
         """
         deadlock_rank = self._config.parameters.get("deadlock_rank")
+        max_deadlock_time = self._config.parameters.get("max_deadlock_time", 3600)
 
         if deadlock_rank is None:
             raise ValueError("deadlock_rank must be specified in config parameters for DEADLOCK strategy")
@@ -240,9 +271,23 @@ class AllReduceProxy(BaseProxy, DelayMixin, TensorCorruptionMixin):
         current_rank = self._get_current_rank()
 
         if current_rank == deadlock_rank:
-            # This rank hangs forever
+            start_time = time.time()
+            stop_file = f"{_DEADLOCK_STOP_FILE_PREFIX}{os.getpid()}"
+
             while True:
-                time.sleep(3600)  # Sleep for 1 hour in a loop
+                # Check timeout (if max_deadlock_time > 0)
+                if max_deadlock_time > 0 and (time.time() - start_time) > max_deadlock_time:
+                    raise TimeoutError(f"Deadlock simulation exceeded {max_deadlock_time}s timeout")
+
+                # Check for stop signal file
+                if os.path.exists(stop_file):
+                    try:
+                        os.remove(stop_file)
+                    except OSError:
+                        pass  # Ignore removal errors
+                    raise InterruptedError("Deadlock simulation stopped by signal file")
+
+                time.sleep(_DEADLOCK_CHECK_INTERVAL)
 
         # Other ranks proceed normally
         call_kwargs = dict(kwargs)
@@ -526,11 +571,15 @@ class BarrierProxy(BaseProxy, DelayMixin):
         **kwargs: Any,
     ) -> Any:
         """
-        Cause specified rank to hang indefinitely, simulating a barrier timeout.
+        Cause specified rank to hang, simulating a barrier timeout.
 
-        The specified rank will enter an infinite sleep loop, while other ranks
+        The specified rank will enter a sleep loop, while other ranks
         will proceed normally. This creates a timeout situation where other ranks
-        wait indefinitely for the hanging rank at the barrier.
+        wait for the hanging rank at the barrier.
+
+        The timeout simulation can be terminated by:
+        1. Exceeding max_timeout_time (default: 3600s)
+        2. Creating a stop signal file: /tmp/ralph_stop_deadlock_{pid}
 
         Args:
             group: The process group to work on.
@@ -539,16 +588,21 @@ class BarrierProxy(BaseProxy, DelayMixin):
             **kwargs: Additional keyword arguments for the original function.
 
         Returns:
-            Never returns for the timeout rank.
+            Never returns for the timeout rank (raises TimeoutError/InterruptedError).
             Result of original barrier for other ranks.
 
         Config parameters:
             timeout_rank (int): The rank that should hang (required).
+            max_timeout_time (float): Maximum time to simulate timeout in seconds
+                                     (default: 3600). Set to 0 for infinite.
 
         Raises:
             ValueError: If timeout_rank is not specified in config parameters.
+            TimeoutError: When max_timeout_time is exceeded.
+            InterruptedError: When stop signal file is detected.
         """
         timeout_rank = self._config.parameters.get("timeout_rank")
+        max_timeout_time = self._config.parameters.get("max_timeout_time", 3600)
 
         if timeout_rank is None:
             raise ValueError("timeout_rank must be specified in config parameters for BARRIER_TIMEOUT strategy")
@@ -556,9 +610,23 @@ class BarrierProxy(BaseProxy, DelayMixin):
         current_rank = self._get_current_rank()
 
         if current_rank == timeout_rank:
-            # This rank hangs forever
+            start_time = time.time()
+            stop_file = f"{_DEADLOCK_STOP_FILE_PREFIX}{os.getpid()}"
+
             while True:
-                time.sleep(3600)  # Sleep for 1 hour in a loop
+                # Check timeout (if max_timeout_time > 0)
+                if max_timeout_time > 0 and (time.time() - start_time) > max_timeout_time:
+                    raise TimeoutError(f"Barrier timeout simulation exceeded {max_timeout_time}s")
+
+                # Check for stop signal file
+                if os.path.exists(stop_file):
+                    try:
+                        os.remove(stop_file)
+                    except OSError:
+                        pass
+                    raise InterruptedError("Barrier timeout simulation stopped by signal file")
+
+                time.sleep(_DEADLOCK_CHECK_INTERVAL)
 
         # Other ranks proceed normally
         call_kwargs = dict(kwargs)

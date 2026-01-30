@@ -129,6 +129,9 @@ class RayGetProxy(BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin):
         Calls the original ray.get, then sets a ratio of the results to None
         to simulate partial failures in the object store.
 
+        NOTE: This method returns a new list rather than modifying the original
+        results list in-place, to avoid side effects on the caller's data.
+
         Args:
             object_refs: Single object reference or list of references
             *args: Additional positional arguments to pass to original
@@ -138,7 +141,7 @@ class RayGetProxy(BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin):
         Returns:
             Results with fail_ratio of them set to None.
             For single reference, may return None or the actual result.
-            For list of references, returns list with some elements as None.
+            For list of references, returns a new list with some elements as None.
 
         Config parameters:
             fail_ratio (float): Ratio of results to set to None (0.0 to 1.0, default 0.5)
@@ -163,18 +166,17 @@ class RayGetProxy(BaseProxy, DelayMixin, ExceptionMixin, TensorCorruptionMixin):
         # Handle list of references - results should be a list
         if not isinstance(results, list):
             # If results is not a list, wrap and unwrap
-            results = [results]
-            for i in range(len(results)):
-                if random.random() < fail_ratio:
-                    results[i] = None
-            return results[0]
-
-        # Process list results
-        for i in range(len(results)):
             if random.random() < fail_ratio:
-                results[i] = None
+                return None
+            return results
 
-        return results
+        # Create new list with potential failures (avoid modifying original)
+        modified_results = [
+            None if random.random() < fail_ratio else r
+            for r in results
+        ]
+
+        return modified_results
 
 
 class ObjectStoreFullError(Exception):

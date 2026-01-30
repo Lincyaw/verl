@@ -10,6 +10,8 @@ The InjectionEngine is the central orchestrator that:
 
 import importlib
 import random
+import threading
+import weakref
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import wrapt
@@ -107,6 +109,9 @@ class InjectionEngine:
 
         # Current training step
         self._current_step = 0
+
+        # Lock for thread-safe step access
+        self._step_lock = threading.Lock()
 
         # Track installation state
         self._installed = False
@@ -218,7 +223,7 @@ class InjectionEngine:
 
         from ralph.core.config import StrategyType, TriggerConfig, TriggerType
 
-        with open(yaml_path) as f:
+        with open(yaml_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         if not data:
@@ -315,36 +320,59 @@ class InjectionEngine:
         3. Creates a proxy instance wrapping the original function
         4. Monkey-patches the original with the proxy
 
+        If installation fails for any target, all previously installed proxies
+        are rolled back to restore original functions.
+
         Raises:
-            RuntimeError: If proxies are already installed
+            RuntimeError: If proxies are already installed, or if installation
+                         fails (after rollback)
             ImportError: If target module cannot be imported
             AttributeError: If target function doesn't exist in module
         """
         if self._installed:
             raise RuntimeError("Proxies are already installed")
 
-        for target, config in self._configs.items():
-            # Get proxy class
-            proxy_class = ProxyRegistry.get_proxy(target)
+        installed_targets: list[str] = []
 
-            # Resolve the target function
-            original_fn, module, attr_name = self._resolve_target(target)
+        try:
+            for target, config in self._configs.items():
+                # Get proxy class
+                proxy_class = ProxyRegistry.get_proxy(target)
 
-            # Create proxy instance
-            proxy = proxy_class(original_fn, self._collector)
-            proxy.set_config(config)
-            proxy.set_step(self._current_step)
-            proxy.set_rng(self._rng)
+                # Resolve the target function
+                original_fn, module, attr_name = self._resolve_target(target)
 
-            # Store references
-            self._originals[target] = original_fn
-            self._proxies[target] = proxy
-            self._patch_refs[target] = (module, attr_name)
+                # Create proxy instance
+                proxy = proxy_class(original_fn, self._collector)
+                proxy.set_config(config)
+                proxy.set_step(self._current_step)
+                proxy.set_rng(self._rng)
 
-            # Monkey-patch
-            setattr(module, attr_name, proxy)
+                # Store references
+                self._originals[target] = original_fn
+                self._proxies[target] = proxy
+                self._patch_refs[target] = (module, attr_name)
 
-        self._installed = True
+                # Monkey-patch
+                setattr(module, attr_name, proxy)
+                installed_targets.append(target)
+
+            self._installed = True
+        except Exception as e:
+            # Rollback all installed proxies
+            for target in installed_targets:
+                if target in self._patch_refs and target in self._originals:
+                    module, attr_name = self._patch_refs[target]
+                    setattr(module, attr_name, self._originals[target])
+
+            # Clear state
+            self._proxies.clear()
+            self._originals.clear()
+            self._patch_refs.clear()
+
+            raise RuntimeError(
+                f"Failed to install proxies, rolled back {len(installed_targets)} proxies: {e}"
+            ) from e
 
     def _resolve_target(self, target: str) -> tuple:
         """
@@ -428,23 +456,29 @@ class InjectionEngine:
         This should be called at the beginning of each training step to
         ensure trigger conditions are evaluated correctly.
 
+        This method is thread-safe.
+
         Args:
             step: The current training step number
         """
-        self._current_step = step
-        self._scheduler.update_step(step)
+        with self._step_lock:
+            self._current_step = step
+            self._scheduler.update_step(step)
 
-        for proxy in self._proxies.values():
-            proxy.set_step(step)
+            for proxy in self._proxies.values():
+                proxy.set_step(step)
 
     def get_step(self) -> int:
         """
         Get the current training step.
 
+        This method is thread-safe.
+
         Returns:
             The current step number
         """
-        return self._current_step
+        with self._step_lock:
+            return self._current_step
 
     def is_installed(self) -> bool:
         """
@@ -489,15 +523,18 @@ class InjectionEngine:
         """
         Set the random seed for reproducible fault injection.
 
+        This method is thread-safe.
+
         Args:
             seed: Random seed value
         """
-        self._rng = random.Random(seed)
-        self._scheduler.set_seed(seed)
+        with self._step_lock:
+            self._rng = random.Random(seed)
+            self._scheduler.set_seed(seed)
 
-        # Update all installed proxies
-        for proxy in self._proxies.values():
-            proxy.set_rng(self._rng)
+            # Update all installed proxies
+            for proxy in self._proxies.values():
+                proxy.set_rng(self._rng)
 
     def register_post_import_hook(self, target: str, config: FaultConfig) -> None:
         """
@@ -564,11 +601,17 @@ class InjectionEngine:
         self._configs[target] = config
         self._scheduler.add_config(config)
 
-        # Create and register the hook callback
-        engine = self
+        # Use weakref to avoid memory leak - the hook callback captures
+        # a weak reference to the engine instead of a strong reference
+        engine_ref = weakref.ref(self)
 
         def hook_callback(module):
             """Callback invoked when the module is imported."""
+            engine = engine_ref()
+            if engine is None:
+                # Engine has been garbage collected, skip installation
+                return
+
             for hook_target, hook_config in engine._import_hooks.get(module_path, []):
                 try:
                     engine._install_single_proxy(hook_target, hook_config)

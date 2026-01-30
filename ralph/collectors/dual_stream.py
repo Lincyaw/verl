@@ -9,12 +9,15 @@ Both streams are written to JSONL format for easy processing.
 """
 
 import json
+import logging
 import threading
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -258,28 +261,74 @@ class DualStreamCollector:
         return event_id
 
     def _flush_telemetry_buffer(self) -> None:
-        """Flush telemetry buffer to file (internal, assumes lock is held)."""
+        """Flush telemetry buffer to file (internal, assumes lock is held).
+
+        Only clears the buffer after successful write to prevent data loss.
+
+        Raises:
+            IOError, OSError: If file write fails
+            TypeError, ValueError: If JSON serialization fails
+        """
         if not self._telemetry_buffer:
             return
 
-        with open(self._telemetry_path, "a", encoding="utf-8") as f:
+        try:
+            with open(self._telemetry_path, "a", encoding="utf-8") as f:
+                for record in self._telemetry_buffer:
+                    json_line = json.dumps(asdict(record), ensure_ascii=False, default=self._json_default)
+                    f.write(json_line + "\n")
+            # Only clear buffer after successful write
+            self._telemetry_buffer.clear()
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to flush telemetry buffer to {self._telemetry_path}: {e}")
+            raise
+        except (TypeError, ValueError) as e:
+            logger.error(f"JSON serialization error in telemetry buffer: {e}")
+            # Try to identify and keep valid records
+            valid_records = []
             for record in self._telemetry_buffer:
-                json_line = json.dumps(asdict(record), ensure_ascii=False)
-                f.write(json_line + "\n")
-
-        self._telemetry_buffer.clear()
+                try:
+                    json.dumps(asdict(record), ensure_ascii=False, default=self._json_default)
+                    valid_records.append(record)
+                except (TypeError, ValueError):
+                    logger.warning(f"Skipping non-serializable telemetry record: {record.event_id}")
+            self._telemetry_buffer = valid_records
+            raise
 
     def _flush_labels_buffer(self) -> None:
-        """Flush labels buffer to file (internal, assumes lock is held)."""
+        """Flush labels buffer to file (internal, assumes lock is held).
+
+        Only clears the buffer after successful write to prevent data loss.
+
+        Raises:
+            IOError, OSError: If file write fails
+            TypeError, ValueError: If JSON serialization fails
+        """
         if not self._labels_buffer:
             return
 
-        with open(self._labels_path, "a", encoding="utf-8") as f:
-            for record in self._labels_buffer:
-                json_line = json.dumps(record, ensure_ascii=False)
-                f.write(json_line + "\n")
+        try:
+            with open(self._labels_path, "a", encoding="utf-8") as f:
+                for record in self._labels_buffer:
+                    json_line = json.dumps(record, ensure_ascii=False, default=self._json_default)
+                    f.write(json_line + "\n")
+            # Only clear buffer after successful write
+            self._labels_buffer.clear()
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to flush labels buffer to {self._labels_path}: {e}")
+            raise
+        except (TypeError, ValueError) as e:
+            logger.error(f"JSON serialization error in labels buffer: {e}")
+            raise
 
-        self._labels_buffer.clear()
+    @staticmethod
+    def _json_default(obj: Any) -> Any:
+        """Custom JSON serializer for non-standard types."""
+        if hasattr(obj, 'isoformat'):  # datetime
+            return obj.isoformat()
+        if hasattr(obj, '__dict__'):
+            return obj.__dict__
+        return str(obj)
 
     def flush(self) -> None:
         """

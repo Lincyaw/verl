@@ -179,24 +179,35 @@ class TriggerConfig:
 
         Returns:
             True if the fault should be triggered, False otherwise.
+
+        Raises:
+            ValueError: If required parameters for the trigger type are missing.
         """
         if self.type == TriggerType.ONE_SHOT:
+            if self.at_step is None:
+                raise ValueError("ONE_SHOT trigger requires 'at_step' to be set")
             return current_step == self.at_step
 
         elif self.type == TriggerType.STEP_BASED:
-            if self.start_step is None or self.end_step is None:
-                return False
+            if self.start_step is None:
+                raise ValueError("STEP_BASED trigger requires 'start_step' to be set")
+            if self.end_step is None:
+                raise ValueError("STEP_BASED trigger requires 'end_step' to be set")
             return self.start_step <= current_step <= self.end_step
 
         elif self.type == TriggerType.PROBABILISTIC:
+            if not 0.0 <= self.probability <= 1.0:
+                raise ValueError(f"Probability must be between 0.0 and 1.0, got {self.probability}")
             import random
 
             r = rng if rng else random
             return r.random() < self.probability
 
         elif self.type == TriggerType.PERIODIC:
-            if self.every_n_steps is None or self.every_n_steps <= 0:
-                return False
+            if self.every_n_steps is None:
+                raise ValueError("PERIODIC trigger requires 'every_n_steps' to be set")
+            if self.every_n_steps <= 0:
+                raise ValueError(f"every_n_steps must be positive, got {self.every_n_steps}")
             return current_step % self.every_n_steps == 0
 
         return False
@@ -495,6 +506,7 @@ def validate_yaml_config(yaml_path: str) -> tuple:
     - YAML syntax is valid
     - Required sections exist
     - Each scenario has required fields
+    - Enum values are valid (fault_type, trigger type, severity)
 
     Args:
         yaml_path: Path to the YAML configuration file
@@ -531,6 +543,12 @@ def validate_yaml_config(yaml_path: str) -> tuple:
     if not data:
         return False, ["Empty or invalid YAML file"]
 
+    # Valid enum values
+    valid_strategies = [s.value for s in StrategyType]
+    strategy_aliases = {"nccl_timeout", "gradient_corruption", "wrong_reward", "io_error", "memory_pressure"}
+    valid_trigger_types = [t.value for t in TriggerType]
+    valid_severities = ["low", "medium", "high", "critical"]
+
     # Check scenarios section
     if "scenarios" not in data:
         errors.append("Missing 'scenarios' section")
@@ -541,9 +559,27 @@ def validate_yaml_config(yaml_path: str) -> tuple:
         else:
             required_fields = ["id", "layer", "target", "fault_type", "trigger", "expected_behavior"]
             for i, scenario in enumerate(scenarios):
+                scenario_id = scenario.get("id", f"index {i}")
+
+                # Check required fields
                 missing = [f for f in required_fields if f not in scenario]
                 if missing:
-                    scenario_id = scenario.get("id", f"index {i}")
                     errors.append(f"Scenario '{scenario_id}' missing fields: {missing}")
+
+                # Validate fault_type
+                fault_type = scenario.get("fault_type")
+                if fault_type and fault_type not in valid_strategies and fault_type not in strategy_aliases:
+                    errors.append(f"Scenario '{scenario_id}' has invalid fault_type: '{fault_type}'")
+
+                # Validate trigger type
+                trigger = scenario.get("trigger", {})
+                trigger_type = trigger.get("type")
+                if trigger_type and trigger_type not in valid_trigger_types:
+                    errors.append(f"Scenario '{scenario_id}' has invalid trigger type: '{trigger_type}'")
+
+                # Validate severity
+                severity = scenario.get("severity")
+                if severity and severity not in valid_severities:
+                    errors.append(f"Scenario '{scenario_id}' has invalid severity: '{severity}'")
 
     return len(errors) == 0, errors

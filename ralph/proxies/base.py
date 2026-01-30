@@ -100,27 +100,30 @@ class BaseProxy(ABC):
 
     def _check_function_type(self, fn: Callable) -> None:
         """
-        Check if function is async or generator and log warning.
+        Check if function is async or generator and raise error.
+
+        Async and generator functions are not supported by Ralph proxies
+        because the synchronous fault injection logic cannot properly
+        intercept their execution flow.
 
         Args:
             fn: The function to check
+
+        Raises:
+            TypeError: If fn is an async or generator function
         """
         import asyncio
-        import logging
-
-        logger = logging.getLogger(__name__)
 
         if asyncio.iscoroutinefunction(fn):
-            logger.warning(
-                f"Wrapping async function {getattr(fn, '__name__', fn)} - "
-                "async functions are not fully supported by Ralph proxies. "
-                "Fault injection may not work correctly."
+            raise TypeError(
+                f"Cannot wrap async function {getattr(fn, '__name__', fn)}. "
+                "Async functions are not supported by Ralph proxies. "
+                "Consider using synchronous wrappers or a different approach."
             )
         elif inspect.isgeneratorfunction(fn):
-            logger.warning(
-                f"Wrapping generator function {getattr(fn, '__name__', fn)} - "
-                "generator functions are not fully supported by Ralph proxies. "
-                "Fault injection may not work correctly."
+            raise TypeError(
+                f"Cannot wrap generator function {getattr(fn, '__name__', fn)}. "
+                "Generator functions are not supported by Ralph proxies."
             )
 
     def _build_strategy_map(self) -> None:
@@ -203,18 +206,22 @@ class BaseProxy(ABC):
         Returns:
             Result from either the strategy method or original function
         """
-        if self._should_inject():
-            fault_id = self._record_injection_start()
-            try:
-                result = self._execute_strategy(*args, **kwargs)
-                self._record_injection_end(fault_id, "success")
-                return result
-            except Exception as e:
-                self._record_injection_end(fault_id, f"exception: {type(e).__name__}: {e}")
-                raise
+        # Capture config snapshot to avoid TOCTOU race condition
+        config = self._config
+        if config is None or not config.enabled:
+            return wrapped(*args, **kwargs)
 
-        # Normal execution - call the wrapped function
-        return wrapped(*args, **kwargs)
+        if not config.trigger.should_trigger(self._current_step, self._rng):
+            return wrapped(*args, **kwargs)
+
+        fault_id = self._record_injection_start(config)
+        try:
+            result = self._execute_strategy(config, *args, **kwargs)
+            self._record_injection_end(fault_id, "success")
+            return result
+        except Exception as e:
+            self._record_injection_end(fault_id, f"exception: {type(e).__name__}: {e}")
+            raise
 
     def _should_inject(self) -> bool:
         """
@@ -227,11 +234,12 @@ class BaseProxy(ABC):
             return False
         return self._config.trigger.should_trigger(self._current_step, self._rng)
 
-    def _execute_strategy(self, *args, **kwargs) -> Any:
+    def _execute_strategy(self, config: "FaultConfig", *args, **kwargs) -> Any:
         """
         Execute the configured fault injection strategy.
 
         Args:
+            config: The FaultConfig to use (passed to avoid TOCTOU race)
             *args: Positional arguments to pass to strategy method
             **kwargs: Keyword arguments to pass to strategy method
 
@@ -239,10 +247,12 @@ class BaseProxy(ABC):
             Result from the strategy method
 
         Raises:
+            RuntimeError: If config is None
             NotImplementedError: If strategy is declared but method not found
         """
-        assert self._config is not None, "FaultConfig must be set before executing strategy"
-        strategy = self._config.strategy
+        if config is None:
+            raise RuntimeError("FaultConfig must be set before executing strategy")
+        strategy = config.strategy
 
         if strategy in self._strategy_methods:
             return self._strategy_methods[strategy](*args, **kwargs)
@@ -252,25 +262,31 @@ class BaseProxy(ABC):
                 f"but _strategy_{strategy.value}() not implemented in {self.__class__.__name__}"
             )
 
-    def _record_injection_start(self) -> str:
+    def _record_injection_start(self, config: Optional["FaultConfig"] = None) -> str:
         """
         Record the start of a fault injection.
+
+        Args:
+            config: The FaultConfig to use (passed to avoid TOCTOU race).
+                   If None, falls back to self._config.
 
         Returns:
             Unique fault_id for this injection, or empty string if no collector
         """
-        assert self._config is not None, "FaultConfig must be set before executing strategy"
+        config = config if config is not None else self._config
+        if config is None:
+            raise RuntimeError("FaultConfig must be set before recording injection")
 
         if not self._collector:
             return ""
 
         return self._collector.record_fault_injection(
-            fault_type=self._config.strategy.value,
+            fault_type=config.strategy.value,
             target_layer=self._get_layer(),
             target_function=self._get_target_name(),
-            severity=self._config.severity,
-            parameters=self._config.parameters,
-            expected_behavior=self._config.expected_behavior,
+            severity=config.severity,
+            parameters=config.parameters,
+            expected_behavior=config.expected_behavior,
         )
 
     def _record_injection_end(self, fault_id: str, outcome: str, duration_ms: float = 0) -> None:
@@ -386,12 +402,17 @@ class BaseProxy(ABC):
         return getattr(self._original, "__qualname__", "")
 
     @property
-    def __signature__(self) -> inspect.Signature:
-        """Return the original function signature.
+    def __signature__(self) -> Optional[inspect.Signature]:
+        """Return the original function signature, or None if unavailable.
 
-        This is the key property that enables IDE introspection.
+        This property enables IDE introspection. Returns None for built-in
+        functions or C extensions that don't have introspectable signatures.
         """
-        return inspect.signature(self._original)
+        try:
+            return inspect.signature(self._original)
+        except (ValueError, TypeError):
+            # Built-in functions may not have signatures
+            return None
 
     # =========================================================================
     # Async/Generator detection helpers
